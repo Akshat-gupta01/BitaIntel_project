@@ -56,7 +56,19 @@ async function updateVendorScoreAndStatus(req, res) {
 
         // Status update (approved, rejected, pending, under_review, clarification_required, suspended)
         if (status) {
+            const ALLOWED_STATUSES = ['pending', 'under_review', 'clarification_required', 'approved', 'rejected', 'suspended'];
+            if (!ALLOWED_STATUSES.includes(status)) {
+                return res.status(400).json({
+                    message: `Invalid status. Allowed values: ${ALLOWED_STATUSES.join(', ')}`
+                });
+            }
             profile.verification_status = status;
+
+            // Agar status approved hai toh purana rejection reason clear karo
+            if (status === 'approved') {
+                profile.rejection_reason = null;
+                profile.clarification_notes = null;
+            }
         }
 
         if (rejection_reason !== undefined) {
@@ -646,8 +658,8 @@ async function viewBusiness(req,res){
                 // Left Column: Overview & Identity
                 overview: business.description || `${business.business_name} is a verified business operating in ${business.city || 'India'}.`,
                 identity: {
-                    gstin: business.gst_number || '27AABCU9603R1ZM',
-                    pan: panNumber || 'AABCU9603R'
+                    gstin: business.gst_number || null,
+                    pan: panNumber || null
                 },
                 
                 // Left Column: Documents

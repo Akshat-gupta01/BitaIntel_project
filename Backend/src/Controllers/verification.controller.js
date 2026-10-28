@@ -18,7 +18,8 @@ async function underReviewVerification(req, res) {
                 'level',
                 'rejection_reason',
                 'createdAt'
-            ]
+            ],
+            order: [['createdAt', 'DESC']]
         });
 
         return res.status(200).json({
@@ -64,7 +65,8 @@ async function pendingVerification(req, res) {
                 'score',
                 'level',
                 'createdAt'
-            ]
+            ],
+            order: [['createdAt', 'DESC']]
         });
 
         return res.status(200).json({
@@ -105,7 +107,8 @@ async function clarificationVerification(req, res) {
                 'rejection_reason',
                 'clarification_notes',
                 'createdAt'
-            ]
+            ],
+            order: [['createdAt', 'DESC']]
         });
 
         return res.status(200).json({
@@ -200,14 +203,21 @@ async function updateVerificationAction(req, res) {
             businessProfile.rejection_reason = reason;
         }
 
+        // Status approved hone par purane rejection reason aur clarification notes clear karein
+        if (status === 'approved') {
+            businessProfile.rejection_reason = null;
+            businessProfile.clarification_notes = null;
+        }
+
         // Save changes in business_profiles table
         await businessProfile.save();
 
-        // Step 7: Find verification record for this business
+        // Step 7: Find latest verification record for this business
         let verificationRecord = await verification.findOne({
             where: {
                 business_id: businessProfile.id
-            }
+            },
+            order: [['id', 'DESC']]
         });
 
         // Step 8: If verification record does not exist, create one
@@ -237,6 +247,12 @@ async function updateVerificationAction(req, res) {
 
             if (reason !== undefined && reason !== null) {
                 verificationRecord.rejection_reason = reason;
+            }
+
+            // Approved status par verification record ke reasons bhi clear karein
+            if (status === 'approved') {
+                verificationRecord.rejection_reason = null;
+                verificationRecord.clarification_notes = null;
             }
 
             // Save changes in verifications table (sirf existing record ke liye)
@@ -300,7 +316,8 @@ async function getAllVerified(req,res){
                 'level',
                 'rejection_reason',
                 'createdAt'
-            ]
+            ],
+            order: [['createdAt', 'DESC']]
         });
 
         return res.status(200).json({
