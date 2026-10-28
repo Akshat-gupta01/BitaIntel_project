@@ -2,6 +2,7 @@ const { where } = require('sequelize');
 const { Op } = require('sequelize');
 const { User, otp, role: Role, business_profiles } = require('../models');
 const jwt = require('jsonwebtoken');
+const { recordAuditLog } = require('../services/auditLogger.service');
 
 async function register(req, res) {
     try {
@@ -29,7 +30,7 @@ async function register(req, res) {
         const registerUser = await User.create({ name, email, role_id:roleData.id, phone });
 
         const token = jwt.sign({ id: registerUser.id, email: registerUser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
-        res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });
         return res.status(201).json({
             message: 'User created successfully',
             user: registerUser,
@@ -87,13 +88,20 @@ async function verifyotp(req, res) {
         // JWT Token generate karein
         const token = jwt.sign(
             { id: user.id },
-            process.env.JWT_SECRET || 'secret_key',
+            process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
-        res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });
 
         const isProfileComplete =!!user.business_profile;
         const verificationStatus = user.business_profile ? user.business_profile.verification_status : null;
+
+        await recordAuditLog({
+            userId: user.id,
+            action: 'Login',
+            detail: `${user.name || 'User'} signed in`,
+            ipAddress: req.ip || req.headers['x-forwarded-for']
+        });
 
         return res.status(200).json({
             message: 'Login successful',
@@ -169,5 +177,10 @@ async function getMe(req, res) {
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
+
+
+
+
+
 
 module.exports = { register, verifyotp, login, logout, getMe };

@@ -1,4 +1,4 @@
-const { User, business_profiles,industries,complaints } = require('../models');
+const { User, business_profiles, industries, complaints, inquiries, notification, scoringconfiguration } = require('../models');
 const { Op } = require('sequelize');
 
 
@@ -36,11 +36,7 @@ async function getAccountSettings(req, res) {
        })
     }
 }
-/**
- * PUT /api/vendor/settings
- * Update Account Settings (Contact Person, Email)
- * (Password not used as authentication is mobile OTP based)
- */
+
 async function updateAccountSettings(req, res) {
     try {
         const userId = req.user.id;
@@ -58,7 +54,6 @@ async function updateAccountSettings(req, res) {
         const user = await User.findByPk(userId);
         if (!user) {
             return res.status(404).json({
-                success: false,
                 message: 'User not found'
             });
         }
@@ -108,8 +103,6 @@ async function updateAccountSettings(req, res) {
  * GET /api/vendor/verification
  * Detailed KYC Verification Status and Checklist
  */
-
-// this is api of the vendor
 
 async function getVerificationDetails(req, res) {
     try {
@@ -438,9 +431,9 @@ async function SubmitComplaint(req, res) {
         const userId = req.user.id;
         const { category, priority, subject, description, business_id } = req.body;
 
-        if (!subject || !description) {
+        if (!category || !priority || !subject || !description) {
             return res.status(400).json({
-                message: 'Subject and description are required'
+                message: 'All fields are required'
             });
         }
 
@@ -495,6 +488,329 @@ async function GetMyComplaints(req, res) {
         return res.status(500).json({message:"Internal server error"});
     }
 }
+
+async function GetMyInquiries(req, res) {
+    try {
+        const userId = req.user.id;
+        const profile = await business_profiles.findOne({ where: { user_id: userId } });
+        if (!profile) {
+            return res.status(200).json({ data: [] });
+        }
+        const myInquiries = await inquiries.findAll({
+            where: { business_id: profile.id },
+            include: [{
+                model: business_profiles,
+                as: 'business',
+                attributes: ['id', 'business_name']
+            }],
+            order: [['createdAt', 'DESC']]
+        });
+
+        return res.status(200).json({
+            data: myInquiries
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({message:"Internal server error"});
+    }
+}
+
+async function updateMyInquiry(req, res) {
+    try {
+        const userId = req.user.id;
+        const id=req.params.id;
+        const { status } = req.body;
+
+        const profile = await business_profiles.findOne({ where: { user_id: userId } });
+        if (!profile) {
+            return res.status(404).json({ message: 'Business profile not found' });
+        }
+
+        const inquiry = await inquiries.findOne({
+            where: { id, business_id: profile.id }
+        });
+
+        if (!inquiry) {
+            return res.status(404).json({ message: 'Inquiry not found' });
+        }
+
+        if (status) {
+            inquiry.status = status;
+        }
+        await inquiry.save();
+
+        return res.status(200).json({
+            message: 'Inquiry updated successfully',
+            data: inquiry
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+async function reportInquirySpam(req, res) {
+    try {
+        const userId = req.user.id;
+        const id=req.params.id;
+        const { is_spam,spam_reason } = req.body;
+
+        const profile = await business_profiles.findOne({ where: { user_id: userId } });
+        if (!profile) {
+            return res.status(404).json({ message: 'Business profile not found' });
+        }
+
+        const inquiry = await inquiries.findOne({
+            where: { id, business_id: profile.id }
+        });
+
+        if (!inquiry) {
+            return res.status(404).json({ message: 'Inquiry not found' });
+        }
+
+        inquiry.is_spam = (is_spam !== undefined) ? is_spam : true;
+        if (spam_reason) {
+            inquiry.spam_reason = spam_reason;
+        }
+        await inquiry.save();
+
+        return res.status(200).json({
+            message: 'Inquiry updated successfully',
+            data: inquiry
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+// 1. Fetch Logged-in Vendor's Notifications
+async function GetMyNotifications(req, res) {
+    try {
+        const userId = req.user.id;
+
+        const notifications = await notification.findAll({
+            where: { user_id: userId },
+            order: [['createdAt', 'DESC']]
+        });
+
+        return res.status(200).json({
+            data: notifications
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+// 2. Mark a Notification as Read (When vendor clicks "Mark read")
+async function MarkNotificationAsRead(req, res) {
+    try {
+        const userId = req.user.id;
+        const id=req.params.id;
+
+        const notif = await notification.findOne({
+            where: { id, user_id: userId }
+        });
+
+        if (!notif) {
+            return res.status(404).json({ message: 'Notification not found' });
+        }
+
+        notif.is_read = true;
+        await notif.save();
+
+        return res.status(200).json({
+            message: 'Notification marked as read',
+            data: notif
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+//vendor score page
+function getScoreRating(score) {
+    if (score >= 85) return 'EXCELLENT';
+    if (score >= 70) return 'GOOD';
+    if (score >= 50) return 'AVERAGE';
+    return 'NEEDS IMPROVEMENT';
+}
+
+async function getVendorScoreDetails(req, res) {
+    try {
+        // 1. Login vendor ki user ID nikalo
+        const userId = req.user.id;
+
+        // 2. Database se vendor ka business profile lao
+        const profile = await business_profiles.findOne({
+            where: { user_id: userId }
+        });
+
+        // Agar business profile nahi mila
+        if (!profile) {
+            return res.status(404).json({
+                message: 'Business profile not found'
+            });
+        }
+
+        // 3. Active scoring configurations database se lao
+        const scoringConfigs = await scoringconfiguration.findAll({
+            where: { is_active: true },
+            order: [['weight', 'DESC']]
+        });
+
+        // 4. Vendor ka total score nikalo
+        const totalScore = profile.score || 0;
+
+        // 5. Har category ka score calculate karo
+        const breakdown = [];
+
+        for (const config of scoringConfigs) {
+            // Category ka maximum score
+            const maxScore = config.weight; 
+
+            // Total score ke ratio ke according category score
+            const earnedScore = Math.round(
+                (totalScore / 100) * maxScore
+            );
+
+            // Category ka percentage calculate karo
+            let percentage = 0;
+
+            if (maxScore > 0) {
+                percentage = Math.round(
+                    (earnedScore / maxScore) * 100
+                );
+            }
+
+            // Category ki details array mein add karo
+            breakdown.push({
+                id: config.id,
+                name: config.name,
+                score: earnedScore,
+                max_score: maxScore,
+                percentage: percentage
+            });
+        }
+
+        // 6. Total score ke according rating nikalo
+        const rating = getScoreRating(totalScore);
+
+        // 7. Frontend ko response bhejo
+        return res.status(200).json({
+            success: true,
+            data: {
+                total_score: totalScore,
+                rating: rating,
+                level: profile.level,
+                verification_status: profile.verification_status,
+                breakdown: breakdown
+            }
+        });
+
+    } catch (error) {
+        // Agar code mein error aaya
+        console.error(error);
+
+        return res.status(500).json({
+            message: 'Internal server error'
+        });
+    }
+}
+
+
+async function getOverview(req,res){
+    try {
+        const userId = req.user.id;
+        const profile = await business_profiles.findOne({ where: { user_id: userId } });
+        if (!profile) {
+            return res.status(404).json({ message: 'Business profile not found' });
+        }
+        const totalInquiries = await inquiries.count({ where: { business_id: profile.id } });
+        const recentInquiries = await inquiries.findAll({
+            where: { business_id: profile.id },
+            attributes: ['id', 'name', 'subject', 'status', 'createdAt'],
+            order: [['createdAt', 'DESC']],
+            limit: 5
+        });
+        const score = profile.score || 0;
+        const rating = getScoreRating(score);
+
+         // 3. Profile Completion % Calculate karein (12 fields ke basis par)
+        const fieldsToCheck = [
+            profile.business_name,
+            profile.legal_name,
+            profile.industry,
+            profile.business_email,
+            profile.business_phone,
+            profile.business_address,
+            profile.city,
+            profile.state,
+            profile.gst_number,
+            profile.website,
+            profile.description,
+            (Array.isArray(profile.documents_url) && profile.documents_url.length >= 4)
+        ];
+        //falsy value remove karta hai
+        const filledCount = fieldsToCheck.filter(Boolean).length;
+        const profileCompletion = Math.round((filledCount / fieldsToCheck.length) * 100);
+       
+       // 4. Documents Status Summary (Charon documents ka status)
+        const documents = Array.isArray(profile.documents_url) ? profile.documents_url : [];
+        const findDoc = (keyword) => documents.find(d => 
+            (d.documentType || '').toLowerCase().includes(keyword) || 
+            (d.documentName || '').toLowerCase().includes(keyword)
+        );
+        const resolveDocStatus = (doc) => {
+            if (!doc) return 'Not Uploaded';
+            if (doc.status) return doc.status;
+            if (profile.verification_status === 'approved') return 'Verified';
+            return 'Pending';
+        };
+        const documentsSummary = [
+            { title: 'GST Certificate', status: resolveDocStatus(findDoc('gst')) },
+            { title: 'PAN Document', status: resolveDocStatus(findDoc('pan')) },
+            { title: 'Certificate of Incorporation', status: resolveDocStatus(findDoc('incorporation') || findDoc('coi')) },
+            { title: 'Address Proof', status: resolveDocStatus(findDoc('address')) }
+        ];
+        // 5. Verification Status & Message
+        const isApproved = profile.verification_status === 'approved';
+        const verificationStatusText = isApproved ? 'Verified' : profile.verification_status;
+        const verificationMessage = isApproved
+            ? 'Your business is fully approved and visible in the directory.'
+            : 'Your business profile is currently under review by our verification team.';
+        return res.status(200).json({
+            message: 'Overview fetched successfully',
+            data: {
+                business_name: profile.business_name,
+                business_id: profile.id,
+                // Top 4 Metrics Cards
+                stats: {
+                    profile_completion: profileCompletion, // e.g. 91%
+                    score: profile.score || 0,            // e.g. 91
+                    level: profile.level || 0,            // e.g. 4 ("Level 4")
+                    total_inquiries: totalInquiries       // e.g. 4
+                },
+                // Verification Status Card
+                verification: {
+                    status: verificationStatusText,
+                    is_verified: isApproved,
+                    message: verificationMessage
+                },
+                // Documents Summary Card
+                documents: documentsSummary,
+                // Recent Inquiries Table
+                recent_inquiries: recentInquiries
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}   
+
 module.exports = {
     getAccountSettings,
     updateAccountSettings,
@@ -504,5 +820,12 @@ module.exports = {
     updateBusinessProfile,
     getVendorDocuments,
     SubmitComplaint,
-    GetMyComplaints
+    GetMyComplaints,
+    GetMyInquiries,
+    reportInquirySpam,
+    updateMyInquiry,
+    GetMyNotifications,
+    MarkNotificationAsRead,
+    getVendorScoreDetails,
+    getOverview
 };

@@ -8,23 +8,24 @@ async function checkforAuth(req, res, next) {
     if (!token) return res.status(401).json({message:'Unauthorized'})
 
     try {
-        const decoded=jwt.verify(token,process.env.JWT_SECRET);
-        console.log(decoded);
-        const user=await User.findByPk(decoded.id,{
-            include:[{model: Role, as: 'role',attributes:['id','name']}] 
-            })
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findByPk(decoded.id, {
+            include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }]
+        });
 
-        if(!user){
-            return res.status(404).json({message:'User not found'})
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
         }
 
-        req.user=user;
+        req.user = user;
         next();
 
-
     } catch (error) {
-        console.log(error);
-        return res.status(500).json({message:'Unauthorized'});
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Invalid or expired token' });
+        }
+        console.error('Auth middleware error:', error);
+        return res.status(500).json({ message: 'Internal server error' });
     }
 }
 

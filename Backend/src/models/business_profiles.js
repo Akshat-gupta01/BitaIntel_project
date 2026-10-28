@@ -25,6 +25,11 @@ module.exports = (sequelize, DataTypes) => {
         { foreignKey: 'business_id',
           as: 'complaints' 
         });
+
+      business_profiles.hasMany(models.verification, {
+        foreignKey: 'business_id',
+        as: 'verifications'
+      });
     }
   }
 
@@ -38,7 +43,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       user_id:{
         type: DataTypes.INTEGER,
-        allowNull:false,
+        allowNull:true,
         references:{
           model:"users",
           key:"id"
@@ -102,6 +107,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER, 
         defaultValue: 0,
         allowNull: false
+      },
+      clarification_notes:{
+        type: DataTypes.TEXT,
+        allowNull: true
       },
       createdAt: {
         allowNull: false,

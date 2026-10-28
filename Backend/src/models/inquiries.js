@@ -67,6 +67,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull:true
       },
+      is_spam: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      spam_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
       createdAt: {
         allowNull: false,
         type: DataTypes.DATE

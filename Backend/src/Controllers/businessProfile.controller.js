@@ -1,4 +1,4 @@
-const { business_profiles } = require('../models');
+const { business_profiles, verification } = require('../models');
 const {
   addDocuments,
   removeUploadedFiles,
@@ -118,7 +118,7 @@ async function createBusinessProfile(req, res) {
             });
         }
 
-         const { business_name,legal_name, industry, business_email, business_phone, business_address, gst_number, website, description, documents_url } = req.body;
+         const { business_name,legal_name, industry, business_email, business_phone, business_address, gst_number, website, description, documents_url,city,state } = req.body;
       
           // Validation: Required fields
         if (!business_name || !industry || !business_email || !business_phone) {
@@ -136,10 +136,17 @@ async function createBusinessProfile(req, res) {
             website: website || null,
             description: description || null,
             documents_url: documents_url || null,
+            city:city || null,
+            state:state || null,
             user_id: userId,
             verification_status: 'pending'
-
         });
+
+        await verification.create({
+            business_id: business_profile.id,
+            verification_status: 'pending'
+        });
+
         return res.status(201).json({ message: 'Business profile created successfully', business_profile });
     } catch (err) {
         console.error(err);

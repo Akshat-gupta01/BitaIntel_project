@@ -51,6 +51,14 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull:true
       },
+      is_spam: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
+      },
+      spam_reason: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

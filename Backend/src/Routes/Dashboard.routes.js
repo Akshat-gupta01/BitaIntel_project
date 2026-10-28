@@ -8,7 +8,14 @@ const {
     updateBusinessProfile,
     getVendorDocuments,
     SubmitComplaint,
-    GetMyComplaints
+    GetMyComplaints,
+    GetMyInquiries,
+    GetMyNotifications,
+    MarkNotificationAsRead,
+    updateMyInquiry,
+    reportInquirySpam,
+    getVendorScoreDetails,
+    getOverview,
 } = require('../Controllers/Dashboard.controller');
 const { checkforAuth } = require('../middleware/authmiddleware');
 
@@ -31,10 +38,23 @@ router.get('/get-vendor-documents', checkforAuth, getVendorDocuments);
 
 
 //submit complaint by vendor
-
 router.post('/complaints',checkforAuth,SubmitComplaint)
-
 router.get('/my-complaints',checkforAuth,GetMyComplaints)
+
+
+router.get('/my-inquiries',checkforAuth,GetMyInquiries)
+router.patch('/updateMyInquiry/:id',checkforAuth,updateMyInquiry)
+router.patch('/report-spam/:id', checkforAuth, reportInquirySpam);
+
+// Notifications
+router.get('/notifications', checkforAuth, GetMyNotifications);
+router.patch('/notifications/:id', checkforAuth, MarkNotificationAsRead);
+
+
+// Vendor Score Page
+router.get('/score', checkforAuth, getVendorScoreDetails);
+
+router.get('/overview',checkforAuth,getOverview)
 
 
 module.exports = router;
