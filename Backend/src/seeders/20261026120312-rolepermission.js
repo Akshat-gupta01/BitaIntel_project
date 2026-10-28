@@ -94,7 +94,7 @@ module.exports = {
       { role_id: 4, permission_id: 19 }, // resolve_complaint
 
       // ==========================================
-      // 5. Vendor Role
+      // 5. vendor Role
       // ==========================================
       { role_id: 5, permission_id: 1 },  // view_overview
       { role_id: 5, permission_id: 6 },  // view_business

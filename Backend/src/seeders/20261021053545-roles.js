@@ -9,7 +9,7 @@ module.exports = {
       { name: 'Admin' },
       { name: 'Verification Team' },
       { name: 'Support Team' },
-      { name: 'Vendor' },
+      { name: 'vendor' },
     ])
   },
   async down(queryInterface, Sequelize) {

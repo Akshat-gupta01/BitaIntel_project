@@ -32,6 +32,18 @@ module.exports = {
         type:Sequelize.ENUM('pending','approved','rejected','suspended'),
         defaultValue:'pending'
       },
+      designation:{
+        type:Sequelize.STRING,
+        allowNull:true,
+      },
+      password:{
+        type:Sequelize.STRING,
+        allowNull:false,
+      },
+      acceptance_of_terms:{
+        type:Sequelize.BOOLEAN,
+        defaultValue:false
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

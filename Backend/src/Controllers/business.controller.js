@@ -80,11 +80,11 @@ async function updateVendorScoreAndStatus(req, res) {
 
         await profile.save();
 
-        // Audit Log entry: Document Approval ya Vendor Update
+        // Audit Log entry: Document Approval ya vendor Update
         const isApproved = status && status.toLowerCase() === 'approved';
         await recordAuditLog({
             userId: req.user ? req.user.id : null,
-            action: isApproved ? 'Document Approval' : 'Vendor Update',
+            action: isApproved ? 'Document Approval' : 'vendor Update',
             detail: isApproved 
                 ? `Admin approved document for business #${profile.id} (${profile.business_name})`
                 : `Admin updated vendor #${profile.id} (${profile.business_name}) status to '${profile.verification_status}'`,
@@ -92,7 +92,7 @@ async function updateVendorScoreAndStatus(req, res) {
         });
 
         return res.status(200).json({
-            message: 'Vendor score and status updated successfully',
+            message: 'vendor score and status updated successfully',
             data: {
                 id: profile.id,
                 business_name: profile.business_name,

@@ -2,26 +2,35 @@ const { where } = require('sequelize');
 const { Op } = require('sequelize');
 const { User, otp, role: Role, business_profiles } = require('../models');
 const jwt = require('jsonwebtoken');
+const bcrypt = require("bcrypt"); 
 const { recordAuditLog } = require('../services/auditLogger.service');
 
 async function register(req, res) {
     try {
-        const { name, email, role, phone } = req.body;
-        // Step 1: Sirf 'Vendor' role allowed hai public registration ke liye
-        const ALLOWED_ROLES = ['Vendor', 'vendor'];
-        const selectedRole = role || 'Vendor';
+        const { name, email, role, designation, phone,acceptance_of_terms,password } = req.body;
+        
+        if (!name || !email || !phone || !password) {
+            return res.status(400).json({ message: 'Name, email, phone, and password are required' });
+        }
+
+        if (!acceptance_of_terms) {
+            return res.status(400).json({ message: 'You must accept the terms and conditions to register' });
+        }
+        
+        // Step 1: Sirf 'vendor' role allowed hai public registration ke liye
+        const ALLOWED_ROLES = ['vendor'];
+        const selectedRole = role || 'vendor';
 
         // Agar kisi ne 'Super Admin', 'Admin' etc. bheja toh turant block karo
-        //allowed_roles array m sirf vendor hai .includes jo hai check karta hai ki allowed roles m admin,superadmin toh nhi hai. if agar nhi hai falsy but ! equal laga hai toh woh statement true ho jayega.statement execute ho jayega.
         if (!ALLOWED_ROLES.includes(selectedRole)) {
             return res.status(403).json({ 
                 message: 'Access denied: Cannot register with privileged role' 
             });
         }
 
-        // Step 2: Database se 'Vendor' role fetch karo
+        // Step 2: Database se 'vendor' role fetch karo
         const roleData = await Role.findOne({
-            where: { name: 'Vendor' }
+            where: { name: 'vendor' }
         });
 
         if (!roleData) {
@@ -42,7 +51,17 @@ async function register(req, res) {
             return res.status(400).json({ message: `${field} already exists`, field });
         }
 
-        const registerUser = await User.create({ name, email, role_id: roleData.id, phone });
+        // Password ko hash karein before saving
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const registerUser = await User.create({
+            name,
+            email,
+            role_id: roleData.id,
+            designation,
+            phone,
+            acceptance_of_terms,
+            password: hashedPassword  // Hashed password save hoga
+        });
 
         const token = jwt.sign({ id: registerUser.id, email: registerUser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
         res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });

@@ -62,6 +62,19 @@ module.exports = (sequelize, DataTypes) => {
         type:DataTypes.ENUM('pending','approved','rejected','suspended'),
         defaultValue:'pending'
       },
+      designation:{
+        type:DataTypes.STRING,
+        allowNull:true,
+        
+      },
+      password:{
+        type:DataTypes.STRING,
+        allowNull:false,
+      },
+      acceptance_of_terms:{
+        type:DataTypes.BOOLEAN,
+        defaultValue:false
+      },
       createdAt: {
         allowNull: false,
         type: DataTypes.DATE

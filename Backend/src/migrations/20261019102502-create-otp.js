@@ -17,6 +17,10 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull:false,
       },
+      email:{
+        type:Sequelize.STRING,
+        allowNull:false,
+      },
       expiresAt: {
         type: Sequelize.DATE,
         allowNull:false,
