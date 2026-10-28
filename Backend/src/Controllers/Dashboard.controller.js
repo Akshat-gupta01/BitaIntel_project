@@ -535,6 +535,12 @@ async function updateMyInquiry(req, res) {
         }
 
         if (status) {
+            const ALLOWED_INQUIRY_STATUSES = ['new', 'in_progress', 'responded', 'closed'];
+            if (!ALLOWED_INQUIRY_STATUSES.includes(status)) {
+                return res.status(400).json({
+                    message: `Invalid status. Allowed values: ${ALLOWED_INQUIRY_STATUSES.join(', ')}`
+                });
+            }
             inquiry.status = status;
         }
         await inquiry.save();

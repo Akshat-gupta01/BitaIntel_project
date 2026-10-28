@@ -208,6 +208,11 @@ async function UpdateUser(req, res) {
 async function deleteUser(req, res) {
     try {
         const id = req.params.id;   
+           if (req.user.id == id) {
+            return res.status(400).json({
+                message: 'You cannot delete your own account'
+            });
+        }
         const user = await User.findOne({
             where: {
                 id: id

@@ -266,8 +266,14 @@ async function updateInquiry(req,res){
         if(!inquiry){
             return res.status(404).json({message:"Inquiry not found"});
         }
-        if(status){
-            inquiry.status=status;
+        if (status) {
+            const ALLOWED_INQUIRY_STATUSES = ['new', 'in_progress', 'responded', 'closed'];
+            if (!ALLOWED_INQUIRY_STATUSES.includes(status)) {
+                return res.status(400).json({
+                    message: `Invalid status. Allowed values: ${ALLOWED_INQUIRY_STATUSES.join(', ')}`
+                });
+            }
+            inquiry.status = status;
         }
         if(admin_response){
             inquiry.admin_response=admin_response;
@@ -328,8 +334,14 @@ async function updateComplaint(req,res){
         if(!complaint){
             return res.status(404).json({message:"Complaint not found"});
         }
-        if(status){
-            complaint.status=status;
+        if (status) {
+            const ALLOWED_COMPLAINT_STATUSES = ['Open', 'in_progress', 'Closed', 'Resolved'];
+            if (!ALLOWED_COMPLAINT_STATUSES.includes(status)) {
+                return res.status(400).json({
+                    message: `Invalid status. Allowed values: ${ALLOWED_COMPLAINT_STATUSES.join(', ')}`
+                });
+            }
+            complaint.status = status;
         }
         if(admin_response){
             complaint.admin_response=admin_response;

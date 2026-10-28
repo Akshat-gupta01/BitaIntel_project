@@ -62,39 +62,64 @@ async function downloadBusinessDocument(req, res, next) {
       });
     }
 
-    const profile = await business_profiles.findOne({
-      where: {
-        user_id: req.user.id,
-      },
-    });
+    const userRole = req.user?.role?.name;
+    const isStaff = ['Super Admin', 'Admin', 'Verification Team', 'Support Team'].includes(userRole);
 
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: "Business profile not found",
+    let profile;
+    let document;
+
+    if (isStaff) {
+      // Staff (Admin, Super Admin, Verification Team) can view any vendor's documents
+      const allProfiles = await business_profiles.findAll({
+        attributes: ['id', 'documents_url']
       });
-    }
 
-    const documents = Array.isArray(profile.documents_url)
-      ? profile.documents_url
-      : [];
-
-    const document = documents.find(
-      (item) => item.documentUrl.endsWith(`/${filename}`)
-    );
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: "Document not found",
+      profile = allProfiles.find((p) => {
+        const docs = Array.isArray(p.documents_url) ? p.documents_url : [];
+        return docs.some((d) => d.documentUrl && d.documentUrl.endsWith(`/${filename}`));
       });
+
+      if (profile && Array.isArray(profile.documents_url)) {
+        document = profile.documents_url.find((item) =>
+          item.documentUrl && item.documentUrl.endsWith(`/${filename}`)
+        );
+      }
+    } else {
+      // Normal Vendor can ONLY access documents belonging to their own business profile
+      profile = await business_profiles.findOne({
+        where: {
+          user_id: req.user.id,
+        },
+      });
+
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          message: "Business profile not found",
+        });
+      }
+
+      const documents = Array.isArray(profile.documents_url)
+        ? profile.documents_url
+        : [];
+
+      document = documents.find(
+        (item) => item.documentUrl && item.documentUrl.endsWith(`/${filename}`)
+      );
+
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          message: "Document not found",
+        });
+      }
     }
 
     const filePath = path.join(uploadDirectory, filename);
 
     await fs.access(filePath);
 
-    const friendlyName = `${document.documentName || "document"}.pdf`;
+    const friendlyName = `${document?.documentName || "document"}.pdf`;
     return res.download(filePath, friendlyName);
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -169,6 +194,9 @@ async function getProfile(req, res) {
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
+
+
+
 
 module.exports = { createBusinessProfile, getProfile, uploadBusinessDocuments,
   downloadBusinessDocument };

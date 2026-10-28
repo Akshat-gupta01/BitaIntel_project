@@ -7,27 +7,42 @@ const { recordAuditLog } = require('../services/auditLogger.service');
 async function register(req, res) {
     try {
         const { name, email, role, phone } = req.body;
+        // Step 1: Sirf 'Vendor' role allowed hai public registration ke liye
+        const ALLOWED_ROLES = ['Vendor', 'vendor'];
+        const selectedRole = role || 'Vendor';
+
+        // Agar kisi ne 'Super Admin', 'Admin' etc. bheja toh turant block karo
+        //allowed_roles array m sirf vendor hai .includes jo hai check karta hai ki allowed roles m admin,superadmin toh nhi hai. if agar nhi hai falsy but ! equal laga hai toh woh statement true ho jayega.statement execute ho jayega.
+        if (!ALLOWED_ROLES.includes(selectedRole)) {
+            return res.status(403).json({ 
+                message: 'Access denied: Cannot register with privileged role' 
+            });
+        }
+
+        // Step 2: Database se 'Vendor' role fetch karo
         const roleData = await Role.findOne({
-            where: { name: role }
+            where: { name: 'Vendor' }
         });
+
         if (!roleData) {
             return res.status(400).json({ message: 'Role not found' });
         }
 
         const existingUser = await User.findOne({
-            where: { email },
+            where: { [Op.or]: [{ email }, { phone }] },
             include: [{
                 model: Role,
-                as:"role",
+                as: "role",
                 attributes: ['id', 'name']
             }]
         });
 
         if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' })
+            const field = existingUser.email === email ? "email" : "phone";
+            return res.status(400).json({ message: `${field} already exists`, field });
         }
 
-        const registerUser = await User.create({ name, email, role_id:roleData.id, phone });
+        const registerUser = await User.create({ name, email, role_id: roleData.id, phone });
 
         const token = jwt.sign({ id: registerUser.id, email: registerUser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
         res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });
@@ -153,10 +168,6 @@ async function login(req, res) {
 
 async function logout(req, res) {
     try {
-        const token = req.cookies.token;
-        if (!token) {
-            return res.status(401).json({ message: 'No token found' });
-        }
         res.clearCookie('token');
         return res.status(200).json({ message: 'Logout successful' });
     } catch (err) {
@@ -167,10 +178,9 @@ async function logout(req, res) {
 
 async function getMe(req, res) {
     try {
-        const user = await User.findOne({ where: { id: req.user.id } });
         return res.status(200).json({
             message: 'User found successfully',
-            user:req.user
+            user: req.user
         });
     } catch (err) {
         console.error(err);
