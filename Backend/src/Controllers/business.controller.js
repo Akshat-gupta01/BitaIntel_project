@@ -98,7 +98,9 @@ async function updateVendorScoreAndStatus(req, res) {
                 business_name: profile.business_name,
                 score: profile.score,
                 level: profile.level,
-                status: profile.verification_status
+                status: profile.verification_status,
+                rejection_reason:profile.rejection_reason,
+                clarification_notes:profile.clarification_notes
             }
         });
     } catch (error) {

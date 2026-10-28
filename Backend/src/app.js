@@ -26,7 +26,6 @@ app.use('/api/business-profile', businessProfileRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/verification', verificationRoutes);
-
 app.use('/api/business', businessRoutes);
 
 
