@@ -1,4 +1,5 @@
-const { business_profiles,verification } = require('../models');
+const { business_profiles, verification } = require('../models');
+const { recordAuditLog } = require('../services/auditLogger.service');
 
 async function underReviewVerification(req, res) {
     try {
@@ -38,13 +39,13 @@ async function underReviewVerification(req, res) {
 async function pendingVerification(req, res) {
     try {
         const [pendingCount, clarificationCount, completedCount] = await Promise.all([
-            verification.count({
+            business_profiles.count({
                 where: { verification_status: 'pending' }
             }),
-            verification.count({
+            business_profiles.count({
                 where: { verification_status: 'clarification_required' }
             }),
-            verification.count({
+            business_profiles.count({
                 where: { verification_status: 'approved' }
             })
         ]);
@@ -102,6 +103,7 @@ async function clarificationVerification(req, res) {
                 'score',
                 'level',
                 'rejection_reason',
+                'clarification_notes',
                 'createdAt'
             ]
         });
@@ -121,7 +123,6 @@ async function clarificationVerification(req, res) {
     }
 }
 
-
 async function updateVerificationAction(req, res) {
     try {
         // Step 1: Get ID from URL and data from request body
@@ -137,10 +138,17 @@ async function updateVerificationAction(req, res) {
 
         // Step 2.1: Validate status against allowed enum values
         // (Model ka ENUM DB level pe rokta hai, ye check API level pe clean 400 deta hai)
-        const ALLOWED_STATUSES = ['pending', 'under_review', 'clarification_required', 'approved', 'rejected', 'suspended'];
+        const ALLOWED_STATUSES = ['pending', 'under_review', 'clarification_required', 'approved', 'rejected'];
         if (!ALLOWED_STATUSES.includes(status)) {
             return res.status(400).json({
                 message: `Invalid status. Allowed values: ${ALLOWED_STATUSES.join(', ')}`
+            });
+        }
+
+        // Step 2.2: Rejection reason is mandatory when status is 'rejected'
+        if (status === 'rejected' && (!reason || typeof reason !== 'string' || !reason.trim())) {
+            return res.status(400).json({
+                message: 'Rejection reason is required'
             });
         }
 
@@ -169,6 +177,18 @@ async function updateVerificationAction(req, res) {
 
         // Step 6: Update business profile status
         businessProfile.verification_status = status;
+
+        // Level update: Agar status approved nahi hai toh level 0 reset hoga, approved hai toh score ke hisaab se level set hoga
+        if (status !== 'approved') {
+            businessProfile.level = 0;
+        } else {
+            const score = businessProfile.score || 0;
+            if (score >= 85) businessProfile.level = 4;
+            else if (score >= 80) businessProfile.level = 3;
+            else if (score >= 70) businessProfile.level = 2;
+            else if (score >= 60) businessProfile.level = 1;
+            else businessProfile.level = 0;
+        }
 
         // Update clarification notes if provided
         if (clarify !== undefined && clarify !== null) {
@@ -223,7 +243,23 @@ async function updateVerificationAction(req, res) {
             await verificationRecord.save();
         }
 
-        // Step 10: Send successful response
+        // Step 10: Record audit log for verification status change
+        const actionLabel = status === 'approved' 
+            ? 'Verification Approved' 
+            : status === 'rejected' 
+                ? 'Verification Rejected' 
+                : 'Verification Status Updated';
+
+        await recordAuditLog({
+            userId: req.user ? req.user.id : null,
+            action: actionLabel,
+            detail: `Verifier updated business #${businessProfile.id} (${businessProfile.business_name}) status to '${status}'` +
+                (reason ? `. Reason: ${reason}` : '') +
+                (clarify ? `. Notes: ${clarify}` : ''),
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress
+        });
+
+        // Step 11: Send successful response
         return res.status(200).json({
             success: true,
             message: `Business status updated to '${status}' successfully`,
@@ -231,6 +267,7 @@ async function updateVerificationAction(req, res) {
                 id: businessProfile.id,
                 business_name: businessProfile.business_name,
                 verification_status: businessProfile.verification_status,
+                level: businessProfile.level,
                 clarification_notes: verificationRecord.clarification_notes,
                 verification_id: verificationRecord.id,
                 verification_table_status: verificationRecord.verification_status
