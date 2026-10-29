@@ -1,5 +1,4 @@
-const { where } = require('sequelize');
-const { Op } = require('sequelize');
+const { Op,where } = require('sequelize');
 const { User, otp, role: Role, business_profiles } = require('../models');
 const jwt = require('jsonwebtoken');
 const bcrypt = require("bcrypt");
@@ -60,13 +59,14 @@ async function register(req, res) {
             designation,
             phone,
             acceptance_of_terms,
-            password: hashedPassword, // Hashed password save hoga
-            status:'pending'
+            password: hashedPassword,
+            status: 'pending'
         });
 
         const phoneOtp = "123456"; 
         const emailOtp = "654321"; 
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
         // Purane OTP delete karke naya save karein
         await otp.destroy({ where: { [Op.or]: [{ phone }, { email }] } });
         await otp.create({
@@ -80,13 +80,16 @@ async function register(req, res) {
         return res.status(201).json({
             message: 'Registration initiated. OTPs sent to your mobile and email',
             user: {
-                registerUser,
-                phone:registerUser.phone,
-                email:registerUser.email
+                id: registerUser.id,
+                name: registerUser.name,
+                email: registerUser.email,
+                phone: registerUser.phone,
+                role: roleData.name,
+                status: registerUser.status
             }
         });
     } catch (err) {
-        console.error(err);
+        console.error('Error in register:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
@@ -99,10 +102,33 @@ async function verifyotp(req, res) {
             return res.status(400).json({ message: 'Phone number is required' });
         }
 
+        // User dhoondein
+        const user = await User.findOne({
+            where: { phone },
+            include: [
+                { model: Role, as: 'role', attributes: ['id', 'name'] },
+                { model: business_profiles, as: 'business_profile', attributes: ['id', 'business_name', 'verification_status'] }
+            ]
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not registered with this phone number' });
+        }
+
+        if (user.status === 'suspended') {
+            return res.status(403).json({ message: 'Your account has been deactivated' });
+        }
+
         let validOtp = null;
 
-        // CASE 1: Agar Registration se aaya hai (Dono OTPs hain)
-        if (phone && email && phone_otp && email_otp) {
+        // CASE 1: Agar Registration pending hai -> Dono Phone & Email OTP verify hone chahiye
+        if (user.status === 'pending') {
+            if (!email || !phone_otp || !email_otp) {
+                return res.status(400).json({ 
+                    message: 'Both phone and email OTP are required for registration verification' 
+                });
+            }
+
             validOtp = await otp.findOne({
                 where: {
                     phone,
@@ -113,18 +139,19 @@ async function verifyotp(req, res) {
                 }
             });
         } 
-        // CASE 2: Agar Login se aaya hai (Sirf Phone OTP hai)
-        else if (phone && (  phone_otp)) {
-            const enteredOtp = phone_otp;
+        // CASE 2: Agar User already verified hai aur Login kar raha hai -> Sirf Phone OTP
+        else {
+            if (!phone_otp) {
+                return res.status(400).json({ message: 'Phone OTP is required for login' });
+            }
+
             validOtp = await otp.findOne({
                 where: {
                     phone,
-                    phone_otp: enteredOtp,
+                    phone_otp,
                     expiresAt: { [Op.gt]: new Date() }
                 }
             });
-        } else {
-            return res.status(400).json({ message: 'Please provide valid OTP details' });
         }
 
         if (!validOtp) {
@@ -269,6 +296,7 @@ async function loginPassword(req, res) {
         return res.status(200).json({
             success: true,
             message: 'Password login successful',
+            token,
             isProfileComplete: !!user.business_profile,
             user: {
                 id: user.id,
@@ -282,7 +310,6 @@ async function loginPassword(req, res) {
 
     } catch (err) {
         console.error('Error in loginPassword:', err);
-
         return res.status(500).json({
             message: 'Internal server error'
         });
@@ -336,6 +363,4 @@ async function getMe(req, res) {
     }
 }
 
-
-
-module.exports = { register, verifyotp,loginPassword,sendLoginOtp, logout, getMe };
+module.exports = { register, verifyotp, loginPassword, sendLoginOtp, logout, getMe };

@@ -29,4 +29,4 @@ async function checkforAuth(req, res, next) {
     }
 }
 
-module.exports={checkforAuth}
+module.exports = { checkforAuth };
