@@ -1,4 +1,7 @@
 'use strict';
+
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -29,7 +32,7 @@ module.exports = {
         }
       },
       status:{
-        type:Sequelize.ENUM('pending','approved','rejected','suspended'),
+        type:Sequelize.ENUM('pending','verified','suspended'),
         defaultValue:'pending'
       },
       designation:{

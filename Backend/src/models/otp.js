@@ -24,14 +24,19 @@ module.exports = (sequelize, DataTypes) => {
         type:DataTypes.STRING,
         allowNull:false,
       },
-      otp: {
-        type: DataTypes.STRING,
-        allowNull:false,
-      },
+      
       email:{
         type: DataTypes.STRING,
-        allowNull:false,
+        allowNull:true,
       },
+        phone_otp: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+      email_otp: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
       expiresAt: {
         type: DataTypes.DATE,
         allowNull:false,

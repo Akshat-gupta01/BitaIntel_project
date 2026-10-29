@@ -59,7 +59,7 @@ module.exports = (sequelize, DataTypes) => {
         }
       },
       status:{
-        type:DataTypes.ENUM('pending','approved','rejected','suspended'),
+        type:DataTypes.ENUM('pending','verified','suspended'),
         defaultValue:'pending'
       },
       designation:{
@@ -69,7 +69,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       password:{
         type:DataTypes.STRING,
-        allowNull:false,
+        allowNull:true,
       },
       acceptance_of_terms:{
         type:DataTypes.BOOLEAN,

@@ -13,14 +13,19 @@ module.exports = {
         type:Sequelize.STRING,
         allowNull:false,
       },
-      otp: {
-        type: Sequelize.STRING,
-        allowNull:false,
-      },
+      
       email:{
         type:Sequelize.STRING,
-        allowNull:false,
+        allowNull:true,
       },
+        phone_otp: {
+      type: Sequelize.STRING,
+      allowNull: true
+    },
+    email_otp: {
+      type: Sequelize.STRING,
+      allowNull: true
+    },
       expiresAt: {
         type: Sequelize.DATE,
         allowNull:false,

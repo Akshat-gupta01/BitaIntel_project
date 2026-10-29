@@ -1,4 +1,4 @@
-const { business_profiles, verification } = require('../models');
+const { business_profiles, verification} = require('../models');
 const {
   addDocuments,
   removeUploadedFiles,
@@ -84,6 +84,9 @@ async function downloadBusinessDocument(req, res, next) {
           item.documentUrl && item.documentUrl.endsWith(`/${filename}`)
         );
       }
+      if (!document && profile?.brochure_url && profile.brochure_url.endsWith(`/${filename}`)) {
+        document = { documentName: "Company_Brochure" };
+      }
     } else {
       // Normal Vendor can ONLY access documents belonging to their own business profile
       profile = await business_profiles.findOne({
@@ -106,6 +109,10 @@ async function downloadBusinessDocument(req, res, next) {
       document = documents.find(
         (item) => item.documentUrl && item.documentUrl.endsWith(`/${filename}`)
       );
+
+      if (!document && profile?.brochure_url && profile.brochure_url.endsWith(`/${filename}`)) {
+        document = { documentName: "Company_Brochure" };
+      }
 
       if (!document) {
         return res.status(404).json({
@@ -143,27 +150,86 @@ async function createBusinessProfile(req, res) {
             });
         }
 
-         const { business_name,legal_name, industry, business_email, business_phone, business_address, gst_number, website, description, documents_url,city,state } = req.body;
-      
-          // Validation: Required fields
-        if (!business_name || !industry || !business_email || !business_phone) {
-            return res.status(400).json({ message: 'Required business fields are missing' });
-        }
-        
-         const business_profile = await business_profiles.create({
+        const {
             business_name,
-            industry,
+            trade_name,
             legal_name,
+            constitution,
+            incorporation_date,
+            industry,
+            description,
+            employee_count,
+            website,
             business_email,
             business_phone,
             business_address,
-            gst_number: gst_number || null,
-            website: website || null,
-            description: description || null,
-            documents_url: documents_url || null,
-            city:city || null,
-            state:state || null,
+            city,
+            state,
+            pincode,
+            country,
+            corporate_office_address,
+            billing_address,
+            additional_plants,
+            gst_number,
+            pan,
+            cin,
+            llpin,
+            udyam,
+            iec,
+            tan,
+            duns,
+            lei,
+            authorized_signatory_name,
+            authorized_signatory_designation,
+            branches_count,
+            manufacturing_facilities,
+            key_personnel,
+            documents_url
+        } = req.body;
+
+        // Validation: Required fields
+        if (!business_name || !industry || !business_email || !business_phone) {
+            return res.status(400).json({ 
+                message: 'Required business fields are missing: business_name, industry, business_email, and business_phone are required' 
+            });
+        }
+
+        const business_profile = await business_profiles.create({
             user_id: userId,
+            business_name,
+            trade_name: trade_name || business_name,
+            legal_name: legal_name || business_name,
+            constitution: constitution || null,
+            incorporation_date: incorporation_date || null,
+            industry,
+            description: description || null,
+            employee_count: employee_count || null,
+            website: website || null,
+            business_email,
+            business_phone,
+            business_address: business_address || null,
+            city: city || null,
+            state: state || null,
+            pincode: pincode || null,
+            country: country || 'India',
+            corporate_office_address: corporate_office_address || null,
+            billing_address: billing_address || null,
+            additional_plants: additional_plants || [],
+            gst_number: gst_number || null,
+            pan: pan || null,
+            cin: cin || null,
+            llpin: llpin || null,
+            udyam: udyam || null,
+            iec: iec || null,
+            tan: tan || null,
+            duns: duns || null,
+            lei: lei || null,
+            authorized_signatory_name: authorized_signatory_name || null,
+            authorized_signatory_designation: authorized_signatory_designation || null,
+            branches_count: branches_count || 0,
+            manufacturing_facilities: manufacturing_facilities || null,
+            key_personnel: key_personnel || [],
+            documents_url: documents_url || [],
             verification_status: 'pending'
         });
 
@@ -172,7 +238,11 @@ async function createBusinessProfile(req, res) {
             verification_status: 'pending'
         });
 
-        return res.status(201).json({ message: 'Business profile created successfully', business_profile });
+        return res.status(201).json({ 
+            success: true,
+            message: 'Business profile created successfully', 
+            business_profile 
+        });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: 'Internal server error' });
@@ -188,7 +258,11 @@ async function getProfile(req, res) {
                 message: 'No business profile found. Please fill the onboarding form.',
             });
         }
-        return res.status(200).json({ message: 'Business profile fetched successfully', business_profile });
+        return res.status(200).json({ 
+            success: true,
+            message: 'Business profile fetched successfully', 
+            business_profile 
+        });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: 'Internal server error' });
@@ -196,7 +270,51 @@ async function getProfile(req, res) {
 }
 
 
+const multer = require("multer"); 
+const storage = multer.diskStorage({  
+destination: (req, file, cb) => { cb(null, "uploads/");  
+},  
+filename: (req, file, cb) => { cb( null, Date.now() + path.extname(file.originalname) ); 
+ }, }); 
+ const upload = multer({ storage });  
+
+async function uploadlogo(req,res) {
+   try { 
+        if (!req.file) { 
+            return res.status(400).json({ message: "No file uploaded" }); 
+        } 
+        await business_profiles.update({ logo_url: req.file.filename }, { where: { user_id: req.user.id } }); 
+        res.status(200).json({ message: "Company logo uploaded successfully", logo_url: req.file.filename }); 
+    } catch (error) { 
+        console.error("Error in uploadImage:", error); 
+        res.status(500).json({ message: 'Error uploading image', error: error.message }); 
+    } 
+}
+
+async function uploadbrochure(req, res) {
+    try { 
+        if (!req.file) { 
+            return res.status(400).json({ message: "No file uploaded" }); 
+        } 
+        await business_profiles.update({ brochure_url: req.file.filename }, { where: { user_id: req.user.id } }); 
+        res.status(200).json({ message: "Company brochure uploaded successfully", brochure_url: req.file.filename }); 
+    } catch (error) { 
+        console.error("Error in uploadBrochure:", error); 
+        res.status(500).json({ message: 'Error uploading brochure', error: error.message }); 
+    } 
+}
 
 
-module.exports = { createBusinessProfile, getProfile, uploadBusinessDocuments,
-  downloadBusinessDocument };
+
+
+
+
+module.exports = { 
+    createBusinessProfile, 
+    getProfile, 
+    uploadBusinessDocuments,
+    downloadBusinessDocument,
+    uploadlogo,
+    upload,
+    uploadbrochure
+};

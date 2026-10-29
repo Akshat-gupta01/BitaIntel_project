@@ -2,13 +2,13 @@ const { where } = require('sequelize');
 const { Op } = require('sequelize');
 const { User, otp, role: Role, business_profiles } = require('../models');
 const jwt = require('jsonwebtoken');
-const bcrypt = require("bcrypt"); 
+const bcrypt = require("bcrypt");
 const { recordAuditLog } = require('../services/auditLogger.service');
 
 async function register(req, res) {
     try {
-        const { name, email, role, designation, phone,acceptance_of_terms,password } = req.body;
-        
+        const { name, email, role, designation, phone, acceptance_of_terms, password } = req.body;
+
         if (!name || !email || !phone || !password) {
             return res.status(400).json({ message: 'Name, email, phone, and password are required' });
         }
@@ -60,15 +60,30 @@ async function register(req, res) {
             designation,
             phone,
             acceptance_of_terms,
-            password: hashedPassword  // Hashed password save hoga
+            password: hashedPassword, // Hashed password save hoga
+            status:'pending'
         });
 
-        const token = jwt.sign({ id: registerUser.id, email: registerUser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
-        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });
+        const phoneOtp = "123456"; 
+        const emailOtp = "654321"; 
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+        // Purane OTP delete karke naya save karein
+        await otp.destroy({ where: { [Op.or]: [{ phone }, { email }] } });
+        await otp.create({
+            phone,
+            email,
+            phone_otp: phoneOtp,
+            email_otp: emailOtp,
+            expiresAt
+        });
+
         return res.status(201).json({
-            message: 'User created successfully',
-            user: registerUser,
-            token
+            message: 'Registration initiated. OTPs sent to your mobile and email',
+            user: {
+                registerUser,
+                phone:registerUser.phone,
+                email:registerUser.email
+            }
         });
     } catch (err) {
         console.error(err);
@@ -78,29 +93,116 @@ async function register(req, res) {
 
 async function verifyotp(req, res) {
     try {
-        const { phone, otp: enteredOtp } = req.body;
-        if (!phone || !enteredOtp) {
-            return res.status(400).json({ message: 'Phone and OTP are required' });
+        const { phone, email, phone_otp, email_otp } = req.body;
+
+        if (!phone) {
+            return res.status(400).json({ message: 'Phone number is required' });
         }
 
-        const validOtp = await otp.findOne({
-            where: {
-                phone,
-                otp: enteredOtp,
-                expiresAt: {
-                    [Op.gt]: new Date()
+        let validOtp = null;
+
+        // CASE 1: Agar Registration se aaya hai (Dono OTPs hain)
+        if (phone && email && phone_otp && email_otp) {
+            validOtp = await otp.findOne({
+                where: {
+                    phone,
+                    email,
+                    phone_otp,
+                    email_otp,
+                    expiresAt: { [Op.gt]: new Date() }
                 }
-            }
-        })
+            });
+        } 
+        // CASE 2: Agar Login se aaya hai (Sirf Phone OTP hai)
+        else if (phone && (  phone_otp)) {
+            const enteredOtp = phone_otp;
+            validOtp = await otp.findOne({
+                where: {
+                    phone,
+                    phone_otp: enteredOtp,
+                    expiresAt: { [Op.gt]: new Date() }
+                }
+            });
+        } else {
+            return res.status(400).json({ message: 'Please provide valid OTP details' });
+        }
+
         if (!validOtp) {
             return res.status(400).json({ message: 'Invalid or expired OTP' });
         }
 
-        // OTP verify ho gaya, use delete kar dein
+        // OTP delete karein
         await otp.destroy({ where: { phone } });
-        // User ki details aur business_profile status nikalein
+
+        // User dhoondein
         const user = await User.findOne({
             where: { phone },
+            include: [
+                { model: Role, as: 'role', attributes: ['id', 'name'] },
+                { model: business_profiles, as: 'business_profile', attributes: ['id', 'business_name', 'verification_status'] }
+            ]
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not registered with this phone number' });
+        }
+
+        if (user.status === 'suspended') {
+            return res.status(403).json({ message: 'Your account has been deactivated' });
+        }
+
+        // Status verified mark karein
+        if (user.status === 'pending') {
+            user.status = 'verified';
+            await user.save();
+        }
+
+        // JWT Token generate karein
+        const token = jwt.sign(
+            { id: user.id },
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
+        );
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'OTP verified successfully. Login successful.',
+            token,
+            isProfileComplete: !!user.business_profile,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role ? user.role.name : null,
+                status: user.status
+            }
+        });
+    } catch (err) {
+        console.error('Error in verifyotp:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+async function loginPassword(req, res) {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                message: 'Email and password are required'
+            });
+        }
+
+        const user = await User.findOne({
+            where: { email },
             include: [
                 {
                     model: Role,
@@ -116,74 +218,101 @@ async function verifyotp(req, res) {
         });
 
         if (!user) {
-            return res.status(404).json({ message: 'User not registered with this phone number' });
+            return res.status(401).json({
+                message: 'Invalid email or password'
+            });
         }
 
-        // JWT Token generate karein
+        // Step 1: Account status check
+        if (user.status === 'suspended') {
+            return res.status(403).json({
+                message: 'Your account has been deactivated by admin'
+            });
+        }
+
+        if (user.status === 'pending') {
+            return res.status(403).json({
+                message: 'Your account is not verified yet. Please complete OTP verification.',
+                isPending: true
+            });
+        }
+
+        // Step 2: Password check
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            return res.status(401).json({
+                message: 'Invalid email or password'
+            });
+        }
+
+        // Step 3: JWT token generate
         const token = jwt.sign(
-            { id: user.id },
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role?.name
+            },
             process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
-        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 });
 
-        const isProfileComplete =!!user.business_profile;
-        const verificationStatus = user.business_profile ? user.business_profile.verification_status : null;
-
-        await recordAuditLog({
-            userId: user.id,
-            action: 'Login',
-            detail: `${user.name || 'User'} signed in`,
-            ipAddress: req.ip || req.headers['x-forwarded-for']
+        // Step 4: Token cookie mein save
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000
         });
 
+        // Step 5: Success response
         return res.status(200).json({
-            message: 'Login successful',
-            token,
-            isProfileComplete,
-            verification_status: verificationStatus,
+            success: true,
+            message: 'Password login successful',
+            isProfileComplete: !!user.business_profile,
             user: {
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
-                role: user.role ? user.role.name : null,
-                business_name: user.business_profile ? user.business_profile.business_name : null
+                role: user.role?.name,
+                status: user.status
             }
         });
+
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error('Error in loginPassword:', err);
+
+        return res.status(500).json({
+            message: 'Internal server error'
+        });
     }
 }
 
-
-async function login(req, res) {
+async function sendLoginOtp(req, res) {
     try {
         const { phone } = req.body;
-        if (!phone) {
-            return res.status(400).json({ message: 'Phone number is required' });
-        }
+        if (!phone) return res.status(400).json({ message: 'Phone number is required' });
+
         const user = await User.findOne({ where: { phone } });
-        if (!user) {
-            return res.status(404).json({ message: 'User not registered. Please register first.' });
+        if (!user) return res.status(404).json({ message: 'User not registered with this phone number' });
+
+        if (user.status === 'suspended') {
+            return res.status(403).json({ message: 'Your account has been deactivated' });
         }
-        // const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const generatedOtp = "123456";
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5
+
+        const phoneOtp = "123456";
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
         await otp.destroy({ where: { phone } });
-        await otp.create({ phone, otp: generatedOtp, expiresAt });
-        return res.status(200).json({
-            message: 'OTP sent successfully',
-        });
+        await otp.create({ phone, phone_otp: phoneOtp, expiresAt });
 
+        return res.status(200).json({ success: true, message: 'OTP sent to your phone' });
     } catch (err) {
-        console.error(err);
+        console.error('Error in sendLoginOtp:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
-
 
 async function logout(req, res) {
     try {
@@ -209,7 +338,4 @@ async function getMe(req, res) {
 
 
 
-
-
-
-module.exports = { register, verifyotp, login, logout, getMe };
+module.exports = { register, verifyotp,loginPassword,sendLoginOtp, logout, getMe };
