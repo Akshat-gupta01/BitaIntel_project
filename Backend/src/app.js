@@ -8,6 +8,8 @@ const cookieParser = require("cookie-parser");
 const userRoutes = require('./Routes/user.routes');
 const verificationRoutes = require('./Routes/verification.routes');
 const businessRoutes = require('./Routes/business.routes');
+const masterRoutes = require('./Routes/master.routes');
+const vendorCapabilitiesRoutes = require('./Routes/vendorcapabilities.routes');
 const app = express();
 
 // Security Headers
@@ -27,6 +29,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/business', businessRoutes);
+app.use('/api/master', masterRoutes);
+app.use('/api/vendor-capabilities', vendorCapabilitiesRoutes);
 
 
 // Global Error Handler

@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
       User.hasOne(models.business_profiles,{
         foreignKey:'user_id',
         as:'business_profile'
+      });
+
+      User.hasOne(models.vendor_capabilities, {
+        foreignKey: 'user_id',
+        as: 'capabilities'
       })
 
       User.hasMany(models.complaints, 

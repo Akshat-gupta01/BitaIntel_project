@@ -3,32 +3,24 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 
-
-// file ka par save hogi /uploads/business-documents folder me 
-//if folder nhi hai toh use create karega agar parent folder bhi nhi hai toh create karega.
+// 1. Business Documents Directory (PDF only)
 const uploadDirectory = path.resolve(
   process.cwd(),
   "uploads",
   "business-documents"
 );
-
 fs.mkdirSync(uploadDirectory, { recursive: true });
-// multer ko yeh btana jo file upload kar rahe hai uski kahha store karna hai 
-//destination  function hai jo file ko store karne ki jagah batata hai 
-//filename function hai jo file ka name batata hai 
+
 const storage = multer.diskStorage({
   destination: (req, file, callback) => {
     callback(null, uploadDirectory);
   },
-
-  // filename crypto use karke random bana rahe hai taaki collision na ho 
   filename: (req, file, callback) => {
     const filename = `${crypto.randomUUID()}.pdf`;
     callback(null, filename);
   },
 });
 
-//Kaunsi file upload ho sakti hai?  only pdf wali hi allowed hogi
 const fileFilter = (req, file, callback) => {
   const extension = path.extname(file.originalname).toLowerCase();
 
@@ -41,7 +33,6 @@ const fileFilter = (req, file, callback) => {
   callback(null, true);
 };
 
-// Maximum 5 files, each up to 5MB
 const uploadDocuments = multer({
   storage,
   fileFilter,
@@ -51,7 +42,50 @@ const uploadDocuments = multer({
   },
 });
 
+// 2. Facility Media Directory (PDF, JPG, PNG, WEBP for plant photos & licenses)
+const facilityUploadDir = path.resolve(
+  process.cwd(),
+  "uploads",
+  "facility-documents"
+);
+fs.mkdirSync(facilityUploadDir, { recursive: true });
+
+const facilityStorage = multer.diskStorage({
+  destination: (req, file, callback) => {
+    callback(null, facilityUploadDir);
+  },
+  filename: (req, file, callback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const filename = `${crypto.randomUUID()}${ext}`;
+    callback(null, filename);
+  },
+});
+
+const facilityFileFilter = (req, file, callback) => {
+  const allowedExts = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (!allowedExts.includes(ext)) {
+    const error = new Error("Allowed file formats: PDF, JPG, JPEG, PNG, WEBP");
+    error.statusCode = 400;
+    return callback(error);
+  }
+
+  callback(null, true);
+};
+
+const uploadFacilityMedia = multer({
+  storage: facilityStorage,
+  fileFilter: facilityFileFilter,
+  limits: {
+    files: 10,
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+  },
+});
+
 module.exports = {
   uploadDocuments,
   uploadDirectory,
+  uploadFacilityMedia,
+  facilityUploadDir,
 };

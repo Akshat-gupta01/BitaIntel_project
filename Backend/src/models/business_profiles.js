@@ -25,6 +25,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'business_id',
         as: 'verifications'
       });
+
+      business_profiles.hasOne(models.vendor_capabilities, {
+        foreignKey: 'business_profile_id',
+        as: 'capabilities'
+      });
     }
   }
 
