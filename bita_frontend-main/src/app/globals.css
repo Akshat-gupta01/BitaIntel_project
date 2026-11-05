@@ -1,0 +1,351 @@
+@import "tailwindcss";
+@import "../config/theme.css";
+
+@theme inline {
+  --color-primary-50: var(--primary-50);
+  --color-primary-100: var(--primary-100);
+  --color-primary-200: var(--primary-200);
+  --color-primary-300: var(--primary-300);
+  --color-primary-400: var(--primary-400);
+  --color-primary-500: var(--primary-500);
+  --color-primary-600: var(--primary-600);
+  --color-primary-700: var(--primary-700);
+  --color-primary-800: var(--primary-800);
+  --color-primary-900: var(--primary-900);
+  --color-primary-950: var(--primary-950);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-light: var(--primary-light);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-border: var(--primary-border);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-light: var(--brand-light);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-glow: var(--brand-glow);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-card: var(--ink-card);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-glass: var(--surface-glass);
+  --color-surface-muted: var(--surface-muted);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-glass: var(--border-glass);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-strong: var(--success-strong);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-logo-primary: var(--logo-primary);
+  --color-logo-neutral: var(--logo-neutral);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 96px;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    background-color: var(--canvas);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-image: 
+      radial-gradient(at 5% 5%, color-mix(in srgb, var(--primary-600) 8%, transparent) 0px, transparent 48%),
+      radial-gradient(at 95% 5%, color-mix(in srgb, var(--primary-500) 7%, transparent) 0px, transparent 48%),
+      radial-gradient(at 50% 35%, rgba(245, 158, 11, 0.03) 0px, transparent 45%),
+      radial-gradient(at 8% 85%, color-mix(in srgb, var(--primary-400) 5%, transparent) 0px, transparent 45%),
+      radial-gradient(at 92% 85%, color-mix(in srgb, var(--primary-700) 4%, transparent) 0px, transparent 45%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  img, svg {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  ::selection {
+    background: var(--primary-100);
+    color: var(--primary-900);
+  }
+}
+
+/* ==========================================================================
+   High-Contrast Interactive Controls (Guarantees White Text on Dark Buttons)
+   ========================================================================== */
+.btn-dark,
+[data-variant="dark"],
+a.bg-slate-900,
+button.bg-slate-900,
+a.bg-slate-950,
+button.bg-slate-950,
+.bg-slate-900,
+.bg-slate-950 {
+  color: #FFFFFF !important;
+}
+
+.btn-dark span,
+.btn-dark svg,
+[data-variant="dark"] span,
+[data-variant="dark"] svg,
+a.bg-slate-900 span,
+a.bg-slate-900 svg,
+button.bg-slate-900 span,
+button.bg-slate-900 svg,
+.bg-slate-900 span,
+.bg-slate-900 svg {
+  color: #FFFFFF !important;
+  stroke: currentColor;
+}
+
+/* ==========================================================================
+   Core Web Vitals Performance Optimizations
+   ========================================================================== */
+/* Offscreen layout deferral: skips paint/layout until scrolled near viewport */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 700px;
+}
+
+/* ==========================================================================
+   Apple Glass & Modern Bento Design Utilities
+   ========================================================================== */
+
+.glass-surface {
+  background: var(--surface-glass);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--border-glass);
+  box-shadow: 0 8px 32px 0 rgba(11, 20, 16, 0.03), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+.glass-panel {
+  background: var(--surface-glass-strong);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 20px 45px -10px rgba(11, 20, 16, 0.04), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.glass-dark {
+  background: rgba(11, 20, 16, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+}
+
+/* Pastel Badge & Card Helpers */
+.pastel-mint {
+  background-color: var(--pastel-mint);
+  border-color: var(--pastel-mint-border);
+  color: var(--pastel-mint-text);
+}
+
+.pastel-sage {
+  background-color: var(--pastel-sage);
+  border-color: var(--pastel-sage-border);
+  color: var(--pastel-sage-text);
+}
+
+.pastel-peach {
+  background-color: var(--pastel-peach);
+  border-color: var(--pastel-peach-border);
+  color: var(--pastel-peach-text);
+}
+
+.pastel-primary,
+.pastel-sky {
+  background-color: var(--pastel-primary, var(--pastel-sky));
+  border-color: var(--pastel-primary-border, var(--pastel-sky-border));
+  color: var(--pastel-primary-text, var(--pastel-sky-text));
+}
+
+.pastel-lavender {
+  background-color: var(--pastel-lavender);
+  border-color: var(--pastel-lavender-border);
+  color: var(--pastel-lavender-text);
+}
+
+.pastel-amber {
+  background-color: var(--pastel-amber);
+  border-color: var(--pastel-amber-border);
+  color: var(--pastel-amber-text);
+}
+
+.pastel-rose {
+  background-color: var(--pastel-rose);
+  border-color: var(--pastel-rose-border);
+  color: var(--pastel-rose-text);
+}
+
+.section-pad {
+  padding-top: 88px;
+  padding-bottom: 88px;
+}
+
+@media (max-width: 640px) {
+  .section-pad {
+    padding-top: 56px;
+    padding-bottom: 56px;
+  }
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.form-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.form-input:focus {
+  border-color: var(--brand);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+
+.form-input::placeholder {
+  color: #94A3B8;
+}
+
+.prose-copy p {
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.prose-copy h2 {
+  margin-top: 36px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.prose-copy h3 {
+  margin-top: 24px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ========================================================================= */
+/* Custom Sleek Scrollbar (Dropdowns, modals, and panels)                    */
+/* ========================================================================= */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
