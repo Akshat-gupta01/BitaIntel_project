@@ -6,7 +6,7 @@ import { createWebPageJsonLd } from '@/lib/schema';
 import { Lock } from 'lucide-react';
 
 export const metadata = createPageMetadata({
-  title: 'Privacy Framework & Data Governance',
+  title: 'Privacy Framework & Data governmen',
   description:
     'BITAINTEL privacy principles, role-based visibility controls, and statutory data protection protocols.',
   pathname: '/privacy',
