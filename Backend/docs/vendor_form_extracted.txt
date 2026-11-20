@@ -1,0 +1,492 @@
+For BITAINTEL, I recommend consolidating the entire vendor registration into 5 steps while retaining all essential company, product, compliance, commercial and verification information. Use conditional fields so vendors only see questions relevant to their business.
+Step 1- login only
+Account creation
+Account: Authorized person's name, designation, email, mobile, password, OTP verification and acceptance of terms.
+Step 2- Account & Company Profile
+ company identity and legal details
+Company details: Legal name, trade name, constitution, incorporation date, website, company description, logo, brochure and employee count.
+Registered addresses: Registered office, corporate office, billing address, city, state/province, PIN/postal code and country. Add option add plant or office add
+Business identity: GSTIN, PAN, CIN, LLPIN, Udyam, IEC, TAN, D-U-N-S and LEI, as applicable. 
+Company structure: Branches, manufacturing facilities, authorized signatory and relevant directors/owners if photo available of marketing head/ purchase head / account head show multiple person profile add .
+Basic documents: Incorporation certificate, address proof, applicable tax registrations and authorization documents.
+Step 3 - Business Classification & Capabilities
+What the vendor does and how the business operates
+Business types: Manufacturer, OEM, contract manufacturer, trader, wholesaler, distributor, dealer, stockist, importer, exporter, service provider, consultant, agent or retailer.
+Categories: Select from BITAINTEL's 20 main vendor categories.
+Subcategories: Dynamically filtered based on the selected category; allow multiple selections.
+Business activities: Manufacturing, trading, distribution, services, import, export, private label and contract manufacturing.
+Manufacturing capabilities: Facility locations, owned/leased/contract facilities, processes, technology, machinery, installed and available capacity, R&D, laboratory, QC/QA and custom development.
+Service capabilities: Service types, expertise, geographic coverage, equipment and delivery capacity.
+Operating profile: Years in business, number of facilities, annual turnover range and employee count.
+Facility information: Manufacturing licences, facility photographs and supporting technical documents.
+Step 4 - Products, Services & Quality
+Portfolio, specifications, certifications and technical documents
+Products/services: Name, category, subcategory, brand, description, manufacturer, specifications, grade, standards, HS/HSN code and country of origin.
+Supply information: MOQ, standard order quantity, monthly/annual capacity, available stock, lead time and sample availability.
+Commercial product details: Indicative price, currency, price validity and target markets.
+Product files: Images, catalogue, technical data sheet, COA and SDS, as applicable.
+Certifications: ISO 9001, ISO 14001, ISO 45001, WHO-GMP/GMP, FSSAI, CE, BIS and other industry-specific certificates, where applicable.
+Regulatory approvals: Relevant manufacturing licences, DMF/USDMF, CEP and other regulatory filing details for pharmaceutical vendors.
+Certificate records: Certificate number, issuing authority, issue/expiry dates, scope, applicable facility and uploaded evidence.
+Quality systems: Testing capabilities, calibration, inspection, laboratory facilities, audits and quality assurance procedures.
+Step 5 -Commercial, Trade & Payment Details
+Buyer engagement, procurement, logistics and financial information
+Business contacts: Sales, procurement, accounts and support contact persons, email addresses and phone numbers.
+Commercial terms: Accepted currencies, payment methods, advance payment, credit terms, MOQ policy, sample policy, return/replacement policy and warranty terms.
+Trade operations: Importer/exporter status, IEC, export/import products, sourcing countries, export markets, experience and annual trade turnover ranges.
+International logistics: Preferred Incoterms, freight arrangements, customs clearance, export packaging, cold-chain capability and documentation support.
+Customer and supplier references: Optional trade references, customer segments and relevant business experience.
+Banking details: Account holder, bank, account type, account number, IFSC, SWIFT/BIC, branch, country and bank proof when required.
+Authorized representatives: Directors, owners, signatories, business contact information, ownership information where necessary, and authorization letters.
+Due diligence: Applicable compliance declarations, lawful sanctions screening, conflict-of-interest declarations and supporting evidence.
+Step 6 — Documents, Review & Submission
+Final checks, declarations and vendor verification
+Document checklist: Registration certificates, applicable tax documents, address proof, IEC, licences, product catalogues, quality certificates, bank proof and signatory authorization.
+Document metadata: Type, issue date, expiry date, facility, upload date, reviewer comments and verification status.
+Review screen: Preview all five steps and edit any section before submission.
+Declarations: Accuracy of information, authority to register the business, privacy consent, terms acceptance and authorization for lawful verification.
+Submission controls: Save draft, previous, save and continue, preview and submit for verification.
+Registration tracking: Vendor ID, reference number, submission date, completion percentage, pending documents and review status.
+Status workflow: Draft, verification pending, submitted, under review, additional information required, verified, rejected, suspended or renewal required.
+Post-submission: Admin remarks, correction/resubmission, downloadable registration summary and certificate-expiry reminders.
+Vendor Registration
+note
+Conditional registration: Show industry-specific fields only when relevant.
+Multiple selections: Support multiple categories, subcategories, products, facilities and certificates.
+Progress saving: Allow vendors to save incomplete forms and resume later.
+Smart validation: Validate email, mobile OTP, country-specific tax identifiers, file formats and required fields.
+Security: Restrict sensitive banking and personal information, encrypt sensitive data where appropriate, and maintain access logs.
+Verification: Keep account verification, legal entity verification, certificate validation and overall vendor approval as separate statuses.
+This structure consolidates the full registration into five manageable steps without dropping the major information areas from the original specification.
+For stage -3 BITAINTEL – Business Category & Subcategory Master List
+Below is the reference list for BITAINTEL vendor registration, website development and database setup. It contains 20 main business categories and 240 subcategory entries for manufacturers, suppliers, traders, distributors and service providers.
+Main category and subcategory reference
+Use this list as the initial master data for the BITAINTEL website. Categories can be expanded as new industries are added.
+BITAINTEL – Business Categories & Subcategories
+Pharmaceuticals & Healthcare
+Active Pharmaceutical Ingredients (APIs)
+Finished Formulations
+Ophthalmic Products
+Biotechnology & Biologics
+Nutraceuticals
+Medical Devices
+Healthcare Supplies
+Pharma Intermediates
+Excipients
+Contract Manufacturing (CDMO/CMO)
+Pharma Packaging
+Pharma Testing & Regulatory Services
+Others
+Chemicals & Petrochemicals
+Organic Chemicals
+Inorganic Chemicals
+Specialty Chemicals
+Fine Chemicals
+Agrochemicals
+Dyes & Pigments
+Solvents
+Chemical Intermediates
+Industrial Gases
+Petrochemicals
+Water Treatment Chemicals
+Adhesives & Sealants
+Others
+Agriculture & Food
+Agricultural Products
+Grains & Cereals
+Spices & Seasonings
+Edible Oils
+Food Ingredients & Additives
+Processed Foods
+Dairy Products
+Meat, Poultry & Seafood
+Beverages
+Organic Foods
+Animal Feed
+Seeds & Fertilizers
+Others
+Industrial Manufacturing
+OEM Manufacturing
+Contract Manufacturing
+Precision Engineering
+Industrial Components
+Fabrication & Welding
+Industrial Tools
+Electrical Assemblies
+Automation Components
+Industrial Consumables
+Private Label Manufacturing
+Others
+Machinery & Equipment
+Industrial Machinery
+Pharmaceutical Machinery
+Food Processing Equipment
+Packaging Machinery
+CNC & Machine Tools
+Pumps & Valves
+Compressors
+Material Handling Equipment
+Agricultural Machinery
+Spare Parts & Maintenance
+Others
+Electrical & Electronics
+Electronic Components
+Semiconductors
+Cables & Wires
+Switchgear & Circuit Breakers
+Power Supplies & Transformers
+Motors & Drives
+Lighting Products
+Consumer Electronics
+Control Systems
+Electrical Accessories
+Others
+Construction & Building Materials
+Cement & Concrete
+Steel Structures
+Tiles & Ceramics
+Glass Products
+Doors & Windows
+Plumbing & Sanitaryware
+Paints & Coatings
+Roofing Materials
+Insulation Products
+Construction Chemicals
+Building Hardware
+Others
+Textiles & Apparel
+Yarn & Fibres
+Woven Fabrics
+Knitted Fabrics
+Garments & Apparel
+Home Textiles
+Technical Textiles
+Industrial Fabrics
+Leather & Footwear
+Textile Machinery
+Dyeing & Finishing Services
+Others
+Packaging & Printing
+Flexible Packaging
+Rigid Packaging
+Plastic Containers
+Glass Packaging
+Metal Packaging
+Paper & Corrugated Packaging
+Pharmaceutical Packaging
+Food Packaging
+Labels & Stickers
+Printing Services
+Packaging Machinery
+Others
+Automotive & Transportation
+Automotive OEM Parts
+Aftermarket Spare Parts
+EV Components
+Batteries & Charging
+Tyres & Tubes
+Commercial Vehicles
+Automotive Chemicals & Lubricants
+Vehicle Electronics
+Fleet Equipment
+Marine & Aviation Components
+Others
+IT & Telecommunications
+Software Development
+SaaS Products
+Cloud Services
+Cybersecurity
+IT Hardware
+Networking Equipment
+Telecommunications Equipment
+Data & Analytics
+AI Solutions
+IT Consulting & Support
+Others
+Professional & Business Services
+Management Consulting
+Engineering Consulting
+Legal Services
+Accounting & Taxation
+Marketing & Advertising
+Human Resources
+Business Process Outsourcing
+Corporate Training
+Certification Consulting
+Business Intelligence Services
+Others
+Logistics & Supply Chain
+Freight Forwarding
+Road Transportation
+Air Freight
+Ocean Freight
+Warehousing
+Cold Chain Logistics
+Customs Clearance
+Courier & Express
+Third-Party Logistics (3PL)
+Supply Chain Consulting
+Others
+Import, Export & Trading
+Importers
+Exporters
+General Trading Companies
+Authorized Distributors
+Wholesale Traders
+Indenting Agents
+Sourcing Agents
+Commission Agents
+International Procurement
+Cross-Border E-commerce
+Others
+Consumer Goods & Retail
+Household Products
+Personal Care & Cosmetics
+Home & Kitchen Products
+Furniture & Furnishings
+Consumer Appliances
+Toys & Games
+Sports & Fitness Products
+Stationery & Office Supplies
+Retail & E-commerce Suppliers
+Lifestyle Accessories
+Others
+Energy & Utilities
+Solar Energy
+Wind Energy
+Power Generation
+Energy Storage
+Batteries
+Electrical Power Systems
+Renewable Energy Equipment
+Fuel & Petroleum Products
+Energy Efficiency Solutions
+Utility Infrastructure
+Others
+Metals, Minerals & Mining
+Ferrous Metals
+Non-Ferrous Metals
+Steel & Stainless Steel
+Aluminium & Copper
+Metal Alloys
+Industrial Minerals
+Mining Equipment
+Metal Casting & Forging
+Metal Fabrication
+Metal Recycling
+Others
+Plastics, Rubber & Polymers
+Plastic Resins
+Engineering Plastics
+Rubber Products
+Elastomers
+Polymer Compounds
+Masterbatches
+Plastic Moulding
+Injection Moulding
+Extrusion Products
+Recycled Polymers
+Others
+Laboratory, Testing & Research
+Analytical Testing
+Chemical Testing
+Pharmaceutical Testing
+Microbiology Testing
+Calibration Services
+Inspection & Certification
+R&D Services
+Contract Research
+Laboratory Equipment
+Reference Standards & Reagents
+Others
+Safety, Environment & Waste Management
+Personal Protective Equipment (PPE)
+Industrial Safety Equipment
+Fire Safety Systems
+Environmental Testing
+Waste Collection & Disposal
+Hazardous Waste Management
+Water & Wastewater Treatment
+Recycling Services
+Pollution Control Equipment
+Environmental Consulting
+Others
+2. Business type master list
+Business type should be a separate selection from the industry category.
+Code
+Business type
+BT01
+Manufacturer
+BT02
+Original Equipment Manufacturer (OEM)
+BT03
+Contract Manufacturer
+BT04
+Trader
+BT05
+Wholesaler
+BT06
+Distributor
+BT07
+Dealer
+BT08
+Stockist
+BT09
+Importer
+BT10
+Exporter
+BT11
+Service Provider
+BT12
+Consultant
+BT13
+Agent
+BT14
+Retailer
+3. Recommended database columns
+Use the following fields in the BITAINTEL category master table.
+Field
+Example
+Category ID
+CAT001
+Category Name
+Chemicals & Petrochemicals
+Subcategory ID
+SUB001
+Subcategory Name
+Specialty Chemicals
+Business Type Code
+BT01
+Status
+Active
+Parent Category ID
+CAT002
+Created Date
+System generated
+A vendor should be able to select multiple business types, categories and subcategories where applicable. Use unique IDs in the database rather than relying on category names.
+Recommended next step: Maintain this list as a central master table so the same category data powers vendor registration, product listings, search filters, vendor comparisons and the admin dashboard.
+{
+  "business_name": "Meridian Steel Works",
+  "trade_name": "Meridian Steel",
+  "legal_name": "Meridian Steel Works Private Limited",
+  "constitution": "Private Limited",
+  "incorporation_date": "2018-06-15",
+  "industry": "Manufacturing & Heavy Engineering",
+  "description": "Leading Indian manufacturer and exporter of precision industrial steel components, fabricated structures, and high-pressure alloy fittings.",
+  "employee_count": "51-200",
+  "website": "https://www.meridiansteel.test",
+  "logo_url": "https://api.softfix.in/uploads/company/logos/meridian-logo.png",
+  "brochure_url": "https://api.softfix.in/uploads/company/brochures/meridian-catalog-2026.pdf",
+  "business_email": "contact@meridiansteel.test",
+  "business_phone": "+919876543210",
+ 
+  "business_address": "Plot No. 42, Industrial Area Phase-II, Peenya",
+  "city": "Bengaluru",
+  "state": "Karnataka",
+  "pincode": "560058",
+  "country": "India",
+  "corporate_office_address": "Suite 501, Prestige Trade Tower, Palace Road, High Grounds, Bengaluru, Karnataka 560001",
+  "billing_address": "Plot No. 42, Industrial Area Phase-II, Peenya, Bengaluru, Karnataka 560058",
+ 
+  "additional_plants": [
+    {
+      "plant_name": "Unit 1 - Forging & Casting Division",
+      "address": "Survey No. 88, KIADB Industrial Area",
+      "city": "Dharwad",
+      "state": "Karnataka",
+      "pincode": "580011",
+      "plant_head": "Suresh Nair",
+      "contact": "+919800001111"
+    },
+    {
+      "plant_name": "Unit 2 - Cold Rolling & Galvanizing Facility",
+      "address": "Plot 14-B, GIDC Industrial Estate",
+      "city": "Sanand",
+      "state": "Gujarat",
+      "pincode": "382110",
+      "plant_head": "Pravin Patel",
+      "contact": "+919800002222"
+    }
+  ],
+ 
+  "gst_number": "29ABCDE1234F1Z5",
+  "pan": "ABCDE1234F",
+  "cin": "U27100KA2018PTC112345",
+  "llpin": null,
+  "udyam": "UDYAM-KR-03-0012345",
+  "iec": "0718012345",
+  "tan": "BLRM12345C",
+  "duns": "654321987",
+  "lei": "335800ABCDEF12345678",
+ 
+  "authorized_signatory_name": "Ramesh Chandra Gupta",
+  "authorized_signatory_designation": "Managing Director",
+  "branches_count": 3,
+  "manufacturing_facilities": "2 Large Scale Manufacturing Units, 1 Assembly Workshop, 1 ISO Certified Testing Lab",
+ 
+  "key_personnel": [
+    {
+      "name": "Ramesh Chandra Gupta",
+      "designation": "Managing Director / Owner",
+      "department": "Executive Management",
+      "email": "rc.gupta@meridiansteel.test",
+      "phone": "+919811122233",
+      "photo_url": "https://api.softfix.in/uploads/personnel/photos/director-ramesh.jpg",
+      "is_authorized_signatory": true
+    },
+    {
+      "name": "Vikram Malhotra",
+      "designation": "Head of Marketing & Sales",
+      "department": "Marketing",
+      "email": "vikram.m@meridiansteel.test",
+      "phone": "+919822233344",
+      "photo_url": "https://api.softfix.in/uploads/personnel/photos/head-marketing.jpg",
+      "is_authorized_signatory": false
+    },
+    {
+      "name": "Deepak Verma",
+      "designation": "Head of Procurement & Purchase",
+      "department": "Purchase",
+      "email": "deepak.v@meridiansteel.test",
+      "phone": "+919833344455",
+      "photo_url": "https://api.softfix.in/uploads/personnel/photos/head-purchase.jpg",
+      "is_authorized_signatory": false
+    },
+    {
+      "name": "Sunita Agarwal",
+      "designation": "Head of Accounts & Finance (CFO)",
+      "department": "Accounts",
+      "email": "sunita.a@meridiansteel.test",
+      "phone": "+919844455566",
+      "photo_url": "https://api.softfix.in/uploads/personnel/photos/head-accounts.jpg",
+      "is_authorized_signatory": false
+    }
+  ],
+ 
+  "documents_url": [
+    {
+      "documentType": "incorporation_certificate",
+      "documentName": "Certificate_of_Incorporation_MCA.pdf",
+      "documentUrl": "/api/business-profile/documents/doc-coi-2018.pdf",
+      "status": "pending"
+    },
+    {
+      "documentType": "address_proof",
+      "documentName": "Electricity_Bill_Peenya_Factory.pdf",
+      "documentUrl": "/api/business-profile/documents/doc-address-bill.pdf",
+      "status": "pending"
+    },
+    {
+      "documentType": "tax_registration",
+      "documentName": "GST_Registration_Certificate_REG06.pdf",
+      "documentUrl": "/api/business-profile/documents/doc-gst-cert.pdf",
+      "status": "pending"
+    },
+    {
+      "documentType": "authorization_letter",
+      "documentName": "Board_Resolution_Authorized_Signatory.pdf",
+      "documentUrl": "/api/business-profile/documents/doc-board-resolution.pdf",
+      "status": "pending"
+    }
+  ]
+}

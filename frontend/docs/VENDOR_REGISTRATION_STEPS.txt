@@ -1,0 +1,124 @@
+VENDOR REGISTRATION, STEP BY STEP
+
+The journey has six registration steps. Step 1 is account signup at
+/demo/register; Steps 2-6 are completed in the wizard on
+/demo/dashboard/vendor, opened with "Complete Profile Steps (Step 2-6)".
+
+1. CREATE THE ACCOUNT AND PROVIDE CONTACT DETAILS
+
+Where: /demo/register
+
+This step creates the vendor's login and identifies the person authorized to
+represent the company. The form asks for:
+
+- Registered company or entity legal name
+- Authorized representative's full name and corporate designation
+- Official corporate email and mobile number
+- Password and password confirmation
+- Acceptance of the Terms of Service
+
+The page also presents fields for email and mobile OTPs. In a real registration
+system, these would help confirm that the representative controls those contact
+channels.
+
+What it means: This creates the basic account, but it does not complete the
+company dossier or make the business verified. The account starts in an
+unverified state and continues to the vendor dashboard.
+
+2. ADD THE COMPANY PROFILE AND STATUTORY IDENTITY
+
+Where: /demo/dashboard/vendor -> "Complete Profile Steps (Step 2-6)" ->
+"Company Profile & GST"
+
+This step establishes the legal identity of the business. It asks for
+information such as:
+
+- Legal registered name, trade or brand name, and legal structure
+- Incorporation or establishment details
+- GSTIN and PAN
+- Registered office and other facilities
+- Key personnel
+- Foundational company documents
+
+Why it matters: These details identify which legal entity is registering and
+provide the statutory information that would be checked during compliance
+review. The dashboard's progress indicator can move forward as these details
+are supplied.
+
+3. CLASSIFY THE BUSINESS AND DESCRIBE ITS CAPABILITIES
+
+Where: The dashboard wizard -> "Classification & Scope"
+
+The vendor describes what the business does by selecting applicable business
+types, industry categories, and related subcategories. The form also collects
+business activities and operational capabilities. Some capability questions
+depend on the classifications selected. Turnover information helps describe the
+scale of the business.
+
+Why it matters: Buyers need a consistent way to find vendors by the products,
+services, and capabilities they offer. In the current form, the vendor needs to
+make the required business-type and category selections to proceed.
+
+4. ADD PRODUCTS, SERVICES, AND QUALITY INFORMATION
+
+Where: The dashboard wizard -> "Products & ISO Standards"
+
+The vendor builds a catalog of what they can supply. Entries can describe
+products or services and include relevant details such as specifications,
+categories, minimum order quantities, lead times, and pricing information. The
+vendor can also record quality certifications, ISO standards, and regulatory
+accreditations.
+
+Why it matters: This information helps buyers assess whether the vendor's
+offering fits their requirements. The current flow expects at least one catalog
+item and certification before proceeding.
+
+5. PROVIDE COMMERCIAL, TRADE, AND BANKING DETAILS
+
+Where: The dashboard wizard -> "Commercial & Banking"
+
+This step covers how the vendor handles business transactions and settlement.
+It includes:
+
+- Departmental contacts, such as sales or finance contacts
+- Payment terms and supported currencies
+- Trade information, including applicable Incoterms
+- Bank settlement details, including account holder, bank, account number, and
+  IFSC/SWIFT code
+- Due-diligence declarations, including sanctions, conflict-of-interest, and
+  screening declarations
+
+Why it matters: These details support buyer-vendor communication, transaction
+planning, and compliance checks. The form requires key bank information and all
+required declarations before allowing the vendor to continue.
+
+6. REVIEW AND SUBMIT THE DOSSIER
+
+Where: The dashboard wizard -> "Review & Submit"
+
+The vendor reviews the information provided across the earlier steps and checks
+the statutory document checklist. Before submitting, the vendor must accept
+declarations confirming the accuracy of the information, their authority to
+submit it, and the required privacy or verification terms.
+
+What happens after submission: The site generates a vendor ID and reference
+number, marks the dossier as 100% complete, sets its status to "Verification
+Pending", and returns the vendor to the dashboard. 100% complete means
+submitted; it does not mean approved.
+
+AFTER SUBMISSION: COMPLIANCE REVIEW
+
+Where: /demo/dashboard/vendor
+
+The dashboard displays the application's review status and reference number.
+The interface represents states such as "Verification Pending", "Under
+Compliance Review", "Action Required", and "Verified & Active". If verified,
+the intended outcome shown by the site is an active profile that buyers can
+find.
+
+IMPORTANT DEMO LIMITATION
+
+OTP entry and approval states are simulated. The current site does not send or
+validate real OTPs or perform live government or compliance checks. Submission
+puts the dossier into a pending state; it does not automatically verify or
+approve the vendor.

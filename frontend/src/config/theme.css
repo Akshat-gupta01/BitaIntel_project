@@ -1,0 +1,130 @@
+/* ==========================================================================
+   BITAINTEL THEME CONFIGURATION
+   ==========================================================================
+   Default CSS variables aligned with `src/config/theme.ts`.
+   Runtime and build-time primary color changes flow from `src/config/theme.ts`.
+   ========================================================================== */
+
+:root {
+  /* Primary Palette (Default: BITAINTEL Logo Theme) */
+  --primary-50: #EFF2FB;
+  --primary-100: #DBE2F5;
+  --primary-200: #B8C4EA;
+  --primary-300: #889DDD;
+  --primary-400: #5170CD;
+  --primary-500: #3051B5;
+  --primary-600: #28428F;
+  --primary-700: #223671; /* Official BITAINTEL Logo Blue */
+  --primary-800: #1A2956;
+  --primary-900: #121E3F;
+  --primary-950: #0A1229;
+
+  /* Primary Semantic Tokens */
+  --primary: var(--primary-600);
+  --primary-hover: var(--primary-700);
+  --primary-active: var(--primary-800);
+  --primary-light: var(--primary-50);
+  --primary-subtle: var(--primary-100);
+  --primary-border: var(--primary-200);
+  --primary-foreground: #FFFFFF;
+  --primary-glow: rgba(34, 54, 113, 0.28);
+
+  /* Logo Specific Tokens */
+  --logo-primary: #223671;
+  --logo-neutral: #5C5D5E;
+
+  /* Brand Aliases (for backward compatibility) */
+  --brand: var(--primary);
+  --brand-strong: var(--primary-700);
+  --brand-light: var(--primary-400);
+  --brand-soft: var(--primary-50);
+  --brand-glow: var(--primary-glow);
+
+  /* Deep Surfaces & High-Contrast Bento Cards */
+  --ink: var(--primary-950);
+  --ink-soft: var(--primary-900);
+  --ink-card: var(--primary-800);
+
+  /* Semantic UI Tokens */
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+  --muted: #64748B;
+  --muted-foreground: #64748B;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: var(--primary-500);
+
+  /* Apple Glass & Surface System */
+  --canvas: #F8FAFC;
+  --surface: #FFFFFF;
+  --surface-glass: rgba(255, 255, 255, 0.85);
+  --surface-glass-strong: rgba(255, 255, 255, 0.94);
+  --surface-glass-dark: rgba(8, 47, 73, 0.88);
+  --surface-muted: #F1F5F9;
+
+  /* Typography Colors (Harmonized with Logo Slate Charcoal #5C5D5E) */
+  --text: #0F172A;
+  --text-secondary: #5C5D5E;
+  --text-muted: #5C5D5E;
+  --text-inverse: #FFFFFF;
+
+  /* Borders & Dividers */
+  --border-glass: rgba(255, 255, 255, 0.85);
+  --border-subtle: #E2E8F0;
+  --border-glass-dark: rgba(255, 255, 255, 0.14);
+
+  /* Separate Semantic Status Colors (Emerald for success, Amber for warning, Rose for destructive) */
+  --success: #059669;
+  --success-strong: #047857;
+  --success-soft: #ECFDF5;
+  --warning: #D97706;
+  --warning-soft: #FFFBEB;
+  --destructive: #E11D48;
+  --danger: #E11D48;
+  --danger-soft: #FFF1F2;
+  --info: var(--primary-600);
+  --info-soft: var(--primary-50);
+
+  /* Interaction & Focus */
+  --focus: var(--primary-600);
+
+  /* Pastel Palette Tokens */
+  --pastel-mint: #F0FDF4;
+  --pastel-mint-border: #BBF7D0;
+  --pastel-mint-text: #166534;
+
+  --pastel-sage: #EEF2FF;
+  --pastel-sage-border: #C7D2FE;
+  --pastel-sage-text: #3730A3;
+
+  --pastel-peach: #FFF7ED;
+  --pastel-peach-border: #FED7AA;
+  --pastel-peach-text: #9A3412;
+
+  --pastel-sky: var(--primary-50);
+  --pastel-sky-border: var(--primary-200);
+  --pastel-sky-text: var(--primary-700);
+
+  --pastel-lavender: #F5F3FF;
+  --pastel-lavender-border: #DDD6FE;
+  --pastel-lavender-text: #5B21B6;
+
+  --pastel-amber: #FFFBEB;
+  --pastel-amber-border: #FDE68A;
+  --pastel-amber-text: #92400E;
+
+  --pastel-rose: #FFF1F2;
+  --pastel-rose-border: #FECDD3;
+  --pastel-rose-text: #9F1239;
+
+  /* Radii for modern Bento & Apple pill aesthetics */
+  --radius-pill: 9999px;
+  --radius-card: 1.5rem;
+  --radius-bento: 1.75rem;
+
+  color-scheme: light;
+}

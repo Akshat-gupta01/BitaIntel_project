@@ -1,0 +1,2 @@
+import type {MetadataRoute} from 'next';import {site} from '@/config/site';import {businesses} from '@/data';
+export default function sitemap():MetadataRoute.Sitemap{const paths=['','/directory','/how-it-works','/about','/faq','/contact','/register','/privacy','/terms','/compare'];return [...paths.map(path=>({url:`${site.url}${path}`,lastModified:new Date(),changeFrequency:'monthly' as const,priority:path===''?1:.6})),...businesses.map(b=>({url:`${site.url}/business/${b.id}`,lastModified:new Date(),changeFrequency:'monthly' as const,priority:.5}))];}
