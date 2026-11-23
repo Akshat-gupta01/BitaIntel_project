@@ -6,6 +6,7 @@ import { CONSTITUTIONS } from '@/config/vendorMasterData';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
+import { BusinessLogoUploader } from '@/components/shared/BusinessLogoUploader';
 import {
   Building2,
   Plus,
@@ -470,6 +471,12 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
           <Building2 className="size-4 text-primary-700" />
           <h3 className="text-sm font-bold text-slate-900">1. Company Identity & Constitution</h3>
         </div>
+
+        <BusinessLogoUploader
+          logoUrl={data.logoUrl}
+          businessName={data.tradeName || data.legalName}
+          onChange={(newUrl) => onChange({ logoUrl: newUrl })}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>

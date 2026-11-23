@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Card } from '@/components/ui/Card';
+import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import {
   CheckCircle2,
   FileCheck2,
@@ -578,7 +579,14 @@ export function Step6Review({
               <Edit3 className="size-3" /> Edit
             </button>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <BusinessAvatar
+              logoUrl={dossier.step2.logoUrl}
+              businessName={dossier.step2.tradeName || dossier.step2.legalName}
+              className="size-12 rounded-xl"
+              textClassName="text-sm"
+            />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-700 flex-1">
             <div>
               <span className="text-slate-400 block text-[10px]">Legal Name</span>
               <strong className="text-slate-900">{dossier.step2.legalName}</strong>
@@ -614,6 +622,7 @@ export function Step6Review({
               <span>{dossier.step2.keyPersonnel.length} Executives profiled</span>
             </div>
           </div>
+        </div>
         </div>
 
         {/* Step 3 Preview */}

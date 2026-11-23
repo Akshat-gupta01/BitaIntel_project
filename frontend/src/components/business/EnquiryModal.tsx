@@ -8,12 +8,25 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { toast } from 'sonner';
 import type { Business } from '@/data';
 
-export function EnquiryModal({ business }: { business: Business }) {
+interface EnquiryModalProps {
+  business: Business;
+  productName?: string;
+  triggerButton?: React.ReactNode;
+}
+
+export function EnquiryModal({ business, productName, triggerButton }: EnquiryModalProps) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+
+  function handleOpen() {
+    if (productName && !message) {
+      setMessage(`I would like to request an official quotation, commercial lead times, and certified technical compliance documents (TDS & COA) for "${productName}".`);
+    }
+    setOpen(true);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,21 +60,31 @@ export function EnquiryModal({ business }: { business: Business }) {
 
   return (
     <>
-      <Button
-        variant="primary"
-        className="w-full justify-center shadow-md"
-        size="lg"
-        onClick={() => setOpen(true)}
-        icon={<Mail className="size-4" />}
-      >
-        Initiate Verified Enquiry
-      </Button>
+      {triggerButton ? (
+        <span onClick={handleOpen} className="inline-block cursor-pointer">
+          {triggerButton}
+        </span>
+      ) : (
+        <Button
+          variant="primary"
+          className="w-full justify-center shadow-md"
+          size="lg"
+          onClick={handleOpen}
+          icon={<Mail className="size-4" />}
+        >
+          Initiate Verified Enquiry
+        </Button>
+      )}
 
       <Dialog
         open={open}
         onClose={handleClose}
-        title={`Enquire with ${business.name}`}
-        description={`Direct verified procurement channel for ${business.legalName}`}
+        title={productName ? `Request RFQ: ${productName}` : `Enquire with ${business.name}`}
+        description={
+          productName
+            ? `Direct verified quotation channel for ${business.legalName}`
+            : `Direct verified procurement channel for ${business.legalName}`
+        }
       >
         {sent ? (
           <div className="rounded-2xl border border-primary-500/30 bg-primary-50 p-6 text-center space-y-3">
@@ -85,6 +108,12 @@ export function EnquiryModal({ business }: { business: Business }) {
                 <span>Target Entity:</span>
                 <span>{business.name}</span>
               </div>
+              {productName && (
+                <div className="flex justify-between font-semibold text-primary-700">
+                  <span>Product Scope:</span>
+                  <span className="truncate max-w-[200px] text-right">{productName}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-500">
                 <span>GSTIN:</span>
                 <span>{business.gstin}</span>

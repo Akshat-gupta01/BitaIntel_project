@@ -128,6 +128,7 @@ export function Footer() {
               {[
                 ['Verified Directory', '/demo/directory'],
                 ['Compare Businesses', '/demo/compare'],
+                ['News & Admin Feed', '/demo/feed'],
                 ['Manufacturing Entities', '/demo/directory?industry=Manufacturing'],
                 ['Healthcare & Pharma', '/demo/directory?industry=Healthcare+%26+Pharma'],
                 ['IT & Tech Services', '/demo/directory?industry=IT+Services'],

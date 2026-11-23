@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { ArrowUpRight, MapPin, Award, CheckCircle2 } from 'lucide-react';
+import { ArrowUpRight, MapPin, Award, CheckCircle2, Sparkles } from 'lucide-react';
 import type { Business } from '@/data';
 import { Badge, type BadgeKind } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ScoreRing } from './ScoreRing';
+import { BitaintelVerifiedBadge } from './BitaintelVerifiedBadge';
 import { cn } from '@/lib/utils';
 
 export interface BusinessCardProps {
@@ -108,13 +109,18 @@ export function BusinessCard({
       {/* Top Header Row */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3.5 min-w-0">
-          <div
-            className={cn(
-              'grid size-12 shrink-0 place-items-center rounded-2xl text-sm font-black text-white shadow-xs group-hover:scale-105 transition-transform bg-gradient-to-br',
-              theme.avatarGradient
+          <div className="relative shrink-0">
+            <div
+              className={cn(
+                'grid size-12 shrink-0 place-items-center rounded-2xl text-sm font-black text-white shadow-xs group-hover:scale-105 transition-transform bg-gradient-to-br',
+                theme.avatarGradient
+              )}
+            >
+              {b.initials}
+            </div>
+            {b.isPremiumSubscriber && (
+              <BitaintelVerifiedBadge size="md" />
             )}
-          >
-            {b.initials}
           </div>
           <div className="min-w-0">
             <Link
@@ -142,6 +148,12 @@ export function BusinessCard({
       {/* Badges strip with pastel variety */}
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
         <Badge kind="verified">Verified Entity</Badge>
+        {b.isPremiumSubscriber && (
+          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide border bg-gradient-to-r from-amber-500/15 via-primary-500/10 to-purple-500/10 text-primary-900 border-amber-300/80 shadow-2xs">
+            <Sparkles className="size-3 text-amber-500 shrink-0" />
+            <span>Premium</span>
+          </span>
+        )}
         <Badge kind="level">Tier {b.level}</Badge>
         <Badge kind={theme.badgeKind} icon={false}>
           {b.industry}

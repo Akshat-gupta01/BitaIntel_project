@@ -150,7 +150,7 @@ export interface ProductCatalogItem {
   leadTimeDays: string;
   sampleAvailability: 'Available Free' | 'Available Paid' | 'Not Available';
 
-  indicativePrice: string;
+  indicativePrice?: string;
   currency: string;
   priceValidity: string;
   targetMarkets: string;

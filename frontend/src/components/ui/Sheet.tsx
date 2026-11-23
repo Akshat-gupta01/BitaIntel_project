@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,12 @@ export function Sheet({
   side = 'right',
   className,
 }: SheetProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -38,9 +45,9 @@ export function Sheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-hidden"
       onMouseDown={(e) => {
@@ -85,6 +92,7 @@ export function Sheet({
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }

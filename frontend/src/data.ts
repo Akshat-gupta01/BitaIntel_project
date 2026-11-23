@@ -25,6 +25,8 @@ export type Business = {
   initials: string;
   lastAudited: string;
   badge: 'Platinum' | 'Gold' | 'Silver' | 'Verified';
+  isPremiumSubscriber?: boolean;
+  subscriptionPlan?: 'Standard' | 'Premium';
 };
 
 export const businesses: Business[] = [
@@ -55,6 +57,8 @@ export const businesses: Business[] = [
     initials: 'MS',
     lastAudited: '12 Oct 2026',
     badge: 'Platinum',
+    isPremiumSubscriber: true,
+    subscriptionPlan: 'Premium',
   },
   {
     id: 'nexora-cloud-systems',
@@ -83,6 +87,8 @@ export const businesses: Business[] = [
     initials: 'NC',
     lastAudited: '04 Oct 2026',
     badge: 'Platinum',
+    isPremiumSubscriber: true,
+    subscriptionPlan: 'Premium',
   },
   {
     id: 'greenleaf-bio-extracts',
@@ -139,6 +145,8 @@ export const businesses: Business[] = [
     initials: 'AC',
     lastAudited: '28 Sep 2026',
     badge: 'Gold',
+    isPremiumSubscriber: true,
+    subscriptionPlan: 'Premium',
   },
   {
     id: 'propack-sustainable',
@@ -335,6 +343,8 @@ export const businesses: Business[] = [
     initials: 'ZA',
     lastAudited: '09 Oct 2026',
     badge: 'Platinum',
+    isPremiumSubscriber: true,
+    subscriptionPlan: 'Premium',
   },
   {
     id: 'synapse-biotech-lab',

@@ -6,6 +6,7 @@ import * as vendorService from '../../../../services/vendor.service';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { BusinessLogoUploader } from '@/components/shared/BusinessLogoUploader';
 import {
   Building2,
   MapPin,
@@ -181,6 +182,12 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
             MCA21 Verified
           </span>
         </div>
+
+        <BusinessLogoUploader
+          logoUrl={data.logoUrl}
+          businessName={data.tradeName || data.legalName}
+          onChange={(newUrl) => onUpdate({ logoUrl: newUrl })}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs">
           <div>

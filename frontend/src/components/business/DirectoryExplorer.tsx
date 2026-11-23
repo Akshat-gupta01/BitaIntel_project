@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useDeferredValue, useEffect } from 'react';
+import { useMemo, useState, useDeferredValue } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -11,9 +11,11 @@ import {
   CheckCircle2,
   MapPin,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { businesses, industries, type Business } from '@/data';
 import { BusinessCard } from './BusinessCard';
+import { BitaintelVerifiedBadge } from './BitaintelVerifiedBadge';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { ScoreRing } from './ScoreRing';
@@ -71,68 +73,16 @@ export function DirectoryExplorer() {
   const [level, setLevel] = useState('Any level');
   const [minimumScore, setMinimumScore] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(true);
+  const [premiumOnly, setPremiumOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'score' | 'tenure' | 'name'>('score');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [showFilters, setShowFilters] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [previewBusiness, setPreviewBusiness] = useState<Business | null>(null);
-  const [dbVendors, setDbVendors] = useState<Business[]>([]);
-
-  useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3000';
-    fetch(`${apiUrl}/api/v1/master/directory-vendors`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.data?.vendors && Array.isArray(data.data.vendors)) {
-          const mapped: Business[] = data.data.vendors.map((v: any) => ({
-            id: v.slug || String(v.id),
-            name: v.name,
-            legalName: v.legalName || v.name,
-            initials: v.initials || v.name?.slice(0, 2).toUpperCase() || 'BT',
-            industry: v.industry || 'Manufacturing',
-            location: `${v.city || 'Mumbai'}, ${v.state || 'Maharashtra'}`,
-            city: v.city || 'Mumbai',
-            state: v.state || 'Maharashtra',
-            score: Math.round(Number(v.score) || 0),
-            level: (Math.min(4, Math.max(1, Number(v.level) || 1))) as 1 | 2 | 3 | 4,
-            badge: (v.badge === 'Platinum' || v.badge === 'Gold' || v.badge === 'Silver' ? v.badge : 'Verified') as 'Platinum' | 'Gold' | 'Silver' | 'Verified',
-            age: v.age || Math.max(1, new Date().getFullYear() - (v.yearEstablished || 2024)),
-            verified: Boolean(v.verified || v.verificationStatus === 'Verified' || v.verificationStatus === 'approved'),
-            gstin: v.statutory?.gstin || 'GSTIN Pending',
-            cin: v.statutory?.cin || 'CIN Pending',
-            turnover: v.turnover || '₹1–5 crore',
-            employees: v.employees || '10–50',
-            summary: v.summary || 'Verified B2B Enterprise Supplier on BITAINTEL Network',
-            products: Array.isArray(v.products) && v.products.length > 0
-              ? v.products.map((p: any) => p.name)
-              : ['Industrial Material', 'B2B Supplies'],
-            isoCertified: Array.isArray(v.certifications) && v.certifications.length > 0
-              ? v.certifications[0]?.certificateType || 'ISO 9001:2015'
-              : 'ISO 9001:2015',
-            identity: 'Verified Statutory Identity',
-            documents: 'Authenticated Vault Records',
-            contact: 'Authorized Representative Verified',
-            address: v.registeredAddress || `${v.city || 'Mumbai'}, ${v.state || 'Maharashtra'}`,
-            profile: Math.min(100, Math.round(Number(v.score) || 85)),
-            lastAudited: v.lastAudited ? new Date(v.lastAudited).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent',
-          }));
-          setDbVendors(mapped);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const allBusinesses = useMemo(() => {
-    if (dbVendors.length === 0) return businesses;
-    const dbIds = new Set(dbVendors.map((b) => b.id.toLowerCase()));
-    const dbNames = new Set(dbVendors.map((b) => b.name.toLowerCase()));
-    const uniqueStatic = businesses.filter((b) => !dbIds.has(b.id.toLowerCase()) && !dbNames.has(b.name.toLowerCase()));
-    return [...dbVendors, ...uniqueStatic];
-  }, [dbVendors]);
 
   const results = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    const filtered = allBusinesses.filter((b) => {
+    const filtered = businesses.filter((b) => {
       const matchesQuery =
         !q ||
         b.name.toLowerCase().includes(q) ||
@@ -148,8 +98,16 @@ export function DirectoryExplorer() {
         level === 'Any level' || b.level >= Number(level);
       const matchesScore = b.score >= minimumScore;
       const matchesVerified = !verifiedOnly || b.verified;
+      const matchesPremium = !premiumOnly || b.isPremiumSubscriber;
 
-      return matchesQuery && matchesIndustry && matchesLevel && matchesScore && matchesVerified;
+      return (
+        matchesQuery &&
+        matchesIndustry &&
+        matchesLevel &&
+        matchesScore &&
+        matchesVerified &&
+        matchesPremium
+      );
     });
 
     return filtered.sort((a, b) => {
@@ -157,10 +115,10 @@ export function DirectoryExplorer() {
       if (sortBy === 'tenure') return b.age - a.age;
       return a.name.localeCompare(b.name);
     });
-  }, [allBusinesses, deferredQuery, industry, level, minimumScore, verifiedOnly, sortBy]);
+  }, [deferredQuery, industry, level, minimumScore, verifiedOnly, premiumOnly, sortBy]);
 
   function toggleCompare(id: string) {
-    const business = allBusinesses.find((b) => b.id === id);
+    const business = businesses.find((b) => b.id === id);
     const bName = business ? business.name : id;
 
     setCompareIds((prev) => {
@@ -185,6 +143,7 @@ export function DirectoryExplorer() {
     setLevel('Any level');
     setMinimumScore(0);
     setVerifiedOnly(false);
+    setPremiumOnly(false);
     setSortBy('score');
   }
 
@@ -334,7 +293,7 @@ export function DirectoryExplorer() {
               />
             </div>
 
-            {/* Checkbox */}
+            {/* Verification Status Checkbox */}
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">
                 Verification Status
@@ -343,7 +302,24 @@ export function DirectoryExplorer() {
                 <Checkbox
                   checked={verifiedOnly}
                   onChange={(e) => setVerifiedOnly(e.target.checked)}
-                  label="Active Verified Status Only"
+                  label="Active Verified Only"
+                />
+              </div>
+            </div>
+
+            {/* Premium Subscribers Filter */}
+            <div className="sm:col-span-2 lg:col-span-4">
+              <div className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50/60 text-xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-amber-500" />
+                  <span className="font-semibold text-amber-950">
+                    Filter by Verified Premium Subscribers
+                  </span>
+                </div>
+                <Checkbox
+                  checked={premiumOnly}
+                  onChange={(e) => setPremiumOnly(e.target.checked)}
+                  label="Show Premium Subscribers Only"
                 />
               </div>
             </div>
@@ -355,8 +331,13 @@ export function DirectoryExplorer() {
           <div>
             Showing <strong className="font-bold text-slate-900">{results.length}</strong>{' '}
             verified enterprise entities
+            {premiumOnly && (
+              <span className="ml-2 font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                ⭐ Premium Subscribers
+              </span>
+            )}
           </div>
-          {(query || industry !== 'All industries' || level !== 'Any level' || minimumScore > 0) && (
+          {(query || industry !== 'All industries' || level !== 'Any level' || minimumScore > 0 || premiumOnly) && (
             <button
               type="button"
               onClick={resetFilters}
@@ -450,13 +431,25 @@ export function DirectoryExplorer() {
                 >
                   <td className="p-4 font-semibold text-slate-900">
                     <div className="flex items-center gap-3">
-                      <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-slate-900 !text-white text-white font-bold text-xs">
-                        {b.initials}
+                      <div className="relative shrink-0">
+                        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-slate-900 !text-white text-white font-bold text-xs">
+                          {b.initials}
+                        </div>
+                        {b.isPremiumSubscriber && (
+                          <BitaintelVerifiedBadge size="sm" />
+                        )}
                       </div>
                       <div>
-                        <span className="font-bold hover:text-primary-700">
-                          {b.name}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold hover:text-primary-700">
+                            {b.name}
+                          </span>
+                          {b.isPremiumSubscriber && (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-bold rounded-full bg-gradient-to-r from-amber-50 to-orange-50 text-amber-800 border border-amber-300 shadow-2xs">
+                              <Sparkles className="size-2.5 text-amber-600" /> Premium
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-400 font-normal">
                           GSTIN: {b.gstin}
                         </p>
@@ -542,8 +535,13 @@ export function DirectoryExplorer() {
             {/* Header info */}
             <div className="flex items-start justify-between gap-4 p-4 rounded-2xl bg-primary-50/60 border border-primary-200/80">
               <div className="flex items-center gap-3">
-                <div className="grid size-12 place-items-center rounded-2xl bg-primary-700 text-white font-black text-sm shadow-xs">
-                  {previewBusiness.initials}
+                <div className="relative shrink-0">
+                  <div className="grid size-12 place-items-center rounded-2xl bg-primary-700 text-white font-black text-sm shadow-xs">
+                    {previewBusiness.initials}
+                  </div>
+                  {previewBusiness.isPremiumSubscriber && (
+                    <BitaintelVerifiedBadge size="md" />
+                  )}
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-900">{previewBusiness.name}</h4>
@@ -556,6 +554,12 @@ export function DirectoryExplorer() {
             {/* Badges */}
             <div className="flex flex-wrap gap-2">
               <Badge kind="verified">Verified Profile</Badge>
+              {previewBusiness.isPremiumSubscriber && (
+                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide border bg-gradient-to-r from-amber-500/20 via-primary-500/15 to-purple-500/15 text-primary-950 border-amber-300 shadow-2xs">
+                  <Sparkles className="size-3 text-amber-500 shrink-0" />
+                  <span>Verified Premium</span>
+                </span>
+              )}
               <Badge kind="level">Tier {previewBusiness.level}</Badge>
               <Badge kind="primary">{previewBusiness.industry}</Badge>
               {previewBusiness.isoCertified && (

@@ -36,6 +36,8 @@ import { BusinessCapabilitiesTab } from '@/components/dashboard/vendor/BusinessC
 import { CatalogProductsTab } from '@/components/dashboard/vendor/CatalogProductsTab';
 import { CertificationsQualityTab } from '@/components/dashboard/vendor/CertificationsQualityTab';
 import { CommercialTradeTab } from '@/components/dashboard/vendor/CommercialTradeTab';
+import { AccountSettingsTab } from '@/components/dashboard/vendor/AccountSettingsTab';
+import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -1097,26 +1099,43 @@ export default function VendorDashboardPage() {
             </div>
 
             {/* Business Card Pill */}
-            <div className="mt-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <p className="text-xs font-bold text-slate-900 truncate">
-                {dossier.step2.legalName || user?.businessName || user?.name || 'My Enterprise'}
-              </p>
-              <p className="text-[11px] font-mono text-slate-500 truncate">
-                {dossier.step2.gstin || (user?.gstin && user.gstin !== 'Pending GSTIN')
-                  ? `GSTIN: ${dossier.step2.gstin || user?.gstin}`
-                  : 'GSTIN: Pending Entry'}
-              </p>
-              <div className="pt-1.5 flex items-center justify-between">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 border border-primary-200">
-                  {role === 'unverified'
-                    ? 'Tier: Unverified'
-                    : role === 'pending_approval'
-                    ? 'Tier: Under Review'
-                    : 'Tier: Strong'}
-                </span>
-                <span className="text-[11px] font-black text-primary-600 font-mono">
-                  {role === 'unverified' ? '—' : `${trustScore} / 100`}
-                </span>
+            <div className="mt-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('settings');
+                  setMobileSidebarOpen(false);
+                }}
+                className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <BusinessAvatar
+                  logoUrl={dossier.step2.logoUrl}
+                  businessName={dossier.step2.tradeName || user?.businessName || 'Meridian Steel Works'}
+                  fallbackInitials={user?.avatarInitials}
+                  className="size-10 rounded-xl"
+                />
+              </button>
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  {dossier.step2.legalName || user?.businessName || user?.name || 'My Enterprise'}
+                </p>
+                <p className="text-[11px] font-mono text-slate-500 truncate">
+                  {dossier.step2.gstin || (user?.gstin && user.gstin !== 'Pending GSTIN')
+                    ? `GSTIN: ${dossier.step2.gstin || user?.gstin}`
+                    : 'GSTIN: Pending Entry'}
+                </p>
+                <div className="pt-0.5 flex items-center justify-between">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 border border-primary-200">
+                    {role === 'unverified'
+                      ? 'Tier: Unverified'
+                      : role === 'pending_approval'
+                      ? 'Tier: Under Review'
+                      : 'Tier: Strong'}
+                  </span>
+                  <span className="text-[11px] font-black text-primary-600 font-mono">
+                    {role === 'unverified' ? '—' : `${trustScore} / 100`}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -2153,268 +2172,25 @@ export default function VendorDashboardPage() {
                 />
               </div>
             )}
-
             {/* ===================================================================== */}
             {/* TAB 8: ACCOUNT & SECURITY SETTINGS                                   */}
             {/* ===================================================================== */}
             {activeTab === 'settings' && (
-              <div className="space-y-6 animate-in fade-in">
-                {/* Success Feedback banner */}
-                {settingsSavedMessage && (
-                  <div className="p-4 rounded-2xl border border-primary-300 bg-primary-50 text-primary-900 text-xs font-semibold flex items-center gap-2.5">
-                    <CheckCircle2 className="size-4 text-primary-600 shrink-0" />
-                    <span>{settingsSavedMessage}</span>
-                  </div>
-                )}
-                {passwordSuccessMessage && (
-                  <div className="p-4 rounded-2xl border border-primary-300 bg-primary-50 text-primary-900 text-xs font-semibold flex items-center gap-2.5">
-                    <CheckCircle2 className="size-4 text-primary-600 shrink-0" />
-                    <span>{passwordSuccessMessage}</span>
-                  </div>
-                )}
-                {passwordErrorMessage && (
-                  <div className="p-4 rounded-2xl border border-rose-300 bg-rose-50 text-rose-900 text-xs font-semibold flex items-center gap-2.5">
-                    <AlertCircle className="size-4 text-rose-600 shrink-0" />
-                    <span>{passwordErrorMessage}</span>
-                  </div>
-                )}
-
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {/* Card 1: Official Corporate Representative & Contact Details */}
-                  <Card variant="bento" className="p-6 bg-white space-y-5">
-                    <div className="border-b border-slate-100 pb-3">
-                      <div className="flex items-center gap-2">
-                        <Users className="size-4 text-primary-600" />
-                        <h2 className="text-base font-bold text-slate-900">Authorized Signatory & Contact Info</h2>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Primary focal point registered for verification inquiries & corporate buyer RFIs.
-                      </p>
-                    </div>
-
-                    <form onSubmit={handleSaveSettings} className="space-y-4">
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">
-                          Authorized Contact Person
-                        </label>
-                        <input
-                          type="text"
-                          value={settingsForm.contactPerson}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, contactPerson: e.target.value })}
-                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">
-                          Corporate Designation / Role
-                        </label>
-                        <input
-                          type="text"
-                          value={settingsForm.designation}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, designation: e.target.value })}
-                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                          required
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">
-                            Official Email (UID)
-                          </label>
-                          <input
-                            type="email"
-                            value={settingsForm.email}
-                            onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
-                            className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">
-                            Mobile Phone (OTP Active)
-                          </label>
-                          <input
-                            type="text"
-                            value={settingsForm.phone}
-                            onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                            className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">
-                          Registered Factory / Office Premises
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={settingsForm.registeredOffice}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, registeredOffice: e.target.value })}
-                          className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                          required
-                        />
-                      </div>
-
-                      <div className="pt-2 flex justify-end">
-                        <Button type="submit" variant="primary" size="sm">
-                          Save Contact Details
-                        </Button>
-                      </div>
-                    </form>
-                  </Card>
-
-                  {/* Card 2: Security, Password & Verification Controls */}
-                  <Card variant="bento" className="p-6 bg-white space-y-5 flex flex-col justify-between">
-                    <div className="space-y-4">
-                      <div className="border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <Lock className="size-4 text-primary-600" />
-                          <h2 className="text-base font-bold text-slate-900">Security & Authentication (SRS §5.11)</h2>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Audit-compliant password policies and multi-factor session authentication.
-                        </p>
-                      </div>
-
-                      <form onSubmit={handleUpdatePassword} className="space-y-3">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">
-                            Current Password
-                          </label>
-                          <input
-                            type="password"
-                            placeholder="••••••••••••"
-                            value={passwordState.currentPassword}
-                            onChange={(e) => setPasswordState({ ...passwordState, currentPassword: e.target.value })}
-                            className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-xs font-bold text-slate-700 block mb-1">
-                              New Password
-                            </label>
-                            <input
-                              type="password"
-                              placeholder="Minimum 8 characters"
-                              value={passwordState.newPassword}
-                              onChange={(e) => setPasswordState({ ...passwordState, newPassword: e.target.value })}
-                              className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-slate-700 block mb-1">
-                              Confirm Password
-                            </label>
-                            <input
-                              type="password"
-                              placeholder="Re-enter new password"
-                              value={passwordState.confirmPassword}
-                              onChange={(e) => setPasswordState({ ...passwordState, confirmPassword: e.target.value })}
-                              className="w-full text-xs px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="pt-2 flex justify-end">
-                          <Button type="submit" variant="secondary" size="sm">
-                            Update Password
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs text-slate-600">
-                      <div className="flex items-center justify-between text-slate-900 font-bold">
-                        <span>Active Session Security</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-100 text-primary-800">
-                          TLS 1.3 / AES-256
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Logged in from IP: <strong>103.24.120.44 (Pune, India)</strong> · Last active: Just now
-                      </p>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Card 3: Notification & Privacy Preferences (SRS §5.10 & §5.11) */}
-                <Card variant="bento" className="p-6 bg-white space-y-5">
-                  <div className="border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Bell className="size-4 text-primary-600" />
-                      <h2 className="text-base font-bold text-slate-900">Notification & Directory Privacy Preferences</h2>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Configure multi-channel alerts and consent controls for your public verified profile.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
-                      <h3 className="text-xs font-bold text-slate-900">Multi-Channel Alerts</h3>
-
-                      <Checkbox
-                        checked={settingsForm.emailAlertsEnquiry}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, emailAlertsEnquiry: e.target.checked })}
-                        label="Buyer Enquiry Instant Alerts"
-                        description="Notify via email when an enterprise buyer submits an RFI or message."
-                      />
-
-                      <Checkbox
-                        checked={settingsForm.emailAlertsVerification}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, emailAlertsVerification: e.target.checked })}
-                        label="Analyst Verification Milestones"
-                        description="Receive updates when uploaded proofs are verified or need re-submission."
-                      />
-
-                      <Checkbox
-                        checked={settingsForm.smsAlertsOtp}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, smsAlertsOtp: e.target.checked })}
-                        label="SMS / OTP Security Alerts"
-                        description="Critical security notifications sent to primary mobile phone."
-                      />
-                    </div>
-
-                    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
-                      <h3 className="text-xs font-bold text-slate-900">Directory Visibility & Consent (SRS §5.3)</h3>
-
-                      <Checkbox
-                        checked={settingsForm.publicDirectoryVisible}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, publicDirectoryVisible: e.target.checked })}
-                        label="Publish in BITAINTEL Verified Directory"
-                        description="Permit approved enterprise buyers to discover your business dossier."
-                      />
-
-                      <Checkbox
-                        checked={settingsForm.showFinancialBand}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, showFinancialBand: e.target.checked })}
-                        label="Display Audited Turnover Band (₹25–50 Cr)"
-                        description="Show verified turnover bracket without revealing granular bank balance."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => {
-                        setSettingsSavedMessage('Preferences updated successfully.');
-                        setTimeout(() => setSettingsSavedMessage(''), 4000);
-                      }}
-                    >
-                      Save Preferences
-                    </Button>
-                  </div>
-                </Card>
-              </div>
+              <AccountSettingsTab
+                dossier={dossier}
+                user={user}
+                role={role}
+                onUpdateDossier={(updated) => {
+                  setDossier(updated);
+                }}
+                onUpgradeToPremium={() => {
+                  setRole('premium_subscriber');
+                  toast.success('Simulation: Account Upgraded to Premium Subscriber!');
+                }}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+              />
             )}
+
           </div>
         </main>
 

@@ -24,9 +24,9 @@ import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
 
 const navLinks = [
   { label: 'Home', href: '/demo' },
-  { label: 'Home-2', href: '/demo/home' },
   { label: 'Directory', href: '/demo/directory' },
   { label: 'Compare', href: '/demo/compare' },
+  { label: 'Feed', href: '/demo/feed' },
   { label: 'How It Works', href: '/demo/how-it-works' },
   { label: 'About', href: '/demo/about' },
   { label: 'FAQ', href: '/demo/faq' },
@@ -130,7 +130,7 @@ export function Header() {
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    'rounded-full px-4 py-1 text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                    'rounded-full px-3 lg:px-3.5 py-1 text-xs font-semibold transition-all duration-150 whitespace-nowrap',
                     active
                       ? 'bg-slate-900 !text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100/70'

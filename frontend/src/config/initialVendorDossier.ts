@@ -22,6 +22,7 @@ export const INITIAL_EMPTY_DOSSIER: FullVendorRegistrationDossier = {
     website: '',
     companyDescription: '',
     employeeCount: '50–250 employees',
+    logoUrl: '',
     registeredAddress: '',
     corporateAddress: '',
     billingAddress: '',

@@ -15,7 +15,6 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ScoreRing } from '@/components/business/ScoreRing';
-import { EnquiryModal } from '@/components/business/EnquiryModal';
 
 import { JsonLd } from '@/components/shared/JsonLd';
 import { createPageMetadata } from '@/lib/metadata';
