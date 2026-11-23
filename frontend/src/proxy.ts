@@ -9,7 +9,7 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // Protect all dashboard routes (vendor, buyer, admin)
+  /// Protect all dashboard routes (vendor, buyer, admin)
   if (
     pathname.startsWith('/demo/dashboard') ||
     pathname.startsWith('/dashboard')
