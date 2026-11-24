@@ -93,7 +93,6 @@ export async function getVerificationQueue(req: Request, res: Response) {
       where: {
         [Op.or]: [
           { verificationStatus: { [Op.in]: ["pending_verification", "Pending", "Under Review", "registered"] } },
-          { "$statutory.gstnStatus$": "PENDING" },
           { verified: false },
         ],
       },
@@ -104,9 +103,14 @@ export async function getVerificationQueue(req: Request, res: Response) {
       total: queue.length,
       queue,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get Verification Queue Error:", error);
-    return sendError(res, "Failed to fetch verification queue", 500, "ERR_INTERNAL_SERVER");
+    return sendError(
+      res,
+      error?.message || "Failed to fetch verification queue",
+      500,
+      "ERR_INTERNAL_SERVER"
+    );
   }
 }
 
@@ -140,7 +144,9 @@ export async function getAllVendors(req: Request, res: Response) {
             v.level = rescore.level;
             v.badge = rescore.badge;
           }
-        } catch {}
+        } catch (err) {
+          console.error(`Rescore error for vendor id ${v.id}:`, err);
+        }
       }
     }
 
@@ -148,9 +154,14 @@ export async function getAllVendors(req: Request, res: Response) {
       total: vendors.length,
       vendors,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get All Vendors Error:", error);
-    return sendError(res, "Failed to fetch vendors", 500, "ERR_INTERNAL_SERVER");
+    return sendError(
+      res,
+      error?.message || "Failed to fetch vendors",
+      500,
+      "ERR_INTERNAL_SERVER"
+    );
   }
 }
 

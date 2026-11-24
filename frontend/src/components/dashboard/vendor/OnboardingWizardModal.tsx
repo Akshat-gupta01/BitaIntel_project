@@ -170,16 +170,21 @@ export function OnboardingWizardModal({
           summary: dossier.step2.companyDescription,
           companyDescription: dossier.step2.companyDescription,
           website: dossier.step2.website || null,
+          incorporationDate: dossier.step2.incorporationDate || null,
+          logoUrl: dossier.step2.logoUrl || null,
           employees: dossier.step2.employeeCount,
         });
 
-        if (dossier.step2.gstin || dossier.step2.pan) {
+        if (dossier.step2.gstin || dossier.step2.pan || dossier.step2.iec || dossier.step2.tan || dossier.step2.duns || dossier.step2.lei) {
           await vendorService.updateStatutory({
             gstin: dossier.step2.gstin,
             pan: dossier.step2.pan,
             cin: dossier.step2.cin,
             udyamMsme: dossier.step2.udyam,
             iecCode: dossier.step2.iec,
+            tan: dossier.step2.tan,
+            duns: dossier.step2.duns,
+            lei: dossier.step2.lei,
           }).catch(() => {});
         }
 

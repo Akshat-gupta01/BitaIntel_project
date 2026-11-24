@@ -66,6 +66,14 @@ module.exports = {
           type: Sequelize.STRING(500),
           allowNull: true,
         },
+        testingCapabilities: {
+          type: Sequelize.TEXT,
+          allowNull: true,
+        },
+        qualityAssuranceProcedures: {
+          type: Sequelize.TEXT,
+          allowNull: true,
+        },
         createdAt: {
           type: Sequelize.DATE,
           allowNull: false,

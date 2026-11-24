@@ -7,6 +7,8 @@ import {
   getIndustries,
   getBusinessActivities,
   getCurrencies,
+  getPublicDirectory,
+  getPublicBusinessDetail,
 } from "../controllers/master.controller.js";
 
 const masterRouter = Router();
@@ -36,6 +38,10 @@ masterRouter.get("/business-activities", getBusinessActivities);
 
 // 7. Currencies (INR, USD, EUR, AED, SAR, etc.)
 masterRouter.get("/currencies", getCurrencies);
+
+// 8. Public Business Directory & Details (Live from MySQL business_entities)
+masterRouter.get("/directory", getPublicDirectory);
+masterRouter.get("/business/:slug", getPublicBusinessDetail);
 
 export default masterRouter;
 

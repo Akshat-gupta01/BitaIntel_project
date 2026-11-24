@@ -7,7 +7,6 @@ import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Logo } from '@/components/ui/Logo';
-import { Checkbox } from '@/components/ui/Checkbox';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { toast } from 'sonner';
 import {
@@ -42,10 +41,8 @@ import {
   LayoutDashboard,
   ShieldCheck,
   FileText,
-  MessageSquare,
   Bell,
   Building2,
-  Users,
   Settings,
   ChevronRight,
   UploadCloud,
@@ -60,10 +57,7 @@ import {
   X,
   FileCheck2,
   Download,
-  Lock,
   DollarSign,
-  AlertCircle,
-  Send,
 } from 'lucide-react';
 
 interface BackendFacility {
@@ -114,6 +108,7 @@ interface BackendProduct {
   targetMarkets?: string;
   images?: string[];
   productPhotos?: string[];
+  imageUrl?: string; // Product main image URL
   catalogueDoc?: string;
   technicalDataSheetDoc?: string;
   coaDoc?: string;
@@ -188,6 +183,9 @@ interface BackendBusinessPayload {
   country?: string;
   summary?: string;
   companyType?: string;
+  incorporationDate?: string;
+  logoUrl?: string;
+  yearEstablished?: number;
   website?: string;
   employees?: string;
   turnover?: string;
@@ -196,6 +194,12 @@ interface BackendBusinessPayload {
     pan?: string;
     cin?: string;
     udyamMsme?: string;
+    iecCode?: string;
+    tan?: string;
+    duns?: string;
+    dunsNumber?: string;
+    lei?: string;
+    statutoryPayload?: Record<string, string | number | boolean | null | undefined>;
   };
   facilities?: BackendFacility[];
   keyPersonnel?: BackendPersonnel[];
@@ -209,11 +213,86 @@ interface BackendBusinessPayload {
   };
   products?: BackendProduct[];
   certifications?: BackendCertification[];
-  commercial?: Record<string, unknown>;
-  bankingDetails?: Record<string, unknown>;
-  commercialTerms?: Record<string, unknown>;
-  tradeLogistics?: Record<string, unknown>;
-  complianceDeclarations?: Record<string, unknown>;
+  commercial?: {
+    departmentContacts?: unknown[];
+    acceptedCurrencies?: string[];
+    paymentMethods?: string[];
+    advancePaymentPercentage?: string | number;
+    creditTermsDays?: string | number;
+    moqPolicy?: string;
+    samplePolicy?: string;
+    warrantyTerms?: string;
+    returnPolicy?: string;
+    importerExporterStatus?: string;
+    iecNumber?: string;
+    sourcingCountries?: string;
+    exportMarkets?: string;
+    annualTradeTurnover?: string;
+    preferredIncoterms?: string[];
+    freightArrangements?: string;
+    customsClearanceAssistance?: boolean;
+    exportPackagingStandards?: string;
+    coldChainCapability?: boolean;
+    tradeReferences?: string;
+    accountHolderName?: string;
+    bankName?: string;
+    accountType?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    swiftBicCode?: string;
+    bankBranch?: string;
+    bankCountry?: string;
+    bankProofDoc?: string;
+    lawfullyScreened?: boolean;
+    noConflictOfInterest?: boolean;
+    sanctionsFreeDeclaration?: boolean;
+    authorityConsent?: boolean;
+    [key: string]: unknown;
+  };
+  bankingDetails?: {
+    accountHolderName?: string;
+    bankName?: string;
+    accountType?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    swiftBicCode?: string;
+    bankBranch?: string;
+    bankCountry?: string;
+    bankProofDoc?: string;
+    [key: string]: unknown;
+  };
+  commercialTerms?: {
+    acceptedCurrencies?: string[];
+    paymentMethods?: string[];
+    advancePaymentPercentage?: string | number;
+    creditTermsDays?: string | number;
+    moqPolicy?: string;
+    samplePolicy?: string;
+    warrantyTerms?: string;
+    returnPolicy?: string;
+    [key: string]: unknown;
+  };
+  tradeLogistics?: {
+    importerExporterStatus?: string;
+    iecNumber?: string;
+    sourcingCountries?: string;
+    exportMarkets?: string;
+    annualTradeTurnover?: string;
+    preferredIncoterms?: string[];
+    freightArrangements?: string;
+    customsClearanceAssistance?: boolean;
+    exportPackagingStandards?: string;
+    coldChainCapability?: boolean;
+    tradeReferences?: string;
+    [key: string]: unknown;
+  };
+  complianceDeclarations?: {
+    lawfullyScreened?: boolean;
+    noConflictOfInterest?: boolean;
+    sanctionsFreeDeclaration?: boolean;
+    authorityConsent?: boolean;
+    [key: string]: unknown;
+  };
   departmentContacts?: Record<string, unknown>[];
   documents?: BackendDocRecord[];
   registrationNo?: string;
@@ -407,71 +486,15 @@ const INITIAL_DOCUMENTS = [
   },
 ];
 
-// Enquiry Lifecycle per SRS Section 5.9
-// (New → Viewed → Responded → In Discussion → Closed/Rejected)
-export type EnquiryStatus = 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected';
-
-export interface Enquiry {
-  id: string;
-  buyerName: string;
-  buyerCompany: string;
-  buyerEmail: string;
-  buyerPhone: string;
-  subject: string;
-  details: string;
-  date: string;
-  status: EnquiryStatus;
-  budget: string;
-}
-
-const INITIAL_ENQUIRIES: Enquiry[] = [
-  {
-    id: 'ENQ-802',
-    buyerName: 'Kavita Sundaram',
-    buyerCompany: 'Tata Commercial Infrastructure Ltd',
-    buyerEmail: 'procurement@tatacommercial.com',
-    buyerPhone: '+91 98200 11223',
-    subject: 'RFI: Empanelment for High-Tensile Structural Beams & Fabrication',
-    details: 'Looking for audited supplier capability to deliver 400 MT monthly galvanized steel structures for Mumbai-Pune highway infra project.',
-    date: '21 Oct 2026, 04:30 PM',
-    status: 'New',
-    budget: '₹4.50 Crore / year',
-  },
-  {
-    id: 'ENQ-803',
-    buyerName: 'Anil Deshmukh',
-    buyerCompany: 'Larsen & Toubro Heavy Civil Infra',
-    buyerEmail: 'a.deshmukh@lntecc.com',
-    buyerPhone: '+91 97654 32109',
-    subject: 'Dossier Access Request & ISO 9001 Scope Verification',
-    details: 'Requesting access to detailed Module C test certificates and welding quality records for metro bridge tender.',
-    date: '19 Oct 2026, 11:15 AM',
-    status: 'In Discussion',
-    budget: '₹2.80 Crore',
-  },
-  {
-    id: 'ENQ-804',
-    buyerName: 'Vikram Joshi',
-    buyerCompany: 'Jindal Steel & Power Engineering',
-    buyerEmail: 'v.joshi@jindalinfra.in',
-    buyerPhone: '+91 99887 76655',
-    subject: 'Quotation Request for Precision CNC Machined Flanges',
-    details: 'Need 1,200 units of custom grade 316 stainless forged flanges as per drawing spec JS-2026-ENG-B.',
-    date: '16 Oct 2026, 02:40 PM',
-    status: 'Responded',
-    budget: '₹1.15 Crore',
-  },
-];
-
 // In-app notifications per SRS Section 5.11
 const INITIAL_NOTIFICATIONS = [
   {
     id: 'notif_1',
-    title: 'New Buyer Empanelment RFI Received',
-    desc: 'Tata Commercial Infrastructure submitted a new enquiry for Structural Fabrication.',
+    title: 'Verification Status Audited',
+    desc: 'Your statutory profile and catalog credentials have been verified by the Central Audit Team.',
     date: 'Yesterday, 4:30 PM',
     read: false,
-    type: 'enquiry',
+    type: 'verification',
   },
   {
     id: 'notif_2',
@@ -505,7 +528,6 @@ export default function VendorDashboardPage() {
     | 'documents'
     | 'score'
     | 'modules'
-    | 'enquiries'
     | 'notifications'
     | 'settings'
   >('overview');
@@ -532,40 +554,8 @@ export default function VendorDashboardPage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedUploadCategory, setSelectedUploadCategory] = useState(DOCUMENT_CATEGORIES_SRS[0].name);
 
-  // Enquiries State
-  const [enquiries, setEnquiries] = useState(INITIAL_ENQUIRIES);
-  const [selectedEnquiry, setSelectedEnquiry] = useState<typeof INITIAL_ENQUIRIES[0] | null>(INITIAL_ENQUIRIES[0]);
-  const [replyText, setReplyText] = useState('');
-  const [replySuccess, setReplySuccess] = useState('');
-
   // Notifications State
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-
-  // Settings State (Contact person, Security, Notification toggles)
-  const [settingsForm, setSettingsForm] = useState({
-    contactPerson: 'Rajesh K. Mehta',
-    designation: 'Managing Director & Authorized Signatory',
-    email: 'contact@meridiansteelworks.com',
-    phone: '+91 98220 54321',
-    alternatePhone: '+91 20 2712 9840',
-    registeredOffice: 'Plot 42, MIDC Industrial Area, Phase II, Chakan, Pune, Maharashtra 410501',
-    emailAlertsEnquiry: true,
-    emailAlertsVerification: true,
-    smsAlertsOtp: true,
-    digestWeekly: false,
-    publicDirectoryVisible: true,
-    showFinancialBand: true,
-  });
-  const [settingsSavedMessage, setSettingsSavedMessage] = useState('');
-
-  // Password / Security modal/state
-  const [passwordState, setPasswordState] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [passwordSuccessMessage, setPasswordSuccessMessage] = useState('');
-  const [passwordErrorMessage, setPasswordErrorMessage] = useState('');
 
   // Keep Step 1 & Step 2 synchronized with authenticated user whenever user context updates
   useEffect(() => {
@@ -662,6 +652,7 @@ export default function VendorDashboardPage() {
                 ...prev.step2,
                 legalName: b.legalName || prev.step2.legalName,
                 tradeName: b.tradeName || prev.step2.tradeName,
+                logoUrl: b.logoUrl || prev.step2.logoUrl,
                 registeredAddress: b.registeredAddress || prev.step2.registeredAddress,
                 pincode: b.postalCode || prev.step2.pincode,
                 city: b.city || prev.step2.city,
@@ -669,6 +660,7 @@ export default function VendorDashboardPage() {
                 country: b.country || prev.step2.country,
                 companyDescription: b.summary || prev.step2.companyDescription,
                 constitution: b.companyType || prev.step2.constitution,
+                incorporationDate: b.incorporationDate || (b.yearEstablished ? `${b.yearEstablished}-01-01` : prev.step2.incorporationDate),
                 website: b.website || prev.step2.website,
                 employeeCount: b.employees || prev.step2.employeeCount,
                 turnover: b.turnover || prev.step3.annualTurnoverRange,
@@ -676,6 +668,10 @@ export default function VendorDashboardPage() {
                 pan: b.statutory?.pan || prev.step2.pan,
                 cin: b.statutory?.cin || prev.step2.cin,
                 udyam: b.statutory?.udyamMsme || prev.step2.udyam,
+                iec: b.statutory?.iecCode || b.tradeLogistics?.iecNumber || b.commercial?.iecNumber || prev.step2.iec,
+                tan: b.statutory?.tan || (b.statutory?.statutoryPayload?.tan as string) || prev.step2.tan,
+                duns: b.statutory?.duns || b.statutory?.dunsNumber || (b.statutory?.statutoryPayload?.duns as string) || prev.step2.duns,
+                lei: b.statutory?.lei || (b.statutory?.statutoryPayload?.lei as string) || prev.step2.lei,
                 facilities:
                   Array.isArray(b.facilities) && b.facilities.length > 0
                     ? b.facilities.map((f: BackendFacility) => ({
@@ -760,7 +756,9 @@ export default function VendorDashboardPage() {
                         currency: p.currency || 'INR',
                         priceValidity: p.priceValidity || '',
                         targetMarkets: p.targetMarkets || '',
-                        images: p.productPhotos || p.images || [],
+                        images: vendorService.normalizeImageArray(
+                          p.images || p.productPhotos || (p as any).imageUrl || (p as any).image
+                        ),
                         catalogueDoc: p.catalogueDoc || undefined,
                         technicalDataSheetDoc: p.technicalDataSheetDoc || undefined,
                         coaDoc: p.coaDoc || undefined,
@@ -963,6 +961,7 @@ export default function VendorDashboardPage() {
       .catch(() => {
         // Fallback gracefully if not logged in or offline
       });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -990,66 +989,6 @@ export default function VendorDashboardPage() {
     return calculateDossierCompletion(dossier);
   }, [dossier]);
 
-  // Handle Enquiry Status Transition
-  function handleEnquiryStatusChange(id: string, newStatus: 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected') {
-    setEnquiries((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: newStatus } : e))
-    );
-    if (selectedEnquiry && selectedEnquiry.id === id) {
-      setSelectedEnquiry((prev) => (prev ? { ...prev, status: newStatus } : null));
-    }
-  }
-
-  // Handle Reply to buyer
-  function handleSendReply(e: React.FormEvent) {
-    e.preventDefault();
-    if (!replyText || !selectedEnquiry) return;
-
-    handleEnquiryStatusChange(selectedEnquiry.id, 'Responded');
-    const msg = `Response transmitted securely to ${selectedEnquiry.buyerEmail}`;
-    setReplySuccess(msg);
-    toast.success('Commercial Proposal Sent', { description: msg });
-    setReplyText('');
-    setTimeout(() => setReplySuccess(''), 4000);
-  }
-
-  // Handle Save Settings
-  function handleSaveSettings(e: React.FormEvent) {
-    e.preventDefault();
-    setSettingsSavedMessage('Account preferences and contact details updated successfully.');
-    toast.success('Account Settings Saved', {
-      description: 'Your authorized contact details and preferences have been updated.',
-    });
-    setTimeout(() => setSettingsSavedMessage(''), 4000);
-  }
-
-  // Handle Update Password
-  function handleUpdatePassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (!passwordState.currentPassword || !passwordState.newPassword) {
-      setPasswordErrorMessage('Please provide both current and new password.');
-      toast.error('Validation Error', { description: 'Please provide both current and new password.' });
-      return;
-    }
-    if (passwordState.newPassword.length < 8) {
-      setPasswordErrorMessage('New password must be at least 8 characters with letters, numbers, and symbols.');
-      toast.error('Weak Password', { description: 'Password must be at least 8 characters with letters, numbers, and symbols.' });
-      return;
-    }
-    if (passwordState.newPassword !== passwordState.confirmPassword) {
-      setPasswordErrorMessage('New password and confirmation do not match.');
-      toast.error('Mismatch', { description: 'New password and confirmation do not match.' });
-      return;
-    }
-    setPasswordErrorMessage('');
-    setPasswordSuccessMessage('Security credentials updated. Re-authentication active on all devices.');
-    toast.success('Security Credentials Updated', {
-      description: 'Password changed successfully. Re-authentication active on all sessions.',
-    });
-    setPasswordState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    setTimeout(() => setPasswordSuccessMessage(''), 4000);
-  }
-
   // Navigation Items aligned with 5-step registration architecture
   const sidebarNavItems = [
     { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard, badge: dossier.step6.status || 'Verified' },
@@ -1060,7 +999,6 @@ export default function VendorDashboardPage() {
     { id: 'commercial', label: 'Commercial & Banking', icon: DollarSign, badge: 'Protected' },
     { id: 'documents', label: 'Document Vault', icon: FileCheck2, badge: `${documents.length} Files` },
     { id: 'score', label: 'Score & Badge', icon: Award, badge: '89/100' },
-    { id: 'enquiries', label: 'Buyer Enquiries', icon: MessageSquare, badge: `${enquiries.filter(e => e.status === 'New').length} New` },
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: `${notifications.filter(n => !n.read).length}` },
     { id: 'settings', label: 'Account Settings', icon: Settings, badge: null },
   ];
@@ -1265,7 +1203,6 @@ export default function VendorDashboardPage() {
                     {activeTab === 'commercial' && 'Commercial, Trade & Banking (Step 5)'}
                     {activeTab === 'documents' && 'Document Management Vault (Step 6)'}
                     {activeTab === 'score' && 'BITAINTEL Trust Score & Badge'}
-                    {activeTab === 'enquiries' && 'Buyer Enquiries & RFIs'}
                     {activeTab === 'notifications' && 'System Notifications'}
                     {activeTab === 'settings' && 'Account & Security Settings'}
                   </span>
@@ -1428,18 +1365,18 @@ export default function VendorDashboardPage() {
                     </div>
                   </Card>
 
-                  {/* Metric 4: Buyer Enquiries */}
+                  {/* Metric 4: Commercial Catalog Products */}
                   <Card variant="bento" className="p-5 bg-white space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Buyer Enquiries</span>
-                      <MessageSquare className="size-4 text-amber-600" />
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Catalog Products</span>
+                      <Package className="size-4 text-primary-600" />
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-extrabold text-slate-900">{enquiries.length}</span>
-                      <span className="text-xs font-bold text-primary-700 font-semibold">+1 new today</span>
+                      <span className="text-3xl font-extrabold text-slate-900">{dossier.step4.products.length}</span>
+                      <span className="text-xs font-bold text-emerald-700 font-semibold">Active & Audited</span>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      RFI tenders from Tata Infra & L&T Heavy Civil
+                      Listed on BITAINTEL Verified Supplier Directory
                     </p>
                   </Card>
                 </div>
@@ -1624,73 +1561,6 @@ export default function VendorDashboardPage() {
                     </div>
                   </Card>
                 </div>
-
-                {/* Recent Buyer Enquiries Snippet */}
-                <Card variant="bento" className="p-6 bg-white space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">Recent Procurement Enquiries</h2>
-                      <p className="text-xs text-slate-500">Corporate RFIs initiated by verified procurement buyers.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('enquiries')}
-                      className="text-xs font-bold text-primary-700 hover:underline"
-                    >
-                      View All ({enquiries.length}) →
-                    </button>
-                  </div>
-
-                  {role === 'unverified' ? (
-                    <div className="p-6 rounded-2xl bg-amber-50/70 border border-amber-200 text-center space-y-3">
-                      <div className="size-10 rounded-xl bg-amber-100 text-amber-800 grid place-items-center mx-auto">
-                        <Lock className="size-5" />
-                      </div>
-                      <div className="max-w-md mx-auto">
-                        <h3 className="text-sm font-bold text-slate-900">Buyer RFIs Locked During Step 1</h3>
-                        <p className="text-xs text-slate-600 mt-1">
-                          Direct procurement RFIs from enterprise buyers (like Tata Commercial and L&T Infra) will be activated once you complete Step 2 (Company Profile & GSTIN Identification).
-                        </p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setOnboardingInitialStep(2);
-                            setOnboardingModalOpen(true);
-                          }}
-                          className="mt-3 bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs"
-                        >
-                          Complete Step 2 to Unlock RFIs →
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {enquiries.map((enq) => (
-                        <div
-                          key={enq.id}
-                          onClick={() => {
-                            setSelectedEnquiry(enq);
-                            setActiveTab('enquiries');
-                          }}
-                          className="p-3.5 rounded-2xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900">{enq.buyerCompany}</span>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                                {enq.status}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 line-clamp-1">{enq.subject}</p>
-                            <p className="text-[11px] text-primary-700 font-semibold">{enq.budget}</p>
-                          </div>
-                          <span className="text-xs text-slate-400 shrink-0">{enq.date}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
               </div>
             )}
 
@@ -1911,144 +1781,6 @@ export default function VendorDashboardPage() {
             )}
 
             {/* ===================================================================== */}
-            {/* TAB 5: BUYER ENQUIRY LIFECYCLE (SRS §5.9)                            */}
-            {/* (New → Viewed → Responded → In Discussion → Closed/Rejected)        */}
-            {/* ===================================================================== */}
-            {activeTab === 'enquiries' && (
-              <div className="space-y-6 animate-in fade-in">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Buyer Enquiry Lifecycle Management (SRS §5.9)
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Lifecycle states: <strong>New → Viewed → Responded → In Discussion → Closed/Rejected</strong>
-                  </p>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
-                  {/* Left: Enquiry List */}
-                  <div className="space-y-3">
-                    {enquiries.map((enq) => {
-                      const isSelected = selectedEnquiry?.id === enq.id;
-                      return (
-                        <div
-                          key={enq.id}
-                          onClick={() => {
-                            setSelectedEnquiry(enq);
-                            if (enq.status === 'New') {
-                              handleEnquiryStatusChange(enq.id, 'Viewed');
-                            }
-                          }}
-                          className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                            isSelected
-                              ? 'border-primary-600 bg-primary-50/40 shadow-xs'
-                              : 'border-slate-200 bg-white hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-0.5">
-                              <span className="font-mono text-[10px] text-slate-400 font-bold">{enq.id}</span>
-                              <h3 className="text-xs font-bold text-slate-900">{enq.buyerCompany}</h3>
-                              <p className="text-[11px] text-slate-600">{enq.buyerName}</p>
-                            </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              enq.status === 'New'
-                                ? 'bg-primary-600 text-white'
-                                : enq.status === 'In Discussion'
-                                ? 'bg-primary-100 text-primary-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}>
-                              {enq.status}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-xs text-slate-700 line-clamp-1 font-medium">{enq.subject}</p>
-                          <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between text-[11px] text-slate-400">
-                            <span className="font-semibold text-primary-800">{enq.budget}</span>
-                            <span>{enq.date}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right: Enquiry Detail & Response Composer */}
-                  {selectedEnquiry && (
-                    <Card variant="bento" className="p-6 bg-white space-y-5">
-                      {replySuccess && (
-                        <div className="p-3 rounded-xl border border-primary-300 bg-primary-50 text-primary-900 text-xs font-semibold flex items-center gap-2">
-                          <CheckCircle2 className="size-4 text-primary-600 shrink-0" />
-                          <span>{replySuccess}</span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                        <div>
-                          <span className="font-mono text-xs text-slate-400 font-bold">{selectedEnquiry.id}</span>
-                          <h3 className="text-lg font-bold text-slate-900">{selectedEnquiry.buyerCompany}</h3>
-                          <p className="text-xs text-slate-500">Contact: {selectedEnquiry.buyerName} · {selectedEnquiry.buyerEmail}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Lifecycle Status:</span>
-                          <CustomDropdown
-                            value={selectedEnquiry.status}
-                            onChange={(val) => handleEnquiryStatusChange(selectedEnquiry.id, val as 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected')}
-                            options={[
-                              { value: 'New', label: 'New' },
-                              { value: 'Viewed', label: 'Viewed' },
-                              { value: 'Responded', label: 'Responded' },
-                              { value: 'In Discussion', label: 'In Discussion' },
-                              { value: 'Closed/Rejected', label: 'Closed/Rejected' },
-                            ]}
-                            className="w-40"
-                            buttonClassName="min-h-9 py-1 px-3 text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 text-xs">
-                        <p className="font-bold text-slate-900 text-sm">{selectedEnquiry.subject}</p>
-                        <p className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-700 leading-relaxed">
-                          {selectedEnquiry.details}
-                        </p>
-                      </div>
-
-                      {/* Reply Form */}
-                      <form onSubmit={handleSendReply} className="space-y-3 pt-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
-                          Transmit Commercial Proposal / Response
-                        </label>
-                        <textarea
-                          rows={4}
-                          required
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Type your response to the corporate procurement team..."
-                          className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-900 outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
-                        />
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => handleEnquiryStatusChange(selectedEnquiry.id, 'In Discussion')}
-                          >
-                            Mark &quot;In Discussion&quot;
-                          </Button>
-                          <Button
-                            type="submit"
-                            variant="primary"
-                            icon={<Send className="size-3.5" />}
-                          >
-                            Send Response
-                          </Button>
-                        </div>
-                      </form>
-                    </Card>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ===================================================================== */}
             {/* TAB 6: NOTIFICATIONS (SRS §5.11)                                     */}
             {/* ===================================================================== */}
             {activeTab === 'notifications' && (
@@ -2100,9 +1832,33 @@ export default function VendorDashboardPage() {
               <div className="space-y-6 animate-in fade-in">
                 <CompanyProfileTab
                   data={dossier.step2}
-                  onUpdate={(up) => {
+                  onUpdate={async (up) => {
                     const updated = { ...dossier, step2: { ...dossier.step2, ...up } };
                     setDossier(updated);
+                    try {
+                      // 1. If logoUrl or incorporationDate updated, sync to business_entities
+                      const profilePayload: vendorService.VendorProfileUpdatePayload = {};
+                      if (up.logoUrl !== undefined) profilePayload.logoUrl = up.logoUrl || null;
+                      if (up.incorporationDate !== undefined) profilePayload.incorporationDate = up.incorporationDate || null;
+                      if (up.legalName !== undefined) profilePayload.legalName = up.legalName || null;
+                      if (up.tradeName !== undefined) profilePayload.tradeName = up.tradeName || null;
+                      if (Object.keys(profilePayload).length > 0) {
+                        await vendorService.updateVendorProfile(profilePayload);
+                      }
+
+                      // 2. If statutory identifiers updated, sync to statutory_identifiers
+                      if (up.tan !== undefined || up.duns !== undefined || up.lei !== undefined || up.iec !== undefined) {
+                        await vendorService.updateStatutory({
+                          tan: up.tan ? String(up.tan).trim().toUpperCase() : undefined,
+                          duns: up.duns ? String(up.duns).trim() : undefined,
+                          dunsNumber: up.duns ? String(up.duns).trim() : undefined,
+                          lei: up.lei ? String(up.lei).trim().toUpperCase() : undefined,
+                          iecCode: up.iec ? String(up.iec).trim() : undefined,
+                        });
+                      }
+                    } catch (e) {
+                      console.warn('Could not sync profile/statutory updates to backend:', e);
+                    }
                     toast.success('Company profile updated.');
                   }}
                 />

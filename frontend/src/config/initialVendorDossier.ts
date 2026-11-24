@@ -270,6 +270,11 @@ export const DEMO_PREFILLED_DOSSIER: FullVendorRegistrationDossier = {
         currency: 'INR',
         priceValidity: '90 Days',
         targetMarkets: 'India, Germany, USA, Saudi Arabia, Singapore',
+        images: [
+          '/uploads/image/img-1795431240880-b8350bbe-d957-4418-a0ec-3aa83fcfde4c.jpg',
+          '/uploads/image/img-1795431240881-0e292c22-97d3-4154-ae12-fdb958f22431.jpg',
+          '/uploads/image/img-1795431240888-ade3e215-bd99-4092-96a7-3d1a2879836c.jpg',
+        ],
       },
       {
         id: 'PRD-02',
@@ -295,6 +300,9 @@ export const DEMO_PREFILLED_DOSSIER: FullVendorRegistrationDossier = {
         currency: 'USD',
         priceValidity: '60 Days',
         targetMarkets: 'North America, European Union, APAC',
+        images: [
+          '/uploads/image/img-1795430948476-8daf3605-1153-48d6-b85c-4a7070a09ee4.jpg',
+        ],
       },
     ],
     certifications: [

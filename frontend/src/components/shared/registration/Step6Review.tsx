@@ -442,7 +442,7 @@ export function Step6Review({
                 </h3>
                 <p className="text-xs text-slate-600 font-mono">
                   Ref: {dossier.step6.referenceNumber} • Submitted:{' '}
-                  {new Date(dossier.step6.submissionDate || Date.now()).toLocaleDateString()}
+                  {(() => { const date = dossier.step6.submissionDate ? new Date(dossier.step6.submissionDate) : new Date(); return date.toLocaleDateString(); })()}
                 </p>
               </div>
             </div>

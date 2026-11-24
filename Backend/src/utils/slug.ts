@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 /**
  * Helper 1: Company URL slug generator
  * Example: "GreenLeaf Herbal Extracts" -> "greenleaf-herbal-extracts-4821"
@@ -9,7 +11,7 @@ export function generateSlug(text: string): string {
     .replace(/[^\w\s-]/g, "")      // Special symbols remove karta hai
     .replace(/[\s_-]+/g, "-")      // Spaces ko dash (-) banata hai
     .replace(/^-+|-+$/g, "");      // Leading / trailing dash remove karta hai
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const randomSuffix = randomInt(1000, 10000);
   return `${base || "company"}-${randomSuffix}`;
 }
 

@@ -10,6 +10,7 @@ import vendorRoutes from "./routes/vendor.routes.js";
 import masterRoutes from "./routes/master.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import rbacRoutes from "./routes/rbac.routes.js";
+import enquiryRoutes from "./routes/enquiry.routes.js";
 
 const app = express();
 
@@ -50,114 +51,97 @@ app.use(
 app.use("/uploads", (req, res, next) => {
   res.setHeader("X-Frame-Options", "ALLOWALL");
   res.setHeader("Content-Security-Policy", "frame-ancestors *");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
   next();
 });
 
-// Static Uploads Folder — support both Backend/uploads and cwd/uploads
+// Static Uploads Folder — support Backend/uploads, cwd/uploads, and src/dist paths
 const backendUploads = path.join(__dirname, "..", "uploads");
 const rootUploads = path.join(process.cwd(), "uploads");
 const backendCwdUploads = path.join(process.cwd(), "Backend", "uploads");
+const backendDistUploads = path.resolve(__dirname, "..", "..", "uploads");
 
 app.use("/uploads", express.static(backendUploads));
 app.use("/uploads", express.static(rootUploads));
 app.use("/uploads", express.static(backendCwdUploads));
+app.use("/uploads", express.static(backendDistUploads));
 
-// Fallback document handler: if requested file isn't found by exact name, serve the closest or latest uploaded PDF
-app.get("/uploads/documents/:filename", (req, res, next) => {
-  const rawFilename = req.params.filename || "";
-  const decodedFilename = decodeURIComponent(rawFilename);
-  const normalizedHyphen = decodedFilename.replace(/\s+/g, "-");
+// ─── Legacy exact-name fallbacks ────────────────────────────────────────────
+// These only help resolve very old records that stored a filename without the
+// upload sub-folder. They never serve a different file than the one requested:
+// serving the "latest PDF/image" previously leaked other vendors' documents.
+function decodeSafeFilename(rawValue: string): string {
+  try {
+    // Route params are already URL-decoded by Express; basename guarantees the
+    // value cannot escape the uploads directory via "../" sequences.
+    return path.basename(decodeURIComponent(rawValue || ""));
+  } catch {
+    return path.basename(rawValue || "");
+  }
+}
+
+function findExactUpload(folder: string, filename: string): string | null {
+  const normalizedHyphen = filename.replace(/\s+/g, "-");
 
   const possibleDirs = [
-    path.join(backendUploads, "documents"),
-    path.join(rootUploads, "documents"),
-    path.join(backendCwdUploads, "documents"),
-    path.resolve("uploads", "documents"),
-    path.resolve("Backend", "uploads", "documents"),
+    path.join(backendUploads, folder),
+    path.join(rootUploads, folder),
+    path.join(backendCwdUploads, folder),
   ];
 
-  const candidateNames = [decodedFilename, normalizedHyphen, rawFilename];
-
   for (const dir of possibleDirs) {
-    if (fs.existsSync(dir)) {
-      for (const name of candidateNames) {
-        const exact = path.join(dir, name);
-        if (fs.existsSync(exact) && fs.statSync(exact).isFile()) {
-          const isPdf = name.toLowerCase().endsWith(".pdf");
-          res.setHeader("Content-Type", isPdf ? "application/pdf" : "application/octet-stream");
-          return res.sendFile(exact);
-        }
+    for (const name of [filename, normalizedHyphen]) {
+      if (!name) continue;
+      const candidate = path.resolve(dir, name);
+      if (path.dirname(candidate) !== path.resolve(dir)) continue;
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        return candidate;
       }
     }
   }
 
-  // If exact file not found, serve latest available PDF from any uploads/documents
-  for (const dir of possibleDirs) {
-    if (fs.existsSync(dir)) {
-      try {
-        const pdfs = fs.readdirSync(dir).filter((f) => f.endsWith(".pdf"));
-        if (pdfs.length > 0) {
-          const latest = path.join(dir, pdfs[pdfs.length - 1]);
-          res.setHeader("Content-Type", "application/pdf");
-          return res.sendFile(latest);
-        }
-      } catch {}
-    }
-  }
+  return null;
+}
 
-  next();
+app.get("/uploads/documents/:filename", (req, res, next) => {
+  const filename = decodeSafeFilename(req.params.filename);
+  const filePath = filename ? findExactUpload("documents", filename) : null;
+
+  if (!filePath) return next();
+
+  const isPdf = filePath.toLowerCase().endsWith(".pdf");
+  res.setHeader("Content-Type", isPdf ? "application/pdf" : "application/octet-stream");
+  return res.sendFile(filePath);
 });
 
-// Fallback image handler for /uploads/image/:filename
 app.get("/uploads/image/:filename", (req, res, next) => {
-  const rawFilename = req.params.filename || "";
-  const decodedFilename = decodeURIComponent(rawFilename);
-  const normalizedHyphen = decodedFilename.replace(/\s+/g, "-");
+  const filename = decodeSafeFilename(req.params.filename);
+  const filePath = filename ? findExactUpload("image", filename) : null;
 
-  const possibleDirs = [
-    path.join(backendUploads, "image"),
-    path.join(rootUploads, "image"),
-    path.join(backendCwdUploads, "image"),
-    path.resolve("uploads", "image"),
-    path.resolve("Backend", "uploads", "image"),
-  ];
+  if (!filePath) return next();
 
-  const candidateNames = [decodedFilename, normalizedHyphen, rawFilename];
-
-  for (const dir of possibleDirs) {
-    if (fs.existsSync(dir)) {
-      for (const name of candidateNames) {
-        const exact = path.join(dir, name);
-        if (fs.existsSync(exact) && fs.statSync(exact).isFile()) {
-          const ext = path.extname(name).toLowerCase();
-          const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
-          res.setHeader("Content-Type", mime);
-          return res.sendFile(exact);
-        }
-      }
-    }
-  }
-
-  // If exact image not found, serve latest available image
-  for (const dir of possibleDirs) {
-    if (fs.existsSync(dir)) {
-      try {
-        const images = fs.readdirSync(dir).filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f));
-        if (images.length > 0) {
-          const latest = path.join(dir, images[images.length - 1]);
-          res.setHeader("Content-Type", "image/jpeg");
-          return res.sendFile(latest);
-        }
-      } catch {}
-    }
-  }
-
-  next();
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".avif": "image/avif",
+    ".svg": "image/svg+xml",
+  };
+  const mime = mimeMap[ext] || "image/jpeg";
+  res.setHeader("Content-Type", mime);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.sendFile(filePath);
 });
 
 // API Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/vendor", vendorRoutes);
+app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/master", masterRoutes); 
 app.use("/api/v1/admin", adminRoutes);   
 app.use("/api/v1/rbac", rbacRoutes);   

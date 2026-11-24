@@ -44,6 +44,8 @@ export const createProfileSchema = z.object({
   companyDescription: z.string().optional().nullable(),
   website: z.string().optional().nullable(),
   yearEstablished: z.coerce.number().default(2024).optional(),
+  incorporationDate: z.string().optional().nullable(),
+  logoUrl: z.string().optional().nullable(),
   turnover: z.string().default("₹10 Cr - ₹50 Cr").optional(),
   employees: z.string().default("51 - 200").optional(),
 }).passthrough();
@@ -67,6 +69,10 @@ export const createStatutorySchema = z.object({
   udyamMsme: z.string().trim().optional().nullable().or(z.literal("")),
   msmeUdyamRegistration: z.string().trim().optional().nullable().or(z.literal("")),
   msmeCategory: z.string().trim().optional().nullable().or(z.literal("")),
+  tan: z.string().trim().optional().nullable().or(z.literal("")),
+  duns: z.string().trim().optional().nullable().or(z.literal("")),
+  dunsNumber: z.string().trim().optional().nullable().or(z.literal("")),
+  lei: z.string().trim().optional().nullable().or(z.literal("")),
   filingFrequency: z.string().trim().optional().default("Monthly (GSTR-3B)"),
 }).passthrough();
 
@@ -172,7 +178,7 @@ export const productSchema = z.object({
   currency: z.string().default("INR"),
   priceValidity: z.string().optional().nullable(),
   targetMarkets: z.string().optional().nullable(),
-  images: z.array(z.string()).optional().nullable(),
+  images: z.union([z.array(z.string()), z.string()]).optional().nullable(),
   catalogueDoc: z.string().optional().nullable(),
   technicalDataSheetDoc: z.string().optional().nullable(),
   coaDoc: z.string().optional().nullable(),

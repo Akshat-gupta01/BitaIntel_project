@@ -25,6 +25,8 @@ export type Business = {
   initials: string;
   lastAudited: string;
   badge: 'Platinum' | 'Gold' | 'Silver' | 'Verified';
+  slug?: string;
+  logoUrl?: string | null;
   isPremiumSubscriber?: boolean;
   subscriptionPlan?: 'Standard' | 'Premium';
 };
@@ -149,7 +151,37 @@ export const businesses: Business[] = [
     subscriptionPlan: 'Premium',
   },
   {
+    id: 'propack',
+    slug: 'propack',
+    name: 'ProPack Sustainable',
+    legalName: 'ProPack Eco-Polymer Packaging Industries Ltd.',
+    industry: 'Packaging',
+    location: 'Chennai, Tamil Nadu',
+    city: 'Chennai',
+    state: 'Tamil Nadu',
+    level: 3,
+    score: 88,
+    age: 14,
+    summary: 'Biodegradable barrier films and compostable corrugated cargo containers engineered for circular logistics.',
+    products: ['Biodegradable Barrier Film', 'High-Strength Eco Cartons', 'Molded Fiber Cushioning', 'Industrial Pallet Wraps'],
+    gstin: '33AABCP3190E1ZF',
+    cin: 'U25200TN2012PLC086541',
+    isoCertified: 'FSC Certified & ISO 9001:2015',
+    identity: '10/10',
+    documents: '17/20',
+    contact: '5/5',
+    address: '4/5',
+    profile: 15,
+    turnover: '₹10–25 crore',
+    employees: '100–250',
+    verified: true,
+    initials: 'PS',
+    lastAudited: '15 Sep 2026',
+    badge: 'Gold',
+  },
+  {
     id: 'propack-sustainable',
+    slug: 'propack-sustainable',
     name: 'ProPack Sustainable',
     legalName: 'ProPack Eco-Polymer Packaging Industries Ltd.',
     industry: 'Packaging',

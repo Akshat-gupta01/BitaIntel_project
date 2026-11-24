@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { uploadBusinessLogo } from '../../../services/vendor.service';
 
 export function computeInitials(name?: string): string {
   const cleaned = (name || '').trim();
@@ -188,8 +189,16 @@ export function BusinessLogoUploader({
 
     setIsProcessing(true);
     try {
-      const optimizedUrl = await optimizeImageFileToDataUrl(file);
-      onChange(optimizedUrl);
+      let finalUrl = '';
+      try {
+        finalUrl = await uploadBusinessLogo(file);
+      } catch (uploadErr) {
+        console.warn('Backend image upload fallback to local data URL:', uploadErr);
+      }
+      if (!finalUrl) {
+        finalUrl = await optimizeImageFileToDataUrl(file);
+      }
+      onChange(finalUrl);
       setPreviewError(false);
       toast.success(hasCustomLogo ? 'Company Logo Replaced' : 'Company Logo Uploaded', {
         description: `${file.name} is now set as your official business mark.`,

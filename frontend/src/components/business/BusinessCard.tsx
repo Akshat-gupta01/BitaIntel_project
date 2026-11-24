@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ScoreRing } from './ScoreRing';
 import { BitaintelVerifiedBadge } from './BitaintelVerifiedBadge';
+import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import { cn } from '@/lib/utils';
 
 export interface BusinessCardProps {
@@ -110,14 +111,12 @@ export function BusinessCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3.5 min-w-0">
           <div className="relative shrink-0">
-            <div
-              className={cn(
-                'grid size-12 shrink-0 place-items-center rounded-2xl text-sm font-black text-white shadow-xs group-hover:scale-105 transition-transform bg-gradient-to-br',
-                theme.avatarGradient
-              )}
-            >
-              {b.initials}
-            </div>
+            <BusinessAvatar
+              logoUrl={b.logoUrl || undefined}
+              businessName={b.name}
+              fallbackInitials={b.initials}
+              className="size-12 rounded-2xl group-hover:scale-105 transition-transform"
+            />
             {b.isPremiumSubscriber && (
               <BitaintelVerifiedBadge size="md" />
             )}

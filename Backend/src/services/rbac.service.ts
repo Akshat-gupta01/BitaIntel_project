@@ -11,13 +11,60 @@ export interface PermissionDefinition {
 
 // In-Memory Permission Cache for sub-millisecond evaluation
 const permissionCache = new Map<string, Set<string>>();
+// Role activation cache so suspended roles stop authorizing immediately after a change.
+const roleActiveCache = new Map<string, boolean>();
+
+const ALLOWED_ACTIONS = new Set(["view", "create", "edit", "delete", "approve", "export"]);
 
 export class RbacService {
   static clearCache(roleCode?: string) {
     if (roleCode) {
       permissionCache.delete(roleCode);
+      roleActiveCache.delete(roleCode);
     } else {
       permissionCache.clear();
+      roleActiveCache.clear();
+    }
+  }
+
+  static async isRoleActive(roleCode: string): Promise<boolean> {
+    if (roleActiveCache.has(roleCode)) {
+      return roleActiveCache.get(roleCode)!;
+    }
+
+    const role = await Role.findOne({
+      where: { code: roleCode },
+      attributes: ["isActive"],
+    });
+
+    const active = Boolean(role?.isActive);
+    roleActiveCache.set(roleCode, active);
+    return active;
+  }
+
+  /**
+   * Normalizes incoming permission codes and rejects unknown codes instead of
+   * silently dropping them (which previously made assignedCount misleading).
+   */
+  private static normalizePermissionCodes(codes: unknown): string[] {
+    if (!Array.isArray(codes)) {
+      throw new Error("permissionCodes must be an array of permission code strings.");
+    }
+
+    return Array.from(
+      new Set(
+        codes
+          .map((code) => String(code ?? "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  }
+
+  private static assertAllPermissionsExist(requested: string[], found: string[]) {
+    const foundSet = new Set(found);
+    const unknown = requested.filter((code) => !foundSet.has(code));
+    if (unknown.length > 0) {
+      throw new Error(`Unknown permission code(s): ${unknown.join(", ")}`);
     }
   }
 
@@ -106,30 +153,39 @@ export class RbacService {
       throw new Error(`Role with code '${normalizedCode}' already exists.`);
     }
 
-    const newRole = await Role.create({
-      name: data.name.trim(),
-      code: normalizedCode,
-      label: data.label || data.name.trim(),
-      description: data.description || "Custom enterprise assigned role",
-      isSystem: false,
-      isActive: true,
-    });
+    const permissionCodes = this.normalizePermissionCodes(data.permissionCodes ?? []);
+    const transaction = await sequelize.transaction();
 
-    if (Array.isArray(data.permissionCodes) && data.permissionCodes.length > 0) {
-      const perms = await Permission.findAll({
-        where: { code: data.permissionCodes },
-      });
-      const bindings = perms.map((p) => ({
-        roleId: newRole.id,
-        permissionId: p.id,
-      }));
-      if (bindings.length > 0) {
-        await RolePermission.bulkCreate(bindings, { ignoreDuplicates: true });
+    try {
+      const newRole = await Role.create({
+        name: data.name.trim(),
+        code: normalizedCode,
+        label: data.label || data.name.trim(),
+        description: data.description || "Custom enterprise assigned role",
+        isSystem: false,
+        isActive: true,
+      }, { transaction });
+
+      if (permissionCodes.length > 0) {
+        const perms = await Permission.findAll({
+          where: { code: permissionCodes },
+          transaction,
+        });
+
+        this.assertAllPermissionsExist(permissionCodes, perms.map((p) => p.code));
+        await RolePermission.bulkCreate(
+          perms.map((p) => ({ roleId: newRole.id, permissionId: p.id })),
+          { transaction, ignoreDuplicates: true }
+        );
       }
-    }
 
-    this.clearCache(newRole.code);
-    return newRole;
+      await transaction.commit();
+      this.clearCache(newRole.code);
+      return newRole;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   static async createPermission(data: {
@@ -140,6 +196,15 @@ export class RbacService {
     description?: string;
   }) {
     const normalizedCode = data.code.trim().toLowerCase();
+    if (!/^[a-z0-9_]+(\.[a-z0-9_]+)+$/.test(normalizedCode)) {
+      throw new Error("Permission code must look like 'module.action' (lowercase letters, digits, underscores).");
+    }
+
+    const normalizedAction = data.action.trim().toLowerCase();
+    if (!ALLOWED_ACTIONS.has(normalizedAction)) {
+      throw new Error(`Unsupported permission action '${data.action}'. Allowed: ${Array.from(ALLOWED_ACTIONS).join(", ")}.`);
+    }
+
     const existing = await Permission.findOne({ where: { code: normalizedCode } });
     if (existing) {
       throw new Error(`Permission code '${normalizedCode}' already exists.`);
@@ -148,7 +213,7 @@ export class RbacService {
     const newPerm = await Permission.create({
       code: normalizedCode,
       module: data.module.trim(),
-      action: data.action.trim().toLowerCase(),
+      action: normalizedAction,
       name: data.name.trim(),
       description: data.description || "",
     });
@@ -167,24 +232,32 @@ export class RbacService {
       throw new Error("Super Admin role retains wildcard access and cannot be modified.");
     }
 
+    if (!role.isActive) {
+      throw new Error("Inactive roles cannot be modified. Activate the role first.");
+    }
+
+    const requestedCodes = this.normalizePermissionCodes(permissionCodes);
     const t = await sequelize.transaction();
+
     try {
+      // Resolve and validate BEFORE destroying existing bindings, so an invalid
+      // payload can never strip a role of all its permissions.
+      const perms = requestedCodes.length > 0
+        ? await Permission.findAll({
+            where: { code: requestedCodes },
+            transaction: t,
+          })
+        : [];
+
+      this.assertAllPermissionsExist(requestedCodes, perms.map((p) => p.code));
+
       await RolePermission.destroy({ where: { roleId: role.id }, transaction: t });
 
-      if (permissionCodes.length > 0) {
-        const perms = await Permission.findAll({
-          where: { code: permissionCodes },
-          transaction: t,
-        });
-
-        const rows = perms.map((p) => ({
-          roleId: role.id,
-          permissionId: p.id,
-        }));
-
-        if (rows.length > 0) {
-          await RolePermission.bulkCreate(rows, { transaction: t, ignoreDuplicates: true });
-        }
+      if (perms.length > 0) {
+        await RolePermission.bulkCreate(
+          perms.map((p) => ({ roleId: role.id, permissionId: p.id })),
+          { transaction: t, ignoreDuplicates: true }
+        );
       }
 
       await t.commit();
@@ -193,8 +266,8 @@ export class RbacService {
       return {
         roleId: role.id,
         roleCode: role.code,
-        assignedCount: permissionCodes.length,
-        permissionCodes,
+        assignedCount: perms.length,
+        permissionCodes: perms.map((p) => p.code),
       };
     } catch (err) {
       await t.rollback();

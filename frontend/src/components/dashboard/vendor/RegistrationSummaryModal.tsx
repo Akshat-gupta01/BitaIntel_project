@@ -4,6 +4,7 @@ import React from 'react';
 import { FullVendorRegistrationDossier } from '@/types/vendorRegistration';
 import { VENDOR_CATEGORIES, BUSINESS_TYPES } from '@/config/vendorMasterData';
 import { Button } from '@/components/ui/Button';
+import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
   X,
   Printer,
@@ -192,8 +193,13 @@ export function RegistrationSummaryModal({
                   {dossier.step4.products.map((p) => (
                     <tr key={p.id}>
                       <td className="p-2.5">
-                        <strong className="text-slate-900 block">{p.name}</strong>
-                        <span className="text-[10px] text-slate-500">{p.specifications}</span>
+                        <div className="flex items-center gap-2.5">
+                          <ProductThumbnail images={p.images} alt={p.name} size="xs" />
+                          <div className="min-w-0 flex-1">
+                            <strong className="text-slate-900 block truncate">{p.name}</strong>
+                            <span className="text-[10px] text-slate-500 line-clamp-1">{p.specifications}</span>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-2.5 font-mono text-slate-600">{p.hsnCode}</td>
                       <td className="p-2.5 text-slate-700 font-semibold">{p.moq}</td>

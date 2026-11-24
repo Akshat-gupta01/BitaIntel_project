@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Request, Response } from "express";
+import productUpload, { productUploadAsync } from "../config/multer.config.js";
 import {
   User,
   BusinessEntity,
@@ -154,6 +155,16 @@ export async function getProfile(req: Request, res: Response) {
     }
 
     const bJson: any = business.toJSON();
+    if (!bJson.incorporationDate && bJson.yearEstablished) {
+      bJson.incorporationDate = `${bJson.yearEstablished}-01-01`;
+    }
+    if (bJson.statutory) {
+      const payload = (bJson.statutory.statutoryPayload as Record<string, any>) || {};
+      bJson.statutory.tan = bJson.statutory.tan || payload.tan || null;
+      bJson.statutory.duns = bJson.statutory.dunsNumber || bJson.statutory.duns || payload.duns || null;
+      bJson.statutory.dunsNumber = bJson.statutory.dunsNumber || bJson.statutory.duns || payload.duns || null;
+      bJson.statutory.lei = bJson.statutory.lei || payload.lei || null;
+    }
     const bTypes = bJson.vendorBusinessTypes || [];
     const cats = bJson.vendorCategories || [];
     const subcats = bJson.vendorSubcategories || [];
@@ -239,9 +250,15 @@ export async function getProfile(req: Request, res: Response) {
     };
 
     return sendSuccess(res, { business: bJson });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get Profile Error:", error);
-    return sendError(res, "Failed to fetch profile", 500, "ERR_INTERNAL_SERVER");
+    return sendError(
+      res,
+      error?.message || "Failed to fetch profile",
+      500,
+      "ERR_INTERNAL_SERVER",
+      process.env.NODE_ENV !== "production" ? error?.stack : undefined
+    );
   }
 }
 
@@ -298,6 +315,8 @@ export async function createProfile(req: Request, res: Response) {
       country,
       website,
       yearEstablished,
+      incorporationDate,
+      logoUrl,
     } = req.body;
 
     const companyName = name || legalName;
@@ -326,6 +345,8 @@ export async function createProfile(req: Request, res: Response) {
       country: country?.trim() || "India",
       website,
       yearEstablished: Number(yearEstablished) || 2024,
+      incorporationDate: incorporationDate?.trim() || (yearEstablished ? `${yearEstablished}-01-01` : null),
+      logoUrl: logoUrl ? String(logoUrl).trim() : null,
       summary: effectiveSummary?.trim() || null,
       score: 0.00,
       badge: "Under Review",
@@ -353,55 +374,70 @@ export async function createProfile(req: Request, res: Response) {
  * Logged-in vendor ki company details update karta hai (Address, Website, Summary etc.)
  */
 export async function updateProfile(req: Request, res: Response) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return sendError(res, "Please login first", 401, "ERR_UNAUTHORIZED");
-    }
+  const userId = req.user?.id;
+  if (!userId) {
+    return sendError(res, "Please login first", 401, "ERR_UNAUTHORIZED");
+  }
 
+  // Whitelist allowed fields to prevent mass-assignment vulnerability
+  const {
+    name,
+    legalName,
+    tradeName,
+    companyType,
+    industry,
+    category,
+    city,
+    state,
+    registeredAddress,
+    postalCode,
+    pincode,
+    country,
+    website,
+    summary,
+    companyDescription,
+    turnover,
+    employees,
+    yearEstablished,
+    incorporationDate,
+    logoUrl,
+    tan,
+    duns,
+    dunsNumber,
+    lei,
+  } = req.body;
+
+  // Execute entire update workflow in a database transaction
+  const t = await sequelize.transaction();
+
+  try {
     let business = await BusinessEntity.findOne({
-      where: { ownerUserId: userId }
+      where: { ownerUserId: userId },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
     });
 
     if (!business) {
       const user = req.user;
-      const cName = req.body?.name || req.body?.legalName || user?.companyName || "Vendor Enterprise";
-      business = await BusinessEntity.create({
-        ownerUserId: userId,
-        slug: generateSlug(cName),
-        name: cName,
-        legalName: req.body?.legalName || cName,
-        tradeName: req.body?.tradeName || cName,
-        initials: getInitials(cName),
-        score: 0.00,
-        badge: "Under Review",
-        verificationStatus: "registered",
-        isPubliclyVisible: true,
-      });
+      const cName = name || legalName || user?.companyName || "Vendor Enterprise";
+      business = await BusinessEntity.create(
+        {
+          ownerUserId: userId,
+          slug: generateSlug(cName),
+          name: cName,
+          legalName: legalName || cName,
+          tradeName: tradeName || cName,
+          initials: getInitials(cName),
+          score: 0.00,
+          badge: "Under Review",
+          verificationStatus: "registered",
+          isPubliclyVisible: true,
+        },
+        { transaction: t }
+      );
     }
 
-    // Whitelist allowed fields to prevent mass-assignment vulnerability
-    const {
-      name,
-      legalName,
-      tradeName,
-      companyType,
-      industry,
-      category,
-      city,
-      state,
-      registeredAddress,
-      postalCode,
-      pincode,
-      country,
-      website,
-      summary,
-      companyDescription,
-      turnover,
-      employees,
-      yearEstablished
-    } = req.body;
-
+    // ─── 1. Business Entity Table Updates ─────────────────────────────────────────
     const updates: Record<string, any> = {};
 
     if (name?.trim()) updates.name = name.trim();
@@ -436,27 +472,100 @@ export async function updateProfile(req: Request, res: Response) {
     if (employees?.trim()) updates.employees = employees.trim();
     if (yearEstablished !== undefined) updates.yearEstablished = Number(yearEstablished) || 2024;
 
-    // Auto-sync combined location if city or state changed
-    if (city || state) {
-      const newCity = city?.trim() || business.city;
-      const newState = state?.trim() || business.state;
-      updates.location = `${newCity}, ${newState}`;
+    // Save incorporationDate in Business Entity
+    if (incorporationDate !== undefined) {
+      updates.incorporationDate = incorporationDate?.trim() || null;
+      if (incorporationDate?.trim() && !yearEstablished) {
+        const parsedYear = new Date(incorporationDate.trim()).getFullYear();
+        if (!isNaN(parsedYear) && parsedYear > 1800) {
+          updates.yearEstablished = parsedYear;
+        }
+      }
     }
 
-    if (Object.keys(updates).length === 0) {
-      return sendError(res, "No valid fields provided to update", 400, "ERR_NO_DATA");
+    // Save logoUrl in Business Entity
+    if (logoUrl !== undefined) {
+      updates.logoUrl = logoUrl ? String(logoUrl).trim() : null;
     }
 
-    // Single optimized update query
-    await business.update(updates);
+    if (Object.keys(updates).length > 0) {
+      await business.update(updates, { transaction: t });
+    }
+
+    // ─── 2. Statutory Identifier Table Updates ─────────────────────────────────────
+    const effectiveDuns = dunsNumber !== undefined ? dunsNumber : duns;
+    let statutory = null;
+    if (tan !== undefined || effectiveDuns !== undefined || lei !== undefined) {
+      // Find or create StatutoryIdentifier record linked to this business
+      statutory = await StatutoryIdentifier.findOne({
+        where: { businessId: business.id },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      const cleanTan = tan !== undefined ? (tan ? String(tan).trim().toUpperCase() : null) : undefined;
+      const cleanDuns = effectiveDuns !== undefined ? (effectiveDuns ? String(effectiveDuns).trim().toUpperCase() : null) : undefined;
+      const cleanLei = lei !== undefined ? (lei ? String(lei).trim().toUpperCase() : null) : undefined;
+
+      if (!statutory) {
+        statutory = await StatutoryIdentifier.create(
+          {
+            businessId: business.id,
+            tan: cleanTan ?? null,
+            duns: cleanDuns ?? null,
+            dunsNumber: cleanDuns ?? null,
+            lei: cleanLei ?? null,
+            mcaStatus: "ACTIVE",
+            gstnStatus: "ACTIVE",
+            filingFrequency: "Monthly (GSTR-3B)",
+            statutoryPayload: {
+              ...(cleanTan ? { tan: cleanTan } : {}),
+              ...(cleanDuns ? { duns: cleanDuns } : {}),
+              ...(cleanLei ? { lei: cleanLei } : {}),
+            },
+          },
+          { transaction: t }
+        );
+      } else {
+        const statutoryUpdates: Record<string, any> = {};
+        const currPayload = (statutory.statutoryPayload as Record<string, any>) || {};
+        const newPayload = { ...currPayload };
+
+        if (cleanTan !== undefined) {
+          statutoryUpdates.tan = cleanTan;
+          newPayload.tan = cleanTan;
+        }
+        if (cleanDuns !== undefined) {
+          statutoryUpdates.duns = cleanDuns;
+          statutoryUpdates.dunsNumber = cleanDuns;
+          newPayload.duns = cleanDuns;
+        }
+        if (cleanLei !== undefined) {
+          statutoryUpdates.lei = cleanLei;
+          newPayload.lei = cleanLei;
+        }
+        statutoryUpdates.statutoryPayload = newPayload;
+        await statutory.update(statutoryUpdates, { transaction: t });
+      }
+    }
+
+    // Commit transaction only when all operations succeed
+    await t.commit();
 
     return sendSuccess(res, {
-      message: "Business profile updated successfully",
-      business
+      message: "Business profile and statutory identifiers updated successfully",
+      business,
+      statutory,
     });
-  } catch (error) {
+  } catch (error: any) {
+    await t.rollback();
     console.error("Update Profile Error:", error);
-    return sendError(res, "Failed to update business profile", 500, "ERR_INTERNAL_SERVER");
+    return sendError(
+      res,
+      error?.message || "Failed to update business profile",
+      500,
+      "ERR_INTERNAL_SERVER"
+    );
   }
 }
 
@@ -479,7 +588,13 @@ export async function getStatutory(req: Request, res: Response) {
     if (!statutory) {
       return sendError(res, "Statutory details not found for this business", 404, "ERR_STATUTORY_NOT_FOUND");
     }
-    return sendSuccess(res, { statutory });
+    const sJson: any = statutory.toJSON();
+    const payload = (sJson.statutoryPayload as Record<string, any>) || {};
+    sJson.tan = sJson.tan || payload.tan || null;
+    sJson.duns = sJson.dunsNumber || sJson.duns || payload.duns || null;
+    sJson.dunsNumber = sJson.dunsNumber || sJson.duns || payload.duns || null;
+    sJson.lei = sJson.lei || payload.lei || null;
+    return sendSuccess(res, { statutory: sJson });
   } catch (error) {
     console.error("Get Statutory Error:", error);
     return sendError(res, "Failed to fetch statutory identifiers", 500, "ERR_INTERNAL_SERVER");
@@ -500,7 +615,7 @@ export async function createStatutory(req: Request, res: Response) {
     }
     // 2. Check karo ki statutory details pehle se bani toh nahi hain
     const existing = await StatutoryIdentifier.findOne({ where: { businessId: business.id } });
-    const { gstin, pan, cin, udyamMsme, msmeUdyamRegistration, iecCode, iec, filingFrequency } = req.body;
+    const { gstin, pan, cin, udyamMsme, msmeUdyamRegistration, iec, iecCode, filingFrequency, tan, duns, dunsNumber, lei } = req.body;
 
     const rawGstin = typeof gstin === "string" ? gstin.trim() : "";
     const cleanGstin = rawGstin ? rawGstin.toUpperCase() : null;
@@ -508,8 +623,8 @@ export async function createStatutory(req: Request, res: Response) {
     const cleanPan = rawPan ? rawPan.toUpperCase() : null;
     const rawCin = typeof cin === "string" ? cin.trim() : "";
     const cleanCin = rawCin ? rawCin.toUpperCase() : null;
-    const rawUdyam = typeof udyamMsme === "string" ? udyamMsme.trim() : (typeof msmeUdyamRegistration === "string" ? msmeUdyamRegistration.trim() : null);
-    const rawIec = typeof iecCode === "string" ? iecCode.trim() : (typeof iec === "string" ? iec.trim() : null);
+    const rawUdyamMsme = typeof udyamMsme === "string" ? udyamMsme.trim() : (typeof msmeUdyamRegistration === "string" ? msmeUdyamRegistration.trim() : null);
+    const rawIecCode = typeof iecCode === "string" ? iecCode.trim() : (typeof iec === "string" ? iec.trim() : null);
 
     // 3. Duplicate GSTIN Check & Format Validation (agar GSTIN provide kiya gaya hai)
     if (cleanGstin) {
@@ -542,41 +657,76 @@ export async function createStatutory(req: Request, res: Response) {
     }
 
     if (existing) {
+      const currentPayload = (existing.statutoryPayload as Record<string, any>) || {};
+      const newPayload = { ...currentPayload };
+      if (tan !== undefined) newPayload.tan = tan ? String(tan).trim().toUpperCase() : null;
+      if (duns !== undefined || dunsNumber !== undefined) newPayload.duns = (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null;
+      if (lei !== undefined) newPayload.lei = lei ? String(lei).trim().toUpperCase() : null;
+
       await existing.update({
         ...(cleanGstin !== null ? { gstin: cleanGstin } : {}),
         ...(finalPan !== null ? { pan: finalPan } : {}),
         ...(cleanCin !== null ? { cin: cleanCin } : {}),
-        ...(rawUdyam !== null ? { udyamMsme: rawUdyam } : {}),
-        ...(rawIec !== null ? { iecCode: rawIec } : {}),
+        ...(rawUdyamMsme !== null ? { udyamMsme: rawUdyamMsme } : {}),
+        ...(rawIecCode !== null ? { iecCode: rawIecCode } : {}),
+        ...(tan !== undefined ? { tan: tan ? String(tan).trim().toUpperCase() : null } : {}),
+        ...(duns !== undefined || dunsNumber !== undefined
+          ? {
+              duns: (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null,
+              dunsNumber: (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null,
+            }
+          : {}),
+        ...(lei !== undefined ? { lei: lei ? String(lei).trim().toUpperCase() : null } : {}),
         ...(filingFrequency ? { filingFrequency } : {}),
+        statutoryPayload: newPayload,
       });
       try {
         await computeAndSaveBusinessTrustScore(business.id);
       } catch {}
+      const sJson: any = existing.toJSON();
+      sJson.tan = newPayload.tan || null;
+      sJson.duns = newPayload.duns || null;
+      sJson.dunsNumber = newPayload.duns || null;
+      sJson.lei = newPayload.lei || null;
       return sendSuccess(res, {
         message: "Statutory identifiers updated successfully",
-        statutory: existing
+        statutory: sJson
       }, 200);
     }
 
     // 6. Record create karo
+    const initialPayload: Record<string, any> = {};
+    if (tan) initialPayload.tan = String(tan).trim().toUpperCase();
+    if (duns || dunsNumber) initialPayload.duns = String(duns || dunsNumber).trim();
+    if (lei) initialPayload.lei = String(lei).trim().toUpperCase();
+
     const newStatutory = await StatutoryIdentifier.create({
       businessId: business.id,
       gstin: cleanGstin,
       pan: finalPan,
       cin: cleanCin,
-      udyamMsme: rawUdyam || null,
-      iecCode: rawIec || null,
+      udyamMsme: rawUdyamMsme || null,
+      iecCode: rawIecCode || null,
+      tan: tan ? String(tan).trim().toUpperCase() : null,
+      duns: (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null,
+      dunsNumber: (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null,
+      lei: lei ? String(lei).trim().toUpperCase() : null,
       filingFrequency: filingFrequency || "Monthly (GSTR-3B)",
       mcaStatus: "ACTIVE",
-      gstnStatus: cleanGstin ? "PENDING" : "ACTIVE"
+      gstnStatus: cleanGstin ? "PENDING" : "ACTIVE",
+      statutoryPayload: initialPayload,
     });
     try {
       await computeAndSaveBusinessTrustScore(business.id);
     } catch {}
+    const sJson: any = newStatutory.toJSON();
+    sJson.tan = initialPayload.tan || null;
+    sJson.duns = initialPayload.duns || null;
+    sJson.dunsNumber = initialPayload.duns || null;
+    sJson.lei = initialPayload.lei || null;
     return sendSuccess(res, {
       message: "Statutory identifiers saved successfully",
-      statutory: newStatutory
+      statutory: sJson
     }, 201);
   } catch (error) {
     console.error("Create Statutory Error:", error);
@@ -597,15 +747,15 @@ export async function updateStatutory(req: Request, res: Response) {
     }
     let statutory = await StatutoryIdentifier.findOne({ where: { businessId: business.id } });
 
-    const { gstin, pan, cin, udyamMsme, msmeUdyamRegistration, iecCode, iec, filingFrequency } = req.body;
+    const { gstin, pan, cin, udyamMsme, msmeUdyamRegistration, iec, iecCode, filingFrequency, tan, duns, dunsNumber, lei } = req.body;
     const rawGstin = typeof gstin === "string" ? gstin.trim() : "";
     const cleanGstin = rawGstin ? rawGstin.toUpperCase() : null;
     const rawPan = typeof pan === "string" ? pan.trim() : "";
     const cleanPan = rawPan ? rawPan.toUpperCase() : null;
     const rawCin = typeof cin === "string" ? cin.trim() : "";
     const cleanCin = rawCin ? rawCin.toUpperCase() : null;
-    const rawUdyam = typeof udyamMsme === "string" ? udyamMsme.trim() : (typeof msmeUdyamRegistration === "string" ? msmeUdyamRegistration.trim() : null);
-    const rawIec = typeof iecCode === "string" ? iecCode.trim() : (typeof iec === "string" ? iec.trim() : null);
+    const rawUdyamMsme = typeof udyamMsme === "string" ? udyamMsme.trim() : (typeof msmeUdyamRegistration === "string" ? msmeUdyamRegistration.trim() : null);
+    const rawIecCode = typeof iecCode === "string" ? iecCode.trim() : (typeof iec === "string" ? iec.trim() : null);
 
     // Upsert Fallback: Agar pehle se statutory row nahi bani hai, toh create kar do
     if (!statutory) {
@@ -630,23 +780,37 @@ export async function updateStatutory(req: Request, res: Response) {
         finalPan = cleanGstin.substring(2, 12);
       }
 
+      const initialPayload: Record<string, any> = {};
+      if (tan) initialPayload.tan = String(tan).trim().toUpperCase();
+      if (duns || dunsNumber) initialPayload.duns = String(duns || dunsNumber).trim();
+      if (lei) initialPayload.lei = String(lei).trim().toUpperCase();
+
       statutory = await StatutoryIdentifier.create({
         businessId: business.id,
         gstin: cleanGstin,
         pan: finalPan,
         cin: cleanCin,
-        udyamMsme: rawUdyam || null,
-        iecCode: rawIec || null,
+        udyamMsme: rawUdyamMsme || null,
+        iecCode: rawIecCode || null,
+        tan: tan ? String(tan).trim().toUpperCase() : null,
+        dunsNumber: (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null,
+        lei: lei ? String(lei).trim().toUpperCase() : null,
         filingFrequency: filingFrequency?.trim() || "Monthly (GSTR-3B)",
         mcaStatus: "ACTIVE",
         gstnStatus: cleanGstin ? "PENDING" : "ACTIVE",
+        statutoryPayload: initialPayload,
       });
       try {
         await computeAndSaveBusinessTrustScore(business.id);
       } catch {}
+      const sJson: any = statutory.toJSON();
+      sJson.tan = initialPayload.tan || null;
+      sJson.duns = initialPayload.duns || null;
+      sJson.dunsNumber = initialPayload.duns || null;
+      sJson.lei = initialPayload.lei || null;
       return sendSuccess(res, {
         message: "Statutory identifiers created successfully",
-        statutory
+        statutory: sJson
       }, 201);
     }
 
@@ -678,9 +842,31 @@ export async function updateStatutory(req: Request, res: Response) {
       updates.cin = cleanCin;
     }
     if (cleanPan) updates.pan = cleanPan;
-    if (rawUdyam !== null && rawUdyam !== undefined) updates.udyamMsme = rawUdyam || null;
-    if (rawIec !== null && rawIec !== undefined) updates.iecCode = rawIec || null;
+    if (rawUdyamMsme !== null && rawUdyamMsme !== undefined) updates.udyamMsme = rawUdyamMsme || null;
+    if (rawIecCode !== null && rawIecCode !== undefined) updates.iecCode = rawIecCode || null;
+    if (tan !== undefined) updates.tan = tan ? String(tan).trim().toUpperCase() : null;
+    if (duns !== undefined || dunsNumber !== undefined) updates.dunsNumber = (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null;
+    if (lei !== undefined) updates.lei = lei ? String(lei).trim().toUpperCase() : null;
     if (filingFrequency?.trim()) updates.filingFrequency = filingFrequency.trim();
+
+    const existingPayload = (statutory.statutoryPayload as Record<string, any>) || {};
+    const newPayload = { ...existingPayload };
+    let payloadChanged = false;
+    if (tan !== undefined) {
+      newPayload.tan = tan ? String(tan).trim().toUpperCase() : null;
+      payloadChanged = true;
+    }
+    if (duns !== undefined || dunsNumber !== undefined) {
+      newPayload.duns = (duns || dunsNumber) ? String(duns || dunsNumber).trim() : null;
+      payloadChanged = true;
+    }
+    if (lei !== undefined) {
+      newPayload.lei = lei ? String(lei).trim().toUpperCase() : null;
+      payloadChanged = true;
+    }
+    if (payloadChanged) {
+      updates.statutoryPayload = newPayload;
+    }
 
     if (Object.keys(updates).length > 0) {
       await statutory.update(updates);
@@ -689,9 +875,16 @@ export async function updateStatutory(req: Request, res: Response) {
       } catch {}
     }
 
+    const sJson: any = statutory.toJSON();
+    const finalPayload = updates.statutoryPayload || sJson.statutoryPayload || {};
+    sJson.tan = finalPayload.tan || null;
+    sJson.duns = finalPayload.duns || null;
+    sJson.dunsNumber = finalPayload.duns || null;
+    sJson.lei = finalPayload.lei || null;
+
     return sendSuccess(res, {
       message: "Statutory identifiers updated successfully",
-      statutory
+      statutory: sJson
     });
   } catch (error) {
     console.error("Update Statutory Error:", error);
@@ -1750,6 +1943,41 @@ export const updateCapabilities = saveCapabilities;
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Helper: Product image array normalize karta hai (handles JSON string, single string, array, Windows backslashes)
+ */
+function normalizeProductImages(raw: unknown): string[] | null {
+  if (!raw) return null;
+  let items: unknown[] = [];
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) items = parsed;
+      } catch {
+        items = [trimmed];
+      }
+    } else if (trimmed) {
+      items = [trimmed];
+    }
+  }
+
+  const normalized = items
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .map((x) => x.trim().replace(/\\/g, "/"))
+    .map((x) => {
+      if (!x.startsWith("http://") && !x.startsWith("https://") && !x.startsWith("blob:") && !x.startsWith("data:")) {
+        return x.startsWith("/") ? x : `/${x}`;
+      }
+      return x;
+    });
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+/**
  * Helper: Product payload sanitize aur default values assign karta hai
  */
 function sanitizeProductInput(p: any, businessId: number) {
@@ -1778,7 +2006,7 @@ function sanitizeProductInput(p: any, businessId: number) {
     currency: p.currency?.trim() || "INR",
     priceValidity: p.priceValidity?.trim() || null,
     targetMarkets: p.targetMarkets?.trim() || null,
-    images: Array.isArray(p.images) ? p.images : null,
+    images: normalizeProductImages(p.images),
     catalogueDoc: p.catalogueDoc?.trim() || null,
     technicalDataSheetDoc: p.technicalDataSheetDoc?.trim() || null,
     coaDoc: p.coaDoc?.trim() || null,
@@ -1804,12 +2032,59 @@ export async function addProduct(req: Request, res: Response) {
       return sendError(res, "Please create company profile first (Step 2)", 404, "ERR_BUSINESS_NOT_FOUND");
     }
 
-    // 2. Agar Array input bheja ho (Bulk Products Add)
+    // 2. Handle single product image upload using Multer
+    await productUploadAsync(req, res);
+    const productImageUrl = req.file
+      ? `${req.protocol}://${req.get("host")}/uploads/products/${req.file.filename}`
+      : null;
+
+    // 3. Agar Array input bheja ho (Bulk Products Add)
     if (Array.isArray(req.body)) {
       if (req.body.length === 0) {
         return sendError(res, "Product list cannot be empty", 400, "ERR_EMPTY_PAYLOAD");
       }
-      const itemsToCreate = req.body.map((item: any) => sanitizeProductInput(item, business.id));
+      // Process each product with image upload
+      const itemsToCreate = req.body.map((item: any) => {
+        const imageUrl = item.imageUrl || productImageUrl || null;
+        // Build product object with all fields
+        const productData: any = {
+          name: item.name?.trim() || "",
+          type: item.type === "Service" ? "Service" : "Product",
+          categoryId: item.categoryId || "CAT001",
+          subcategoryId: item.subcategoryId || null,
+          brand: item.brand?.trim() || null,
+          description: item.description?.trim() || null,
+          specifications: item.specifications?.trim() || null,
+          grade: item.grade?.trim() || null,
+          standards: item.standards?.trim() || null,
+          hsnCode: item.hsnCode?.trim() || null,
+          countryOfOrigin: item.countryOfOrigin || "India",
+          moq: item.moq?.trim() || null,
+          standardOrderQty: item.standardOrderQty?.trim() || null,
+          monthlyCapacity: item.monthlyCapacity?.trim() || null,
+          availableStock: item.availableStock?.trim() || null,
+          leadTimeDays: item.leadTimeDays?.trim() || null,
+          sampleAvailability:
+            ["Available Free", "Available Paid", "Not Available"].includes(
+              item.sampleAvailability
+            )
+              ? item.sampleAvailability
+              : "Available Free",
+          indicativePrice: item.indicativePrice
+            ? String(item.indicativePrice).trim()
+            : null,
+          currency: item.currency?.trim() || "INR",
+          priceValidity: item.priceValidity?.trim() || null,
+          targetMarkets: item.targetMarkets?.trim() || null,
+          imageUrl: imageUrl,
+          images: item.images || [],
+          catalogueDoc: item.catalogueDoc?.trim() || null,
+          technicalDataSheetDoc: item.technicalDataSheetDoc?.trim() || null,
+          coaDoc: item.coaDoc?.trim() || null,
+          sdsDoc: item.sdsDoc?.trim() || null,
+        };
+        return productData;
+      });
       const products = await BusinessProduct.bulkCreate(itemsToCreate);
       return sendSuccess(
         res,
@@ -1822,7 +2097,7 @@ export async function addProduct(req: Request, res: Response) {
       );
     }
 
-    // 3. Normal Single Product: Fields destructure karein
+    // 4. Normal Single Product: Fields destructure karein
     const {
       name,
       type,
@@ -1852,7 +2127,7 @@ export async function addProduct(req: Request, res: Response) {
       sdsDoc,
     } = req.body;
 
-    // 4. Category ko Master Table se fetch karein (Code ya ID se)
+    // 5. Category ko Master Table se fetch karein (Code ya ID se)
     let masterCategory = await Category.findOne({
       where: isNaN(Number(categoryId))
         ? { code: categoryId.trim() }
@@ -1868,7 +2143,7 @@ export async function addProduct(req: Request, res: Response) {
     const effectiveCategoryCode = masterCategory ? masterCategory.code : (categoryId?.trim() || "CAT001");
     const effectiveCategoryName = masterCategory ? masterCategory.name : "Commercial Category";
 
-    // 6. Subcategory ko Master Table se fetch karein (Agar di ho)
+    // 7. Subcategory ko Master Table se fetch karein (Agar di ho)
     let subcategoryName: string | null = null;
     let effectiveSubcategory = subcategoryId && typeof subcategoryId === "string" ? subcategoryId.trim() : null;
     if (effectiveSubcategory) {
@@ -1883,7 +2158,7 @@ export async function addProduct(req: Request, res: Response) {
       }
     }
 
-    // 7. Database mein Product create karein
+    // 8. Database mein Product create karein
     const product = await BusinessProduct.create({
       businessId: business.id,
       name: name.trim(),
@@ -1909,14 +2184,14 @@ export async function addProduct(req: Request, res: Response) {
       currency: currency?.trim() || "INR",
       priceValidity: priceValidity?.trim() || null,
       targetMarkets: targetMarkets?.trim() || null,
-      images: Array.isArray(images) ? images : null,
+      images: normalizeProductImages(images || (productImageUrl ? [productImageUrl] : [])),
       catalogueDoc: catalogueDoc?.trim() || null,
       technicalDataSheetDoc: technicalDataSheetDoc?.trim() || null,
       coaDoc: coaDoc?.trim() || null,
       sdsDoc: sdsDoc?.trim() || null,
     });
 
-    // 8. Success Response bhejein
+    // 9. Success Response bhejein
     return sendSuccess(
       res,
       {
@@ -2019,6 +2294,7 @@ export async function updateProduct(req: Request, res: Response) {
       "currency",
       "priceValidity",
       "targetMarkets",
+      "imageUrl",
       "images",
       "catalogueDoc",
       "technicalDataSheetDoc",
@@ -2029,7 +2305,7 @@ export async function updateProduct(req: Request, res: Response) {
     for (const key of fields) {
       if (req.body[key] !== undefined) {
         if (key === "images") {
-          product.images = Array.isArray(req.body.images) ? req.body.images : null;
+          product.images = normalizeProductImages(req.body.images);
         } else if (typeof req.body[key] === "string") {
           (product as any)[key] = req.body[key].trim() || null;
         } else {

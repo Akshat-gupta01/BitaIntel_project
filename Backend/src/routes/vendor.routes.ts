@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
+import { requireRole } from "../middlewares/rbac.middleware.js";
 
 import {
   getProfile,
@@ -40,6 +41,11 @@ import {
   saveBankingDetails,
   submitVerification,
 } from "../controllers/vendor.controller.js";
+import {
+  getVendorEnquiries,
+  updateEnquiryStatus,
+  replyEnquiry,
+} from "../controllers/enquiry.controller.js";
 import {
   uploadSingleImage,
   uploadMultipleImages,
@@ -119,6 +125,7 @@ vendorRouter.get("/capabilities", getCapabilities);
 
 // ─── Step 4: Products & Services Catalog ────────────────────────────────────
 vendorRouter.post("/add-product", validate(addProductInputSchema), addProduct);
+vendorRouter.post("/products", validate(addProductInputSchema), addProduct);
 vendorRouter.get("/products", getProducts);
 vendorRouter.post("/products/upload-images", uploadMultipleImages, uploadMultipleImagesController);
 vendorRouter.post("/products/upload-image", uploadSingleImage, uploadImageController);
@@ -166,6 +173,11 @@ vendorRouter.post("/commercial/bank-proof", uploadSingleDocument, uploadBankProo
 // ─── Step 6: Final Verification Submission ──────────────────────────────────
 vendorRouter.post("/submit-verification", validate(submitVerificationSchema), submitVerification);
 
+
+// ─── Enquiries & RFQs (Vendor Management) ────────────────────────────────────
+vendorRouter.get("/enquiries", getVendorEnquiries);
+vendorRouter.patch("/enquiries/:id/status", updateEnquiryStatus);
+vendorRouter.post("/enquiries/:id/reply", replyEnquiry);
 
 // ─── Generic Storage Services ───────────────────────────────────────────────
 vendorRouter.post("/upload-image", uploadSingleImage, uploadImageController);

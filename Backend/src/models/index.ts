@@ -29,6 +29,7 @@ import VendorBusinessActivity from "./VendorBusinessActivity.model.js";
 import BusinessManufacturingCapability from "./BusinessManufacturingCapability.model.js";
 import BusinessServiceCapability from "./BusinessServiceCapability.model.js";
 import BusinessOperatingProfile from "./BusinessOperatingProfile.model.js";
+import BusinessEnquiry from "./BusinessEnquiry.model.js";
 
 // ─── Model Associations ──────────────────────────────────────────────────────
 
@@ -269,6 +270,29 @@ BusinessComplianceDeclarations.belongsTo(BusinessEntity, {
   as: "business",
 });
 
+// 6. Procurement & RFQ Buyer Enquiries (1-to-Many)
+BusinessEntity.hasMany(BusinessEnquiry, {
+  foreignKey: "businessId",
+  as: "enquiries",
+  onDelete: "CASCADE",
+});
+BusinessEnquiry.belongsTo(BusinessEntity, {
+  foreignKey: "businessId",
+  as: "business",
+});
+
+// 7. Product ke sath RFQ Enquiry Association (1-to-Many)
+// Har Product ke liye specific buyer RFQs / Enquiries receive ho sakti hain
+BusinessProduct.hasMany(BusinessEnquiry, {
+  foreignKey: "productId",
+  as: "enquiries",
+  onDelete: "SET NULL",
+});
+BusinessEnquiry.belongsTo(BusinessProduct, {
+  foreignKey: "productId",
+  as: "product",
+});
+
 // ─── RBAC Role-Permission Associations ───────────────────────────────────────
 Role.belongsToMany(Permission, {
   through: RolePermission,
@@ -321,6 +345,7 @@ export {
   BusinessManufacturingCapability,
   BusinessServiceCapability,
   BusinessOperatingProfile,
+  BusinessEnquiry,
 };
 export default {
   sequelize,
@@ -355,4 +380,5 @@ export default {
   BusinessManufacturingCapability,
   BusinessServiceCapability,
   BusinessOperatingProfile,
+  BusinessEnquiry,
 };

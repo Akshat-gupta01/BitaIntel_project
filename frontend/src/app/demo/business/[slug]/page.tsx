@@ -30,7 +30,17 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const b = businesses.find((x) => x.id === slug);
+  let b = businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase());
+  if (!b) {
+    try {
+      const res = await fetch(`http://127.0.0.1:3000/api/v1/master/business/${slug}`, { next: { revalidate: 10 } });
+      if (res.ok) {
+        const json = await res.json();
+        b = json?.data?.business;
+      }
+    } catch {}
+  }
+
   if (!b) {
     return createPageMetadata({
       title: 'Business Dossier Not Found',
@@ -55,7 +65,19 @@ export default async function BusinessProfile({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const b = businesses.find((x) => x.id === slug);
+  let b = businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase());
+  if (!b) {
+    try {
+      const res = await fetch(`http://127.0.0.1:3000/api/v1/master/business/${slug}`, { next: { revalidate: 10 } });
+      if (res.ok) {
+        const json = await res.json();
+        b = json?.data?.business;
+      }
+    } catch (err) {
+      console.warn('Backend business detail fetch note:', err);
+    }
+  }
+
   if (!b) notFound();
 
   const businessSchema = createBusinessJsonLd(b);

@@ -13,20 +13,23 @@ export class StatutoryIdentifier extends Model<
   InferAttributes<StatutoryIdentifier, { omit: "createdAt" | "updatedAt" }>,
   InferCreationAttributes<StatutoryIdentifier, { omit: "createdAt" | "updatedAt" }>
 > {
-   declare id: CreationOptional<number>;
+  declare id: CreationOptional<number>;
   declare businessId: ForeignKey<BusinessEntity["id"]>;
   declare gstin: CreationOptional<string | null>;
   declare pan: CreationOptional<string | null>;
   declare cin: CreationOptional<string | null>;
   declare udyamMsme: CreationOptional<string | null>;
   declare iecCode: CreationOptional<string | null>;
+  declare tan: CreationOptional<string | null>;
+  declare duns: CreationOptional<string | null>;
+  declare dunsNumber: CreationOptional<string | null>;
+  declare lei: CreationOptional<string | null>;
   declare mcaStatus: CreationOptional<string>;
   declare gstnStatus: CreationOptional<string>;
   declare filingFrequency: CreationOptional<string>;
   declare directorDins: CreationOptional<object[]>;
   declare statutoryPayload: CreationOptional<object>;
   declare lastSyncedAt: CreationOptional<Date>;
-
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -62,6 +65,22 @@ StatutoryIdentifier.init(
       allowNull: true
     },
     iecCode: {
+      type: DataTypes.STRING(30),
+      allowNull: true
+    },
+    tan: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    duns: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    dunsNumber: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    lei: {
       type: DataTypes.STRING(30),
       allowNull: true
     },

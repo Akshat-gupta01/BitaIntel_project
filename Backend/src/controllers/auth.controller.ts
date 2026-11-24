@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
+import { randomInt } from "node:crypto";
+import { sequelize } from "../config/database.js";
 import { User, UserOTP, BusinessEntity } from "../models/index.js";
 import { hashPassword, comparePassword } from "../utils/password.js";
 import { generateToken, verifyToken, setAuthCookie, clearAuthCookie } from "../utils/jwt.js";
@@ -16,8 +18,11 @@ import { generateSlug, getInitials } from "../utils/slug.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// 4-digit numeric OTP generate karne ke liye
-const generate4DigitOtp = () => Math.floor(1000 + Math.random() * 9000).toString();
+// 4-digit numeric OTP generate karne ke liye (CSPRNG, not Math.random)
+const generate4DigitOtp = () => randomInt(1000, 10000).toString();
+
+// Suspended / deactivated accounts must not receive sessions or OTPs.
+const isAccountActive = (user: User) => user.status === "ACTIVE";
 
 export async function sendOtp(req: Request, res: Response) {
   const result = sendOtpSchema.safeParse(req.body);
@@ -55,6 +60,15 @@ export async function sendOtp(req: Request, res: Response) {
         "No registered account found with this corporate email or mobile number.",
         404,
         "ERR_USER_NOT_FOUND"
+      );
+    }
+
+    if (!isAccountActive(user)) {
+      return sendError(
+        res,
+        "This account is not active. Please contact platform support.",
+        403,
+        "ERR_ACCOUNT_INACTIVE"
       );
     }
 
@@ -344,34 +358,44 @@ export async function register(req: Request, res: Response) {
     // Step 4: Password hash karein (Bcrypt)
     const passwordHash = await hashPassword(password);
 
-    // Step 5: Database me naya User banayein
-    const newUser = await User.create({
-      companyName,
-      fullName,
-      email,
-      mobile,
-      passwordHash,
-      designation,
-      role: "vendor",
-      isEmailVerified: true,
-      isMobileVerified: true,
-      status: "ACTIVE"
-    });
-
-    // Step 6: ✨ Vendor ki Company Profile (BusinessEntity) automatically create karein
-    const slug = generateSlug(companyName);
+    // Step 5 & 6: User + Business profile ek hi transaction me banayein,
+    // taaki BusinessEntity fail hone par orphan user na bane.
     const initials = getInitials(companyName);
+    const { newUser, newBusiness } = await sequelize.transaction(async (transaction) => {
+      // Slug unique constraint ko pehle se check karein (race ke liye DB constraint final guard hai).
+      let slug = generateSlug(companyName);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const slugTaken = await BusinessEntity.count({ where: { slug }, transaction });
+        if (!slugTaken) break;
+        slug = generateSlug(companyName);
+      }
 
-    const newBusiness = await BusinessEntity.create({
-      ownerUserId: newUser.id,          // 👈 Vendor ki User ID se link kiya (Foreign Key)
-      name: companyName,
-      legalName: companyName,
-      slug,                             // 👈 Public profile URL (e.g. greenleaf-4821)
-      initials,                         // 👈 Avatar initials (e.g. GL)
-      score: 0.00,                      // 👈 Starting platform trust score (0.00 for newly registered)
-      badge: "Under Review",            // 👈 Default badge
-      verificationStatus: "registered", // 👈 Initial lifecycle status
-      isPubliclyVisible: true
+      const user = await User.create({
+        companyName,
+        fullName,
+        email,
+        mobile,
+        passwordHash,
+        designation,
+        role: "vendor",
+        isEmailVerified: true,
+        isMobileVerified: true,
+        status: "ACTIVE"
+      }, { transaction });
+
+      const business = await BusinessEntity.create({
+        ownerUserId: user.id,             // 👈 Vendor ki User ID se link kiya (Foreign Key)
+        name: companyName,
+        legalName: companyName,
+        slug,                             // 👈 Public profile URL (e.g. greenleaf-4821)
+        initials,                         // 👈 Avatar initials (e.g. GL)
+        score: 0.00,                      // 👈 Starting platform trust score (0.00 for newly registered)
+        badge: "Under Review",            // 👈 Default badge
+        verificationStatus: "registered", // 👈 Initial lifecycle status
+        isPubliclyVisible: true
+      }, { transaction });
+
+      return { newUser: user, newBusiness: business };
     });
 
     // Step 7: Single Auth Token generate karein aur HttpOnly Cookie me set karein
@@ -449,6 +473,15 @@ export async function login(req: Request, res: Response) {
 
   if (!user) {
     return sendError(res, "Invalid email/phone or password", 401, "ERR_INVALID_CREDENTIALS");
+  }
+
+  if (!isAccountActive(user)) {
+    return sendError(
+      res,
+      "This account is not active. Please contact platform support.",
+      403,
+      "ERR_ACCOUNT_INACTIVE"
+    );
   }
 
   // 2. Password compare karein
@@ -538,6 +571,15 @@ async function handleOtpLogin(rawIdentifier: string, otpCode: string, res: Respo
       "No registered account found with this email or mobile number.",
       404,
       "ERR_USER_NOT_FOUND"
+    );
+  }
+
+  if (!isAccountActive(user)) {
+    return sendError(
+      res,
+      "This account is not active. Please contact platform support.",
+      403,
+      "ERR_ACCOUNT_INACTIVE"
     );
   }
 
@@ -638,6 +680,15 @@ export async function resetPassword(req: Request, res: Response) {
         "No registered account found with this email or mobile number.",
         404,
         "ERR_USER_NOT_FOUND"
+      );
+    }
+
+    if (!isAccountActive(user)) {
+      return sendError(
+        res,
+        "This account is not active. Please contact platform support.",
+        403,
+        "ERR_ACCOUNT_INACTIVE"
       );
     }
 

@@ -39,6 +39,56 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
   const [pEmail, setPEmail] = useState('');
   const [pMobile, setPMobile] = useState('');
 
+  const [showEditStatutory, setShowEditStatutory] = useState(false);
+  const [editTan, setEditTan] = useState(data.tan || '');
+  const [editDuns, setEditDuns] = useState(data.duns || '');
+  const [editLei, setEditLei] = useState(data.lei || '');
+  const [editIec, setEditIec] = useState(data.iec || '');
+  const [isSavingStatutory, setIsSavingStatutory] = useState(false);
+
+  React.useEffect(() => {
+    setEditTan(data.tan || '');
+    setEditDuns(data.duns || '');
+    setEditLei(data.lei || '');
+    setEditIec(data.iec || '');
+  }, [data.tan, data.duns, data.lei, data.iec]);
+
+  async function handleSaveStatutory() {
+    setIsSavingStatutory(true);
+    try {
+      const cleanTan = editTan.trim().toUpperCase() || undefined;
+      const cleanDuns = editDuns.trim() || undefined;
+      const cleanLei = editLei.trim().toUpperCase() || undefined;
+      const cleanIec = editIec.trim() || undefined;
+
+      await vendorService.updateStatutory({
+        tan: cleanTan,
+        duns: cleanDuns,
+        dunsNumber: cleanDuns,
+        lei: cleanLei,
+        iecCode: cleanIec,
+      });
+
+      onUpdate({
+        tan: editTan.trim().toUpperCase(),
+        duns: editDuns.trim(),
+        lei: editLei.trim().toUpperCase(),
+        iec: editIec.trim(),
+      });
+
+      setShowEditStatutory(false);
+      toast.success('Statutory Identifiers Saved', {
+        description: 'TAN, D-U-N-S, and LEI saved to statutory_identifiers table.',
+      });
+    } catch (err: any) {
+      toast.error('Failed to update identifiers', {
+        description: err?.response?.data?.message || err?.message || 'Please try again.',
+      });
+    } finally {
+      setIsSavingStatutory(false);
+    }
+  }
+
   async function handleSaveFacility() {
     if (!facName || !facCity || !facState) {
       toast.error('Please enter facility name, city, and state.');
@@ -240,13 +290,79 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
 
       {/* 2. Statutory Registrations & Tax IDs */}
       <Card variant="bento" className="p-6 bg-white space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Shield className="size-5 text-primary-700" />
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Statutory Identifiers & Tax Codes</h3>
-            <p className="text-xs text-slate-500">Government portals cross-verification reference numbers</p>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Shield className="size-5 text-primary-700" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Statutory Identifiers & Tax Codes</h3>
+              <p className="text-xs text-slate-500">Government portals cross-verification reference numbers (statutory_identifiers)</p>
+            </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowEditStatutory(!showEditStatutory)}
+            className="text-xs border-primary-300 text-primary-700 hover:bg-primary-50 font-bold"
+          >
+            <Edit2 className="size-3.5 mr-1" /> {showEditStatutory ? 'Cancel' : 'Edit Identifiers'}
+          </Button>
         </div>
+
+        {showEditStatutory && (
+          <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
+            <h4 className="text-xs font-bold text-primary-950">Update Statutory Identifiers</h4>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">Import Export Code (IEC)</label>
+                <Input
+                  value={editIec}
+                  onChange={(e) => setEditIec(e.target.value.toUpperCase())}
+                  placeholder="e.g. 0304018294"
+                  className="text-xs font-mono uppercase bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">Tax Deduction (TAN)</label>
+                <Input
+                  value={editTan}
+                  onChange={(e) => setEditTan(e.target.value.toUpperCase())}
+                  placeholder="e.g. PNEA02941B"
+                  className="text-xs font-mono uppercase bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">D-U-N-S Number</label>
+                <Input
+                  value={editDuns}
+                  onChange={(e) => setEditDuns(e.target.value)}
+                  placeholder="e.g. 65-021-9842"
+                  className="text-xs font-mono bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">Legal Entity ID (LEI)</label>
+                <Input
+                  value={editLei}
+                  onChange={(e) => setEditLei(e.target.value.toUpperCase())}
+                  placeholder="e.g. 335800MRD9820144820"
+                  className="text-xs font-mono uppercase bg-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                size="sm"
+                disabled={isSavingStatutory}
+                onClick={handleSaveStatutory}
+                className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
+              >
+                {isSavingStatutory ? 'Saving...' : 'Save Identifiers'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">

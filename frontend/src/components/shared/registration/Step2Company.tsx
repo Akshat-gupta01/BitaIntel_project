@@ -363,10 +363,15 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
         companyDescription: data.companyDescription?.trim() || null,
         website: data.website?.trim() || null,
         employees: data.employeeCount,
+        incorporationDate: data.incorporationDate?.trim() || null,
+        logoUrl: data.logoUrl?.trim() || null,
+        tan: data.tan?.trim().toUpperCase() || null,
+        duns: data.duns?.trim() || null,
+        lei: data.lei?.trim().toUpperCase() || null,
       });
 
-      // 2. Sync Statutory Identifiers (GSTIN, PAN, CIN, Udyam) to backend database
-      if (data.gstin || data.pan || data.cin) {
+      // 2. Sync Statutory Identifiers (GSTIN, PAN, CIN, Udyam, TAN, DUNS, LEI) to statutory_identifiers table
+      if (data.gstin || data.pan || data.cin || data.tan || data.duns || data.lei || data.iec || data.udyam) {
         try {
           await vendorService.updateStatutory({
             gstin: data.gstin?.trim().toUpperCase() || undefined,
@@ -374,6 +379,10 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
             cin: data.cin?.trim().toUpperCase() || undefined,
             udyamMsme: data.udyam?.trim() || undefined,
             iecCode: data.iec?.trim() || undefined,
+            tan: data.tan?.trim().toUpperCase() || undefined,
+            duns: data.duns?.trim() || undefined,
+            dunsNumber: data.duns?.trim() || undefined,
+            lei: data.lei?.trim().toUpperCase() || undefined,
           });
         } catch (statErr: any) {
           console.warn('Statutory sync note:', statErr.message);
@@ -385,7 +394,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
 
       // 3. Sync any pending facilities to business_facilities table
       if (data.facilities && data.facilities.length > 0) {
-        for (const fac of data.facilities) {
+        for (let fac of data.facilities) {
           if (fac.id && fac.id.startsWith('FAC-')) {
             try {
               const res = await vendorService.addFacility({

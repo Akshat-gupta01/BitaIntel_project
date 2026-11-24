@@ -42,6 +42,22 @@ module.exports = {
         type: Sequelize.STRING(30),
         allowNull: true // Import Export Code
       },
+      tan: {
+        type: Sequelize.STRING(20),
+        allowNull: true // Tax Deduction Account Number
+      },
+      duns: {
+        type: Sequelize.STRING(20),
+        allowNull: true // D-U-N-S Number
+      },
+      dunsNumber: {
+        type: Sequelize.STRING(20),
+        allowNull: true
+      },
+      lei: {
+        type: Sequelize.STRING(30),
+        allowNull: true // Legal Entity Identifier
+      },
       mcaStatus: {
         type: Sequelize.STRING(50),
         allowNull: false,

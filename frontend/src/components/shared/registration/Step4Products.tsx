@@ -8,6 +8,7 @@ import {
   RegulatoryApproval,
 } from '@/types/vendorRegistration';
 import * as vendorService from '../../../../services/vendor.service';
+import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
   VENDOR_CATEGORIES,
   CURRENCIES,
@@ -296,13 +297,13 @@ export function Step4Products({
       currency: prd.currency || 'INR',
       priceValidity: prd.priceValidity || '60 Days',
       targetMarkets: prd.targetMarkets || 'India, Global',
-      images: prd.images || [],
+      images: vendorService.normalizeImageArray(prd.images),
       catalogueDoc: prd.catalogueDoc,
       technicalDataSheetDoc: prd.technicalDataSheetDoc,
       coaDoc: prd.coaDoc,
       sdsDoc: prd.sdsDoc,
     });
-    setProductImages(prd.images || []);
+    setProductImages(vendorService.normalizeImageArray(prd.images));
 
     const docs: typeof attachedDocs = {};
     if (prd.technicalDataSheetDoc) {
@@ -798,7 +799,7 @@ export function Step4Products({
     }
 
     // Sync any pending products that haven't been stored in business_products table
-    for (const prd of data.products) {
+    for (let prd of data.products) {
       if (prd.id && prd.id.startsWith('PRD-')) {
         try {
           const res = await vendorService.addProduct({
@@ -1422,29 +1423,12 @@ export function Step4Products({
                 >
                   <div className="flex gap-3 items-start">
                     {/* Product Photo Thumbnail */}
-                    <div className="relative size-16 shrink-0 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
-                      {primaryImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={vendorService.getFullImageUrl(primaryImage)}
-                          alt={prd.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-slate-400">
-                          <Package className="size-6 text-slate-300" />
-                          <span className="text-[8px] text-slate-400 font-medium mt-0.5">No Photo</span>
-                        </div>
-                      )}
-                      {prd.images && prd.images.length > 1 && (
-                        <span className="absolute bottom-0 right-0 bg-slate-900/80 text-white text-[8px] font-bold px-1 rounded-tl">
-                          +{prd.images.length - 1}
-                        </span>
-                      )}
-                    </div>
+                    <ProductThumbnail
+                      images={prd.images}
+                      alt={prd.name}
+                      size="md"
+                      showCountBadge
+                    />
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">

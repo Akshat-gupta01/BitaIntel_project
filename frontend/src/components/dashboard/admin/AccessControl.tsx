@@ -136,6 +136,11 @@ export function AccessControl() {
   // Module configuration state (allows dynamic additions)
   const [moduleConfigs, setModuleConfigs] = useState<ModuleSlotConfig[]>(DEFAULT_MODULE_CONFIGS);
 
+  // Maps "module::action" to the real permission code from the backend catalog.
+  // Without this, a custom permission code that does not follow the default
+  // `${module}.${action}` convention could never be toggled or saved.
+  const [permissionCodeMap, setPermissionCodeMap] = useState<Record<string, string>>({});
+
   // Load roles & permissions on mount
   useEffect(() => {
     let isMounted = true;
@@ -163,20 +168,39 @@ export function AccessControl() {
         // Check if new modules or permissions exist in catalog
         if (fetchedCatalog?.catalog) {
           const dynamicSlots: Record<string, Record<string, boolean>> = {};
+          const codeMap: Record<string, string> = {};
+
           fetchedCatalog.catalog.forEach((p) => {
             if (!dynamicSlots[p.module]) dynamicSlots[p.module] = {};
             dynamicSlots[p.module][p.action] = true;
+            codeMap[`${p.module}::${p.action}`] = p.code;
           });
 
-          setModuleConfigs((prev) =>
-            prev.map((mod) => {
+          setPermissionCodeMap(codeMap);
+
+          setModuleConfigs((prev) => {
+            const known = new Set(prev.map((mod) => mod.name));
+            const extraModules: ModuleSlotConfig[] = Object.keys(dynamicSlots)
+              .filter((moduleName) => !known.has(moduleName))
+              .map((moduleName) => ({
+                id: moduleName,
+                name: moduleName,
+                sub: 'Custom permission module',
+                slots: Object.fromEntries(
+                  Object.keys(dynamicSlots[moduleName]).map((action) => [action, true])
+                ),
+              }));
+
+            const updated = prev.map((mod) => {
               const extra = dynamicSlots[mod.name] || dynamicSlots[mod.id] || {};
               return {
                 ...mod,
                 slots: { ...mod.slots, ...extra },
               };
-            })
-          );
+            });
+
+            return [...updated, ...extraModules];
+          });
         }
       } catch (err: unknown) {
         console.error('Failed to load RBAC data:', err);
@@ -226,8 +250,11 @@ export function AccessControl() {
     setInitialPermissions(new Set<string>(codes));
   };
 
-  // Helper to map UI module & action to permission code
+  // Helper to map UI module & action to the real permission code.
+  // Prefer the catalog code so custom permission codes are not rewritten.
   const getPermissionCode = (moduleName: string, action: string) => {
+    const catalogCode = permissionCodeMap[`${moduleName}::${action}`];
+    if (catalogCode) return catalogCode;
     const prefix = ACTION_MAP[moduleName] || moduleName.toLowerCase().replace(/\s+/g, '_');
     return `${prefix}.${action}`;
   };
@@ -350,28 +377,44 @@ export function AccessControl() {
     }
 
     try {
+      const normalizedCode = newPermCode.trim().toLowerCase();
       await createCustomPermission({
         module: newPermModule,
         action: newPermAction,
-        code: newPermCode.trim().toLowerCase(),
+        code: normalizedCode,
         name: newPermName.trim(),
         description: newPermDesc.trim(),
       });
 
-      // Expand slot in UI if not already visible
-      setModuleConfigs((prev) =>
-        prev.map((mod) => {
-          if (mod.name === newPermModule || mod.id === newPermModule) {
-            return {
-              ...mod,
-              slots: { ...mod.slots, [newPermAction]: true },
-            };
-          }
-          return mod;
-        })
-      );
+      // Remember the real code and expose the slot (creating the module row if needed)
+      setPermissionCodeMap((prev) => ({
+        ...prev,
+        [`${newPermModule}::${newPermAction}`]: normalizedCode,
+      }));
 
-      toast.success(`Dynamic permission [${newPermCode}] added to ${newPermModule}!`);
+      setModuleConfigs((prev) => {
+        const exists = prev.some((mod) => mod.name === newPermModule || mod.id === newPermModule);
+        if (exists) {
+          return prev.map((mod) => {
+            if (mod.name === newPermModule || mod.id === newPermModule) {
+              return { ...mod, slots: { ...mod.slots, [newPermAction]: true } };
+            }
+            return mod;
+          });
+        }
+
+        return [
+          ...prev,
+          {
+            id: newPermModule,
+            name: newPermModule,
+            sub: 'Custom permission module',
+            slots: { [newPermAction]: true },
+          },
+        ];
+      });
+
+      toast.success(`Dynamic permission [${normalizedCode}] added to ${newPermModule}!`);
       setIsPermModalOpen(false);
       setNewPermCode('');
       setNewPermName('');

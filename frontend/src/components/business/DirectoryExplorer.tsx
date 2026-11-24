@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useDeferredValue } from 'react';
+import { useMemo, useState, useDeferredValue, useEffect } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { businesses, industries, type Business } from '@/data';
+import { getPublicDirectory } from '../../../services/vendor.service';
 import { BusinessCard } from './BusinessCard';
 import { BitaintelVerifiedBadge } from './BitaintelVerifiedBadge';
 import { Button } from '@/components/ui/Button';
@@ -79,10 +80,40 @@ export function DirectoryExplorer() {
   const [showFilters, setShowFilters] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [previewBusiness, setPreviewBusiness] = useState<Business | null>(null);
+  const [liveBusinesses, setLiveBusinesses] = useState<Business[]>(businesses);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadLiveDirectory() {
+      try {
+        const res = await getPublicDirectory();
+        const dbBusinesses = (res as any)?.data?.businesses || (res as any)?.businesses;
+        if (Array.isArray(dbBusinesses) && dbBusinesses.length > 0 && isMounted) {
+          // Merge: Database businesses take precedence, append fallback demo businesses
+          const dbKeySet = new Set(
+            dbBusinesses.map((b: any) => String(b.slug || b.id || b.name).toLowerCase())
+          );
+          const remainingDemo = businesses.filter(
+            (b) =>
+              !dbKeySet.has(b.id.toLowerCase()) &&
+              !dbKeySet.has((b.slug || '').toLowerCase()) &&
+              !dbKeySet.has(b.name.toLowerCase())
+          );
+          setLiveBusinesses([...dbBusinesses, ...remainingDemo]);
+        }
+      } catch (err) {
+        console.warn('Live directory load note (using fallback businesses):', err);
+      }
+    }
+    loadLiveDirectory();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const results = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    const filtered = businesses.filter((b) => {
+    const filtered = liveBusinesses.filter((b) => {
       const matchesQuery =
         !q ||
         b.name.toLowerCase().includes(q) ||
@@ -90,7 +121,7 @@ export function DirectoryExplorer() {
         b.industry.toLowerCase().includes(q) ||
         b.location.toLowerCase().includes(q) ||
         b.gstin.toLowerCase().includes(q) ||
-        b.products.some((p) => p.toLowerCase().includes(q));
+        (Array.isArray(b.products) && b.products.some((p) => p.toLowerCase().includes(q)));
 
       const matchesIndustry =
         industry === 'All industries' || b.industry === industry;
@@ -115,10 +146,10 @@ export function DirectoryExplorer() {
       if (sortBy === 'tenure') return b.age - a.age;
       return a.name.localeCompare(b.name);
     });
-  }, [deferredQuery, industry, level, minimumScore, verifiedOnly, premiumOnly, sortBy]);
+  }, [liveBusinesses, deferredQuery, industry, level, minimumScore, verifiedOnly, premiumOnly, sortBy]);
 
   function toggleCompare(id: string) {
-    const business = businesses.find((b) => b.id === id);
+    const business = liveBusinesses.find((b) => b.id === id);
     const bName = business ? business.name : id;
 
     setCompareIds((prev) => {

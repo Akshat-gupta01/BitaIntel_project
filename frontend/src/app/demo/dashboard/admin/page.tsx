@@ -9,6 +9,10 @@ import {
   AdminQueueItem,
   getVerificationQueue,
   getAllVendors,
+  AdminEnquiryItem,
+  getAdminEnquiries,
+  updateAdminEnquiryStatus,
+  replyAdminEnquiry,
 } from '@services/admin.service';
 import { VendorAuditModal } from '@/components/dashboard/admin/VendorAuditModal';
 import { AccessControl } from '@/components/dashboard/admin/AccessControl';
@@ -34,11 +38,15 @@ import {
   Settings,
   Scale,
   Calendar,
+  MessageSquare,
+  Send,
+  Mail,
 } from 'lucide-react';
 
 export type AdminNavTab =
   | 'overview'
   | 'queue'
+  | 'enquiries'
   | 'vendors'
   | 'verified'
   | 'action_required'
@@ -72,6 +80,10 @@ export default function AdminDashboardPage() {
   // Data states
   const [queue, setQueue] = useState<AdminQueueItem[]>([]);
   const [allVendors, setAllVendors] = useState<AdminQueueItem[]>([]);
+  const [enquiries, setEnquiries] = useState<AdminEnquiryItem[]>([]);
+  const [selectedEnquiry, setSelectedEnquiry] = useState<AdminEnquiryItem | null>(null);
+  const [adminReplyText, setAdminReplyText] = useState('');
+  const [adminReplySuccess, setAdminReplySuccess] = useState('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
@@ -79,6 +91,7 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [badgeFilter, setBadgeFilter] = useState<string>('all');
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>('all');
 
   // Modal audit state
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
@@ -117,9 +130,10 @@ export default function AdminDashboardPage() {
     else setIsRefreshing(true);
 
     try {
-      const [queueRes, vendorsRes] = await Promise.allSettled([
+      const [queueRes, vendorsRes, enquiriesRes] = await Promise.allSettled([
         getVerificationQueue(),
         getAllVendors(),
+        getAdminEnquiries(),
       ]);
 
       if (queueRes.status === 'fulfilled') {
@@ -127,6 +141,13 @@ export default function AdminDashboardPage() {
       }
       if (vendorsRes.status === 'fulfilled') {
         setAllVendors(vendorsRes.value?.vendors || []);
+      }
+      if (enquiriesRes.status === 'fulfilled') {
+        const enqList = enquiriesRes.value?.enquiries || [];
+        setEnquiries(enqList);
+        if (enqList.length > 0) {
+          setSelectedEnquiry((prev) => prev || enqList[0]);
+        }
       }
     } catch (err: unknown) {
       console.error('Error fetching admin data:', err);
@@ -144,9 +165,10 @@ export default function AdminDashboardPage() {
     let isMounted = true;
     const fetchInitialData = async () => {
       try {
-        const [queueRes, vendorsRes] = await Promise.allSettled([
+        const [queueRes, vendorsRes, enquiriesRes] = await Promise.allSettled([
           getVerificationQueue(),
           getAllVendors(),
+          getAdminEnquiries(),
         ]);
         if (!isMounted) return;
         if (queueRes.status === 'fulfilled') {
@@ -154,6 +176,13 @@ export default function AdminDashboardPage() {
         }
         if (vendorsRes.status === 'fulfilled') {
           setAllVendors(vendorsRes.value?.vendors || []);
+        }
+        if (enquiriesRes.status === 'fulfilled') {
+          const enqList = enquiriesRes.value?.enquiries || [];
+          setEnquiries(enqList);
+          if (enqList.length > 0) {
+            setSelectedEnquiry(enqList[0]);
+          }
         }
       } catch (err: unknown) {
         if (!isMounted) return;
@@ -171,6 +200,62 @@ export default function AdminDashboardPage() {
       isMounted = false;
     };
   }, []);
+
+  // Handle Admin Enquiry Status Change
+  const handleAdminStatusChange = async (
+    id: string,
+    newStatus: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected'
+  ) => {
+    setEnquiries((prev) =>
+      prev.map((e) => (e.id === id || e.enquiryNumber === id ? { ...e, status: newStatus } : e))
+    );
+    if (selectedEnquiry && (selectedEnquiry.id === id || selectedEnquiry.enquiryNumber === id)) {
+      setSelectedEnquiry((prev) => (prev ? { ...prev, status: newStatus } : null));
+    }
+    try {
+      await updateAdminEnquiryStatus(id, newStatus);
+      toast.success(`Enquiry status updated to ${newStatus}`);
+    } catch {
+      toast.error('Failed to update status on server');
+    }
+  };
+
+  // Handle Admin Reply / Proposal to Buyer
+  const handleAdminReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminReplyText || !selectedEnquiry) return;
+
+    const currentId = selectedEnquiry.id || selectedEnquiry.enquiryNumber;
+    const currentEmail = selectedEnquiry.buyerEmail;
+    const textToSend = adminReplyText;
+
+    handleAdminStatusChange(currentId, 'Responded');
+    const msg = `Official response transmitted from Admin Desk to ${currentEmail}`;
+    setAdminReplySuccess(msg);
+    toast.success('Admin Proposal Sent', { description: msg });
+    setAdminReplyText('');
+    setTimeout(() => setAdminReplySuccess(''), 4000);
+
+    // Update in-memory selected enquiry
+    setEnquiries((prev) =>
+      prev.map((item) =>
+        item.id === currentId || item.enquiryNumber === currentId
+          ? { ...item, status: 'Responded', replyMessage: textToSend, repliedAt: new Date().toISOString() }
+          : item
+      )
+    );
+    setSelectedEnquiry((prev) =>
+      prev && (prev.id === currentId || prev.enquiryNumber === currentId)
+        ? { ...prev, status: 'Responded', replyMessage: textToSend, repliedAt: new Date().toISOString() }
+        : prev
+    );
+
+    try {
+      await replyAdminEnquiry(currentId, textToSend);
+    } catch {
+      // Fallback
+    }
+  };
 
   // Calculated Metrics
   const metrics = useMemo(() => {
@@ -336,6 +421,13 @@ export default function AdminDashboardPage() {
       badgeColor: metrics.pending > 0 ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-slate-100 text-slate-600',
     },
     {
+      id: 'enquiries',
+      label: 'Buyer Enquiries & RFQs',
+      icon: MessageSquare,
+      badge: enquiries.filter((e) => e.status === 'New').length > 0 ? `${enquiries.filter((e) => e.status === 'New').length} New` : null,
+      badgeColor: 'bg-primary-600 text-white font-bold',
+    },
+    {
       id: 'vendors',
       label: 'All Vendors Directory',
       icon: Building2,
@@ -399,6 +491,15 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  // Access Control mutates roles/permissions and requires `users.edit` on the
+  // backend. Verification officers are allowed into this desk, but not into RBAC.
+  const canManageAccessControl = ['admin', 'super_admin'].includes(
+    (user?.systemRole || '').toLowerCase()
+  );
+  const visibleNavItems = sidebarNavItems.filter(
+    (item) => canManageAccessControl || item.id !== 'access_control'
+  );
+
   return (
     <RoleGuard allowedRoles={['admin', 'super_admin', 'verification_officer']}>
       <div className="h-screen w-full bg-slate-50 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900">
@@ -453,7 +554,7 @@ export default function AdminDashboardPage() {
               Auditor Workflows & Registry
             </p>
 
-            {sidebarNavItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
@@ -938,6 +1039,251 @@ export default function AdminDashboardPage() {
                     </table>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB: BUYER PROCUREMENT ENQUIRIES & RFQs (SUPER ADMIN DESK) */}
+            {activeTab === 'enquiries' && (
+              <div className="space-y-6">
+                <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="max-w-2xl">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary-300 bg-primary-950 px-2.5 py-1 rounded-full border border-primary-700 inline-flex items-center gap-1.5">
+                      <MessageSquare className="size-3 text-primary-400" />
+                      <span>Centralized Procurement Gateway</span>
+                    </span>
+                    <h3 className="text-xl font-black mt-2">Buyer Enquiries & RFQ Leads Desk</h3>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      All buyer enquiries submitted across company dossiers are routed here for Super Admin verification, commercial evaluation, and official response transmission.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{enquiries.length} Total Enquiries</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
+                  {/* Left: Enquiries List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">
+                        Incoming Requests ({enquiries.length})
+                      </h4>
+                      <div className="flex gap-1 text-[11px]">
+                        {['all', 'New', 'Viewed', 'Responded', 'In Discussion'].map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => setEnquiryStatusFilter(s)}
+                            className={`px-2 py-0.5 rounded-md font-semibold transition-colors ${
+                              enquiryStatusFilter === s
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {s === 'all' ? 'All' : s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {enquiries.length === 0 ? (
+                      <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500">
+                        <MessageSquare className="size-8 mx-auto text-slate-400 mb-2" />
+                        <p className="text-xs font-bold text-slate-800">No Buyer Enquiries Yet</p>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          When buyers submit enquiries on vendor profiles or products, they will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      enquiries
+                        .filter((enq) => enquiryStatusFilter === 'all' || enq.status === enquiryStatusFilter)
+                        .map((enq) => {
+                          const isSelected = selectedEnquiry?.id === enq.id || selectedEnquiry?.enquiryNumber === enq.enquiryNumber;
+                          return (
+                            <div
+                              key={enq.id}
+                              onClick={() => {
+                                setSelectedEnquiry(enq);
+                                if (enq.status === 'New') {
+                                  handleAdminStatusChange(enq.enquiryNumber || enq.id, 'Viewed');
+                                }
+                              }}
+                              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-primary-600 bg-primary-50/40 shadow-xs ring-1 ring-primary-500'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-[10px] text-slate-400 font-bold">{enq.enquiryNumber || enq.id}</span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">
+                                      Target: {enq.targetBusinessName}
+                                    </span>
+                                  </div>
+                                  <h3 className="text-xs font-bold text-slate-900">{enq.buyerCompany}</h3>
+                                  <p className="text-[11px] text-slate-600">{enq.buyerName}</p>
+                                </div>
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    enq.status === 'New'
+                                      ? 'bg-primary-600 text-white'
+                                      : enq.status === 'In Discussion'
+                                      ? 'bg-primary-100 text-primary-800'
+                                      : enq.status === 'Responded'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {enq.status}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-xs text-slate-700 line-clamp-1 font-medium">{enq.subject}</p>
+                              {enq.productName && (
+                                <p className="text-[10px] text-blue-700 font-semibold mt-1">
+                                  Scope: {enq.productName}
+                                </p>
+                              )}
+                              <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between text-[11px] text-slate-400">
+                                <span className="font-semibold text-primary-800">{enq.budget}</span>
+                                <span>{enq.date}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+
+                  {/* Right: Enquiry Detail & Admin Proposal Composer */}
+                  {selectedEnquiry ? (
+                    <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-5 self-start">
+                      {adminReplySuccess && (
+                        <div className="p-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs font-semibold flex items-center gap-2">
+                          <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                          <span>{adminReplySuccess}</span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-slate-400 font-bold">{selectedEnquiry.enquiryNumber || selectedEnquiry.id}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white flex items-center gap-1">
+                              <Building2 className="size-3 text-primary-300" />
+                              <span>Vendor: {selectedEnquiry.targetBusinessName}</span>
+                            </span>
+                          </div>
+                          <h3 className="text-lg font-bold text-slate-900 mt-1">{selectedEnquiry.buyerCompany}</h3>
+                          <p className="text-xs text-slate-500">
+                            Buyer: {selectedEnquiry.buyerName} · {selectedEnquiry.buyerEmail}
+                            {selectedEnquiry.buyerPhone && selectedEnquiry.buyerPhone !== 'N/A' && ` · ${selectedEnquiry.buyerPhone}`}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Status:</span>
+                          <select
+                            value={selectedEnquiry.status}
+                            onChange={(e) =>
+                              handleAdminStatusChange(
+                                selectedEnquiry.enquiryNumber || selectedEnquiry.id,
+                                e.target.value as any
+                              )
+                            }
+                            className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 outline-none focus:border-primary-600"
+                          >
+                            <option value="New">New</option>
+                            <option value="Viewed">Viewed</option>
+                            <option value="In Discussion">In Discussion</option>
+                            <option value="Responded">Responded</option>
+                            <option value="Closed/Rejected">Closed/Rejected</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Product Scope Tag */}
+                      {selectedEnquiry.productName && (
+                        <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-200 text-blue-800">
+                              Product Scope
+                            </span>
+                            <span className="font-bold">{selectedEnquiry.productName}</span>
+                          </div>
+                          {selectedEnquiry.product?.hsnCode && (
+                            <span className="font-mono text-[11px] text-blue-700 font-semibold">
+                              HSN: {selectedEnquiry.product.hsnCode}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Intent & Details */}
+                      <div className="space-y-2 text-xs">
+                        <p className="font-bold text-slate-900 text-sm">{selectedEnquiry.subject}</p>
+                        <p className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {selectedEnquiry.details}
+                        </p>
+                      </div>
+
+                      {/* Dispatched Response if any */}
+                      {selectedEnquiry.replyMessage && (
+                        <div className="p-3.5 rounded-2xl bg-primary-50/60 border border-primary-200 text-xs text-slate-800 space-y-1">
+                          <div className="flex justify-between font-bold text-primary-900">
+                            <span>Dispatched Admin Proposal / Response:</span>
+                            <span className="text-[10px] font-normal text-slate-500">
+                              {selectedEnquiry.repliedAt ? new Date(selectedEnquiry.repliedAt).toLocaleString() : ''}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 whitespace-pre-wrap">{selectedEnquiry.replyMessage}</p>
+                        </div>
+                      )}
+
+                      {/* Reply Form */}
+                      <form onSubmit={handleAdminReply} className="space-y-3 pt-2 border-t border-slate-100">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                          Transmit Super Admin Response / Verification Pack
+                        </label>
+                        <textarea
+                          rows={4}
+                          required
+                          value={adminReplyText}
+                          onChange={(e) => setAdminReplyText(e.target.value)}
+                          placeholder="Type official response, verified statutory report, or quotation details to the buyer..."
+                          className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-900 outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() =>
+                              handleAdminStatusChange(
+                                selectedEnquiry.enquiryNumber || selectedEnquiry.id,
+                                'In Discussion'
+                              )
+                            }
+                          >
+                            Mark &quot;In Discussion&quot;
+                          </Button>
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            icon={<Send className="size-3.5" />}
+                          >
+                            Send Admin Response
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 text-slate-400">
+                      <p className="text-xs font-bold">Select an enquiry from the left list to review and respond.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

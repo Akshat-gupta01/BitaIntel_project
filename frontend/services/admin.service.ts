@@ -266,3 +266,59 @@ export const reviewDocument = async (
   const response = await api.patch(`/admin/documents/${docId}/review`, payload);
   return response.data?.data || response.data;
 };
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Centralized Buyer Enquiries & RFQ Leads Desk (Super Admin)
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export interface AdminEnquiryItem {
+  id: string;
+  enquiryId: string;
+  enquiryNumber: string;
+  businessId: number;
+  targetBusinessName: string;
+  targetBusinessLegalName?: string;
+  targetBusinessSlug?: string;
+  targetBusinessLogo?: string | null;
+  buyerName: string;
+  buyerCompany: string;
+  buyerEmail: string;
+  buyerPhone: string;
+  subject: string;
+  details: string;
+  date: string;
+  status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected';
+  budget: string;
+  productId?: number | null;
+  productName?: string | null;
+  product?: any;
+  replyMessage?: string | null;
+  repliedAt?: string | null;
+  createdAt?: string;
+}
+
+export const getAdminEnquiries = async (): Promise<{ total: number; enquiries: AdminEnquiryItem[] }> => {
+  const response = await api.get("/admin/enquiries");
+  const data = response.data?.data || response.data;
+  return {
+    total: data?.totalCount ?? (Array.isArray(data?.enquiries) ? data.enquiries.length : 0),
+    enquiries: Array.isArray(data?.enquiries) ? data.enquiries : [],
+  };
+};
+
+export const updateAdminEnquiryStatus = async (
+  id: string,
+  status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected'
+): Promise<any> => {
+  const response = await api.patch(`/admin/enquiries/${id}/status`, { status });
+  return response.data?.data || response.data;
+};
+
+export const replyAdminEnquiry = async (
+  id: string,
+  replyMessage: string
+): Promise<any> => {
+  const response = await api.post(`/admin/enquiries/${id}/reply`, { replyMessage });
+  return response.data?.data || response.data;
+};

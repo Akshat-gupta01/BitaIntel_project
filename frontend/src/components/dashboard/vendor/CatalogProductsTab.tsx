@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Dialog } from '@/components/ui/Dialog';
 import { BulkProductImportModal } from './BulkProductImportModal';
+import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
+import * as vendorService from '@services/vendor.service';
 import {
   Package,
   Plus,
@@ -24,6 +26,8 @@ import {
   RefreshCw,
   AlertCircle,
   Pencil,
+  Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,11 +73,14 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
     sampleAvailability: 'Available Free',
     technicalDataSheetDoc: '',
     coaDoc: '',
+    images: [],
   });
 
   const tdsInputRef = useRef<HTMLInputElement>(null);
   const coaInputRef = useRef<HTMLInputElement>(null);
   const quickUploadInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const filteredProducts = products.filter(
     (p) =>
@@ -99,6 +106,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
       sampleAvailability: 'Available Free',
       technicalDataSheetDoc: '',
       coaDoc: '',
+      images: [],
     });
     setEditingProduct(null);
   }
@@ -133,8 +141,72 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
       targetMarkets: prod.targetMarkets,
       technicalDataSheetDoc: prod.technicalDataSheetDoc || '',
       coaDoc: prod.coaDoc || '',
+      images: vendorService.normalizeImageArray(prod.images || (prod as any).productPhotos),
     });
     setShowAddModal(true);
+  }
+
+  async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds 10 MB limit`);
+        continue;
+      }
+      if (!file.type.startsWith('image/')) {
+        toast.error(`"${file.name}" is not a valid image format`);
+        continue;
+      }
+      fileList.push(file);
+    }
+
+    if (fileList.length === 0) return;
+
+    setUploadingImage(true);
+    try {
+      const res = await vendorService.uploadProductImages(fileList);
+      const returnedPaths: string[] =
+        res?.data?.paths ||
+        res?.data?.urls ||
+        (res?.data?.path ? [res.data.path] : []) ||
+        (res?.data?.url ? [res.data.url] : []) ||
+        (res?.paths ? res.paths : []) ||
+        (res?.path ? [res.path] : []) ||
+        [];
+
+      if (returnedPaths.length > 0) {
+        const normalized = vendorService.normalizeImageArray(returnedPaths);
+        setNewItem((prev) => ({
+          ...prev,
+          images: [...(prev.images || []), ...normalized],
+        }));
+        toast.success(`${returnedPaths.length} photo(s) uploaded successfully.`);
+      } else {
+        const localUrls = fileList.map((f) => URL.createObjectURL(f));
+        setNewItem((prev) => ({
+          ...prev,
+          images: [...(prev.images || []), ...localUrls],
+        }));
+        toast.success(`${fileList.length} photo(s) attached.`);
+      }
+    } catch (err: unknown) {
+      console.warn('Upload API fallback to local preview:', err);
+      const localUrls = fileList.map((f) => URL.createObjectURL(f));
+      setNewItem((prev) => ({
+        ...prev,
+        images: [...(prev.images || []), ...localUrls],
+      }));
+      toast.success(`${fileList.length} photo(s) attached.`);
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = '';
+      }
+    }
   }
 
   function handleSaveProduct() {
@@ -170,6 +242,10 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
         targetMarkets: newItem.targetMarkets || 'India, Global',
         technicalDataSheetDoc: newItem.technicalDataSheetDoc?.trim() || undefined,
         coaDoc: newItem.coaDoc?.trim() || undefined,
+        images:
+          newItem.images && newItem.images.length > 0
+            ? newItem.images
+            : (editingProduct.images || []),
       };
 
       const updatedList = products.map((p) => (p.id === editingProduct.id ? updatedProduct : p));
@@ -206,6 +282,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
       targetMarkets: 'India, Global',
       technicalDataSheetDoc: newItem.technicalDataSheetDoc?.trim() || undefined,
       coaDoc: newItem.coaDoc?.trim() || undefined,
+      images: newItem.images || [],
     };
 
     onUpdateProducts([...products, item]);
@@ -367,14 +444,27 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="p-3 max-w-xs">
-                        <span className="text-[10px] font-bold text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200/80 inline-block mb-1">
-                          {p.brand || 'Proprietary'}
-                        </span>
-                        <strong className="text-slate-900 block truncate">{p.name}</strong>
-                        <span className="text-[11px] text-slate-500 line-clamp-1">
-                          {p.specifications || p.grade}
-                        </span>
+                      <td className="p-3 max-w-sm">
+                        <div className="flex items-center gap-3">
+                          <ProductThumbnail
+                            images={p.images}
+                            src={p.images && p.images.length > 0 ? p.images[0] : (p as any).imageUrl}
+                            alt={p.name}
+                            size="sm"
+                            showCountBadge
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-bold text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200/80 inline-block mb-1">
+                              {p.brand || 'Proprietary'}
+                            </span>
+                            <strong className="text-slate-900 block truncate" title={p.name}>
+                              {p.name}
+                            </strong>
+                            <span className="text-[11px] text-slate-500 line-clamp-1">
+                              {p.specifications || p.grade}
+                            </span>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3 font-mono text-slate-700">{p.hsnCode}</td>
                       <td className="p-3">
@@ -595,6 +685,103 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
                 className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
               />
             </div>
+          </div>
+
+          {/* ── PRODUCT PHOTOS & GALLERY SECTION ── */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                <ImageIcon className="size-4 text-primary-700" />
+                Product Photos &amp; Image Gallery
+                <span className="text-slate-400 font-normal text-[10px]">
+                  ({(newItem.images || []).length} attached)
+                </span>
+              </span>
+
+              <input
+                type="file"
+                ref={imageInputRef}
+                accept="image/png,image/jpeg,image/webp,image/jpg"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="text-[10px] font-semibold text-primary-700 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 px-2.5 py-1 rounded-md border border-primary-200 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                {uploadingImage ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="size-3" />
+                    <span>Upload Photos</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {(newItem.images || []).length > 0 ? (
+              <div className="flex flex-wrap gap-2.5 p-2.5 bg-white rounded-xl border border-slate-200">
+                {(newItem.images || []).map((imgUrl, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group size-16 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden shadow-2xs shrink-0"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={vendorService.getFullImageUrl(imgUrl)}
+                      alt={`Product Photo ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = (newItem.images || []).filter((_, i) => i !== idx);
+                        setNewItem({ ...newItem, images: updated });
+                        toast.info('Photo removed from product.');
+                      }}
+                      className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
+                      title="Remove photo"
+                    >
+                      <Trash2 className="size-4 text-rose-300 hover:text-rose-100" />
+                    </button>
+                    {idx === 0 && (
+                      <span className="absolute bottom-0 inset-x-0 bg-primary-900/80 text-white text-[8px] font-bold text-center py-0.5">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="size-16 rounded-lg border border-dashed border-slate-300 hover:border-primary-400 bg-slate-50 hover:bg-primary-50/50 flex flex-col items-center justify-center text-slate-400 hover:text-primary-700 transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus className="size-4" />
+                  <span className="text-[9px] font-bold mt-0.5">Add</span>
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => imageInputRef.current?.click()}
+                className="rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50/80 hover:border-primary-400 p-4 text-center cursor-pointer transition-colors"
+              >
+                <UploadCloud className="size-6 text-slate-400 mx-auto mb-1" />
+                <span className="text-xs font-semibold text-primary-700 hover:underline block">
+                  Click to select product photos
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Supports JPG, PNG, WEBP up to 10 MB per image (multiple photos allowed)
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ── TECHNICAL & COMPLIANCE DOCUMENTS SECTION (OPTIONAL) ── */}

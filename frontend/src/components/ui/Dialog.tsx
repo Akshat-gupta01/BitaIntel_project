@@ -26,11 +26,7 @@ export function Dialog({
   bodyClassName,
   size = 'md',
 }: DialogProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
     if (!open) return;

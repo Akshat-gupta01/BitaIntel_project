@@ -69,8 +69,14 @@ export interface VendorProfileUpdatePayload {
   companyDescription?: string | null;
   website?: string | null;
   yearEstablished?: number | null;
+  incorporationDate?: string | null;
+  logoUrl?: string | null;
   turnover?: string | null;
   employees?: string | null;
+  tan?: string | null;
+  duns?: string | null;
+  dunsNumber?: string | null;
+  lei?: string | null;
   [key: string]: unknown;
 }
 
@@ -80,8 +86,12 @@ export interface StatutoryUpdatePayload {
   cin?: string;
   iec?: string;
   iecCode?: string;
+  udyam?: string;
   udyamMsme?: string;
-  msmeCategory?: string;
+  tan?: string;
+  duns?: string;
+  dunsNumber?: string;
+  lei?: string;
   [key: string]: unknown;
 }
 
@@ -506,6 +516,20 @@ export const uploadProductDocument = async (
 };
 
 /**
+ * Upload Company Brand Logo (multipart/form-data)
+ * POST http://localhost:3000/api/v1/vendor/upload-image
+ */
+export const uploadBusinessLogo = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append("image", file);
+  const res = await api.post("/vendor/upload-image", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const data = res.data;
+  return data?.data?.path || data?.path || data?.data?.url || data?.url || "";
+};
+
+/**
  * 23. Upload Single Product Image
  * POST http://localhost:3000/api/v1/vendor/products/upload-image
  */
@@ -572,12 +596,43 @@ export const uploadProductImages = async (
 };
 
 /**
+ * Normalizes unknown images input (string, JSON string, string array) into a clean string[]
+ */
+export const normalizeImageArray = (raw: unknown): string[] => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map(String)
+      .map((s) => s.trim().replace(/\\/g, "/"))
+      .filter((s) => s.length > 0);
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(String)
+            .map((s) => s.trim().replace(/\\/g, "/"))
+            .filter((s) => s.length > 0);
+        }
+      } catch {}
+    }
+    if (trimmed.length > 0) {
+      return [trimmed.replace(/\\/g, "/")];
+    }
+  }
+  return [];
+};
+
+/**
  * Helper to get full browser-renderable image URL
- * Dynamically resolves against Express Backend (port 3000 or NEXT_PUBLIC_API_URL)
+ * Dynamically resolves against Express Backend or Next.js proxy rewrite
  */
 export const getFullImageUrl = (urlOrPath?: string | null): string => {
   if (!urlOrPath) return '';
-  let cleanPath = urlOrPath.trim();
+  let cleanPath = urlOrPath.trim().replace(/\\/g, '/');
 
   // If already a local blob/data URL, return directly for instant preview
   if (cleanPath.startsWith('blob:') || cleanPath.startsWith('data:')) {
@@ -588,8 +643,8 @@ export const getFullImageUrl = (urlOrPath?: string | null): string => {
   if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
     try {
       const parsed = new URL(cleanPath);
-      // If it points to the frontend port (e.g. 3001), extract pathname to route to backend
-      if (typeof window !== 'undefined' && parsed.port === window.location.port) {
+      // If pointing to /uploads path, extract pathname so it routes via Next.js proxy
+      if (parsed.pathname.startsWith('/uploads')) {
         cleanPath = parsed.pathname;
       } else {
         return cleanPath;
@@ -610,16 +665,18 @@ export const getFullImageUrl = (urlOrPath?: string | null): string => {
   // Deduplicate any accidental double /uploads/image/uploads/image
   cleanPath = cleanPath.replace(/\/uploads\/image\/uploads\/image/g, '/uploads/image');
 
-  // Backend origin:
-  // 1. From NEXT_PUBLIC_API_URL if configured
-  // 2. Otherwise window.location.hostname with port 3000 (Express server)
+  // In browser: Next.js rewrites /uploads/:path* to http://127.0.0.1:3000/uploads/:path*
+  // Returning the relative path allows seamless loading across localhost, LAN IPs, and proxies without CORS
+  if (typeof window !== 'undefined') {
+    return cleanPath;
+  }
+
+  // Server-side rendering fallback:
   let backendOrigin = 'http://localhost:3000';
   if (process.env.NEXT_PUBLIC_API_URL) {
     try {
       backendOrigin = new URL(process.env.NEXT_PUBLIC_API_URL).origin;
     } catch {}
-  } else if (typeof window !== 'undefined' && window.location.hostname) {
-    backendOrigin = `http://${window.location.hostname}:3000`;
   }
 
   return `${backendOrigin}${cleanPath}`;
@@ -965,3 +1022,86 @@ export const submitVerification = async (
   const res = await api.post("/vendor/submit-verification", data);
   return res.data;
 };
+
+/**
+ * 39. Public Business Directory & Details (Live from MySQL)
+ */
+export const getPublicDirectory = async (): Promise<ApiResponse<{ businesses: any[] }>> => {
+  const res = await api.get("/master/directory");
+  return res.data;
+};
+
+export const getPublicBusinessDetail = async (slug: string): Promise<ApiResponse<{ business: any }>> => {
+  const res = await api.get(`/master/business/${slug}`);
+  return res.data;
+};
+
+/**
+ * 40. Buyer Procurement Enquiries & RFQs
+ * Fully compliant with Docs (03_EXPRESS_API_SPECIFICATION.md §7)
+ */
+export interface SubmitEnquiryPayload {
+  businessId?: string | number;
+  businessSlug?: string;
+  productId?: string | number | null;
+  productName?: string | null;
+  name?: string;
+  buyerName?: string;
+  email?: string;
+  buyerEmail?: string;
+  phone?: string | null;
+  buyerPhone?: string | null;
+  company?: string | null;
+  buyerCompany?: string | null;
+  subject?: string;
+  message?: string;
+  details?: string;
+  budget?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackendEnquiryItem {
+  id: string;
+  enquiryNumber: string;
+  buyerName: string;
+  buyerCompany: string;
+  buyerEmail: string;
+  buyerPhone: string;
+  subject: string;
+  details: string;
+  date: string;
+  status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected';
+  budget: string;
+  productName?: string | null;
+  replyMessage?: string | null;
+  repliedAt?: string | null;
+}
+
+export const submitEnquiry = async (
+  data: SubmitEnquiryPayload
+): Promise<ApiResponse<any>> => {
+  const res = await api.post("/enquiries", data);
+  return res.data;
+};
+
+export const getVendorEnquiries = async (): Promise<ApiResponse<{ enquiries: BackendEnquiryItem[]; totalCount: number }>> => {
+  const res = await api.get("/vendor/enquiries");
+  return res.data;
+};
+
+export const updateEnquiryStatus = async (
+  id: string,
+  status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected'
+): Promise<ApiResponse<any>> => {
+  const res = await api.patch(`/vendor/enquiries/${id}/status`, { status });
+  return res.data;
+};
+
+export const replyToEnquiry = async (
+  id: string,
+  replyMessage: string
+): Promise<ApiResponse<any>> => {
+  const res = await api.post(`/vendor/enquiries/${id}/reply`, { replyMessage });
+  return res.data;
+};
+

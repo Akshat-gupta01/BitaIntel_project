@@ -15,6 +15,7 @@ import { EnquiryModal } from '@/components/business/EnquiryModal';
 import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
 import { getStoredVendorDossier } from '@/config/initialVendorDossier';
 import { ProductCatalogItem } from '@/types/vendorRegistration';
+import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
   MapPin,
   ShieldCheck,
@@ -56,20 +57,25 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
   const [customLogoUrl, setCustomLogoUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    // 1. If viewing Meridian Steel Works (the reference demo vendor), load stored products & logo from vendor dossier
-    if (b.id === 'meridian-steel-works' || b.name.toLowerCase().includes('meridian')) {
-      const stored = getStoredVendorDossier();
-      if (stored?.step2?.logoUrl) {
+    // 1. If viewing reference demo or company with stored vendor dossier, load stored products & logo from vendor dossier
+    if (b.logoUrl) {
+      setCustomLogoUrl(b.logoUrl);
+    }
+    const stored = getStoredVendorDossier();
+    if (
+      stored &&
+      (b.id === 'meridian-steel-works' ||
+        b.name.toLowerCase().includes('meridian') ||
+        b.id.toLowerCase().includes('propack') ||
+        b.name.toLowerCase().includes('propack'))
+    ) {
+      if (stored.step2?.logoUrl) {
         setCustomLogoUrl(stored.step2.logoUrl);
-      } else {
-        setCustomLogoUrl(undefined);
       }
-      if (stored?.step4?.products && stored.step4.products.length > 0) {
+      if (stored.step4?.products && stored.step4.products.length > 0) {
         setCatalogProducts(stored.step4.products);
         return;
       }
-    } else {
-      setCustomLogoUrl(undefined);
     }
 
     // 2. For any business with registered products in b.products, map them into structured catalog items
@@ -211,7 +217,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                 {/* Logo with BITAINTEL Verified 'b' Seal on Bottom-Right */}
                 <div className="relative shrink-0 group">
                   <BusinessAvatar
-                    logoUrl={customLogoUrl}
+                    logoUrl={customLogoUrl || b.logoUrl || undefined}
                     businessName={b.name}
                     fallbackInitials={b.initials}
                     className="size-16 sm:size-20 rounded-2xl sm:rounded-3xl"
@@ -506,26 +512,29 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                     className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 hover:border-primary-300 hover:shadow-xs transition-all space-y-4"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-50 text-primary-800 border border-primary-200">
-                            {prod.brand || b.name}
-                          </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                            {prod.type || 'Product'}
-                          </span>
-                          {prod.hsnCode && (
-                            <span className="text-[10px] font-mono text-slate-400">
-                              HSN: {prod.hsnCode}
+                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                        <ProductThumbnail images={prod.images} alt={prod.name} size="md" showCountBadge />
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-50 text-primary-800 border border-primary-200">
+                              {prod.brand || b.name}
                             </span>
-                          )}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {prod.type || 'Product'}
+                            </span>
+                            {prod.hsnCode && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                HSN: {prod.hsnCode}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                            {prod.name}
+                          </h3>
+                          <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                            {prod.description || prod.specifications}
+                          </p>
                         </div>
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                          {prod.name}
-                        </h3>
-                        <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
-                          {prod.description || prod.specifications}
-                        </p>
                       </div>
 
                       {/* Price / Commercial Status */}
@@ -732,11 +741,19 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
               description={`${selectedProductForModal.brand || b.name} · Product Details & Specifications`}
             >
               <div className="space-y-4 text-xs">
-                <div>
-                  <span className="text-slate-400 font-bold uppercase text-[10px] block mb-1">Description</span>
-                  <p className="text-slate-700 leading-relaxed">
-                    {selectedProductForModal.description || selectedProductForModal.specifications}
-                  </p>
+                <div className="flex items-start gap-3.5 pb-2">
+                  <ProductThumbnail
+                    images={selectedProductForModal.images}
+                    alt={selectedProductForModal.name}
+                    size="lg"
+                    showCountBadge
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-slate-400 font-bold uppercase text-[10px] block mb-1">Description</span>
+                    <p className="text-slate-700 leading-relaxed">
+                      {selectedProductForModal.description || selectedProductForModal.specifications}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">

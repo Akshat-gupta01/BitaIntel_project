@@ -40,6 +40,8 @@ export class BusinessEntity extends Model<
   declare turnover: CreationOptional<string>;
   declare employees: CreationOptional<string>;
   declare verified: CreationOptional<boolean>;
+  declare logoUrl: CreationOptional<string>;  // Company logo URL
+  declare incorporationDate: CreationOptional<string | null>;
   declare verificationStatus: CreationOptional<string>;
   declare isPubliclyVisible: CreationOptional<boolean>;
   declare lastAudited: CreationOptional<Date>;
@@ -188,7 +190,16 @@ BusinessEntity.init(
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW
-    }
+    },
+    logoUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    },
+    incorporationDate: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+
   },
   {
     sequelize,

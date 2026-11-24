@@ -151,6 +151,14 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.fn('NOW')
       },
+      logoUrl: {
+        type: Sequelize.STRING(500),
+        allowNull: true
+      },
+      incorporationDate: {
+        type: Sequelize.STRING(50),
+        allowNull: true
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE,

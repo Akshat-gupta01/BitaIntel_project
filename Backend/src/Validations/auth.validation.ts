@@ -10,18 +10,16 @@ export const sendOtpSchema = z.object({
 }).refine(
   (data) => {
     if (data.purpose === "registration") {
-      return (
-        typeof data.email === "string" &&
-        data.email.includes("@") &&
-        typeof data.mobile === "string" &&
-        data.mobile.replace(/\D/g, "").length >= 10
-      );
+      const hasValidEmail = typeof data.email === "string" && data.email.includes("@");
+      const cleanMobile = data.mobile?.replace(/\D/g, "") || "";
+      const hasValidMobile = typeof data.mobile === "string" && cleanMobile.length >= 10;
+      return hasValidEmail && hasValidMobile;
     }
     const id = data.identifier || data.email || data.mobile;
     return typeof id === "string" && id.trim().length > 0;
   },
   {
-    message: "Registration requires valid email and 10-digit mobile number. For login or password reset, email or mobile is required."
+    message: "A valid corporate email or 10-digit mobile number is required to dispatch OTP."
   }
 );
 

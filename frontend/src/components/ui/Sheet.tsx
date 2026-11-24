@@ -24,11 +24,7 @@ export function Sheet({
   side = 'right',
   className,
 }: SheetProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
     if (!open) return;

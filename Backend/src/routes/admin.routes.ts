@@ -6,6 +6,11 @@ import {
   verifyStatutory,
   reviewDocument,
 } from "../controllers/admin.controller.js";
+import {
+  getAdminEnquiries,
+  updateAdminEnquiryStatus,
+  replyAdminEnquiry,
+} from "../controllers/enquiry.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { authorize } from "../middlewares/rbac.middleware.js";
 
@@ -22,5 +27,10 @@ adminRouter.patch("/documents/:docId/review", authorize("documents.approve"), re
 
 // 🏢 Module 2: Vendor Management
 adminRouter.get("/vendors", authorize("vendors.view"), getAllVendors);
+
+// 📬 Module 3: Centralized Buyer Enquiries & RFQ Leads Desk (Super Admin)
+adminRouter.get("/enquiries", authorize("verification.view"), getAdminEnquiries);
+adminRouter.patch("/enquiries/:id/status", authorize("verification.approve"), updateAdminEnquiryStatus);
+adminRouter.post("/enquiries/:id/reply", authorize("verification.approve"), replyAdminEnquiry);
 
 export default adminRouter;
