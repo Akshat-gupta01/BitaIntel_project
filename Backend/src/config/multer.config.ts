@@ -1,5 +1,7 @@
 import multer from "multer";
+import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 // Allowed file types for product images
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -7,19 +9,29 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "ima
 // Maximum file size: 5MB
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
 
+// ESM-compatible __dirname (project runs with `type: module`)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Resolve the same `Backend/uploads` root that app.ts serves statically.
+// Works from both `src/config` (tsx) and `dist/config` (compiled).
+const PRODUCT_UPLOAD_DIR = path.resolve(__dirname, "..", "..", "uploads", "products");
+fs.mkdirSync(PRODUCT_UPLOAD_DIR, { recursive: true });
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/products/");
+    cb(null, PRODUCT_UPLOAD_DIR);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename: timestamp_originalname
+    // Generate unique filename while preserving the real extension so the
+    // static handler serves the correct image/* content type.
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    const baseName = path.basename(file.originalname, ext);
-    cb(
-      null,
-      `${uniqueSuffix}_${baseName}${ext.replace(".", "-")}`,
-    );
+    const ext = path.extname(file.originalname).toLowerCase();
+    const baseName = path
+      .basename(file.originalname, path.extname(file.originalname))
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .slice(0, 60);
+    cb(null, `${uniqueSuffix}_${baseName || "product"}${ext}`);
   },
 });
 

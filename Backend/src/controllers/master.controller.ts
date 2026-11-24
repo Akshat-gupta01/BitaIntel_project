@@ -257,9 +257,37 @@ export async function getPublicBusinessDetail(req: Request, res: Response) {
     }
 
     const bJson: any = business.toJSON();
-    const prods = Array.isArray(bJson.products)
-      ? bJson.products.map((p: any) => p.name || p.title).filter(Boolean)
-      : [];
+    const productRecords: any[] = Array.isArray(bJson.products) ? bJson.products : [];
+    const prods = productRecords.map((p: any) => p.name || p.title).filter(Boolean);
+    const catalogProducts = productRecords.map((p: any) => ({
+      id: p.id ?? null,
+      name: p.name || p.title || "Product",
+      type: p.type === "Service" ? "Service" : "Product",
+      categoryId: p.categoryId ?? null,
+      subcategoryId: p.subcategoryId ?? null,
+      brand: p.brand ?? null,
+      description: p.description ?? null,
+      specifications: p.specifications ?? null,
+      grade: p.grade ?? null,
+      standards: p.standards ?? null,
+      hsnCode: p.hsnCode ?? null,
+      countryOfOrigin: p.countryOfOrigin ?? "India",
+      moq: p.moq ?? null,
+      standardOrderQty: p.standardOrderQty ?? null,
+      monthlyCapacity: p.monthlyCapacity ?? null,
+      availableStock: p.availableStock ?? null,
+      leadTimeDays: p.leadTimeDays ?? null,
+      sampleAvailability: p.sampleAvailability ?? "Available Free",
+      indicativePrice: p.indicativePrice ?? null,
+      currency: p.currency ?? "INR",
+      priceValidity: p.priceValidity ?? null,
+      targetMarkets: p.targetMarkets ?? null,
+      images: Array.isArray(p.images) ? p.images.filter((img: unknown) => typeof img === "string") : [],
+      catalogueDoc: p.catalogueDoc ?? null,
+      technicalDataSheetDoc: p.technicalDataSheetDoc ?? null,
+      coaDoc: p.coaDoc ?? null,
+      sdsDoc: p.sdsDoc ?? null,
+    }));
     const certs = Array.isArray(bJson.certifications)
       ? bJson.certifications.map((c: any) => c.name || c.certificateName).filter(Boolean)
       : [];
@@ -281,7 +309,8 @@ export async function getPublicBusinessDetail(req: Request, res: Response) {
       score,
       age: bJson.age || (bJson.yearEstablished ? Math.max(1, new Date().getFullYear() - Number(bJson.yearEstablished)) : 5),
       summary: bJson.summary || `Verified enterprise active on BITAINTEL intelligence directory.`,
-      products: prods.length > 0 ? prods : ["Industrial Solutions", "Engineering Products"],
+      products: prods,
+      catalogProducts,
       gstin: bJson.statutory?.gstin || "Active Verified",
       cin: bJson.statutory?.cin || "—",
       isoCertified: certs.length > 0 ? certs.join(" & ") : "ISO 9001:2015 & MCA21 Verified",

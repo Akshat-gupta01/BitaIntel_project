@@ -14,6 +14,7 @@ import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import { EnquiryModal } from '@/components/business/EnquiryModal';
 import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
 import { getStoredVendorDossier } from '@/config/initialVendorDossier';
+import * as vendorService from '@services/vendor.service';
 import { ProductCatalogItem } from '@/types/vendorRegistration';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
@@ -42,6 +43,72 @@ interface BusinessProfileClientProps {
   business: Business;
 }
 
+interface PublicCatalogProduct {
+  id?: number | string | null;
+  name?: string | null;
+  type?: string | null;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+  brand?: string | null;
+  description?: string | null;
+  specifications?: string | null;
+  grade?: string | null;
+  standards?: string | null;
+  hsnCode?: string | null;
+  countryOfOrigin?: string | null;
+  moq?: string | null;
+  standardOrderQty?: string | null;
+  monthlyCapacity?: string | null;
+  availableStock?: string | null;
+  leadTimeDays?: string | null;
+  sampleAvailability?: string | null;
+  indicativePrice?: string | null;
+  currency?: string | null;
+  priceValidity?: string | null;
+  targetMarkets?: string | null;
+  images?: unknown;
+  catalogueDoc?: string | null;
+  technicalDataSheetDoc?: string | null;
+  coaDoc?: string | null;
+  sdsDoc?: string | null;
+}
+
+function toSampleAvailability(value?: string | null): ProductCatalogItem['sampleAvailability'] {
+  return value === 'Available Paid' || value === 'Not Available' ? value : 'Available Free';
+}
+
+function mapPublicProduct(p: PublicCatalogProduct, fallbackId: string): ProductCatalogItem {
+  return {
+    id: p.id !== null && p.id !== undefined ? String(p.id) : fallbackId,
+    name: (p.name || 'Product').trim(),
+    type: p.type === 'Service' ? 'Service' : 'Product',
+    categoryId: p.categoryId || '',
+    subcategoryId: p.subcategoryId || '',
+    brand: p.brand || '',
+    description: p.description || '',
+    specifications: p.specifications || '',
+    grade: p.grade || '',
+    standards: p.standards || '',
+    hsnCode: p.hsnCode || '',
+    countryOfOrigin: p.countryOfOrigin || 'India',
+    moq: p.moq || '',
+    standardOrderQty: p.standardOrderQty || '',
+    monthlyCapacity: p.monthlyCapacity || '',
+    availableStock: p.availableStock || '',
+    leadTimeDays: p.leadTimeDays || '',
+    sampleAvailability: toSampleAvailability(p.sampleAvailability),
+    indicativePrice: p.indicativePrice || '',
+    currency: p.currency || 'INR',
+    priceValidity: p.priceValidity || '',
+    targetMarkets: p.targetMarkets || '',
+    images: vendorService.normalizeImageArray(p.images),
+    catalogueDoc: p.catalogueDoc || undefined,
+    technicalDataSheetDoc: p.technicalDataSheetDoc || undefined,
+    coaDoc: p.coaDoc || undefined,
+    sdsDoc: p.sdsDoc || undefined,
+  };
+}
+
 export function BusinessProfileClient({ business: b }: BusinessProfileClientProps) {
   const { role, user } = useAuth();
 
@@ -57,56 +124,63 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
   const [customLogoUrl, setCustomLogoUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    // 1. If viewing reference demo or company with stored vendor dossier, load stored products & logo from vendor dossier
+    const stored = getStoredVendorDossier();
+    const isReferenceDemo = b.id === 'meridian-steel-works' || b.name.toLowerCase().includes('meridian');
+    const isPropack = b.id.toLowerCase().includes('propack') || b.name.toLowerCase().includes('propack');
+
     if (b.logoUrl) {
       setCustomLogoUrl(b.logoUrl);
     }
-    const stored = getStoredVendorDossier();
-    if (
-      stored &&
-      (b.id === 'meridian-steel-works' ||
-        b.name.toLowerCase().includes('meridian') ||
-        b.id.toLowerCase().includes('propack') ||
-        b.name.toLowerCase().includes('propack'))
-    ) {
-      if (stored.step2?.logoUrl) {
-        setCustomLogoUrl(stored.step2.logoUrl);
-      }
-      if (stored.step4?.products && stored.step4.products.length > 0) {
-        setCatalogProducts(stored.step4.products);
-        return;
-      }
+    // A dossier-stored logo is only a fallback for the reference demo / the
+    // vendor's own preview; live DB data always wins for product catalog.
+    if (stored?.step2?.logoUrl && (isReferenceDemo || isPropack)) {
+      setCustomLogoUrl(stored.step2.logoUrl);
     }
 
-    // 2. For any business with registered products in b.products, map them into structured catalog items
+    // 1. Live DB catalog (real uploaded product photos + specifications)
+    const apiProducts = (b as unknown as { catalogProducts?: PublicCatalogProduct[] }).catalogProducts;
+    if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+      setCatalogProducts(
+        apiProducts.map((p, idx) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`))
+      );
+      return;
+    }
+
+    // 2. Reference demo or vendor preview with a locally stored dossier
+    if (isReferenceDemo && stored?.step4?.products && stored.step4.products.length > 0) {
+      setCatalogProducts(stored.step4.products);
+      return;
+    }
+
+    // 3. Static seed businesses (no DB record) expose product names only.
     if (b.products && b.products.length > 0) {
-      const mapped: ProductCatalogItem[] = b.products.map((prodName, idx) => ({
-        id: `PRD-${b.id}-${idx + 1}`,
-        name: prodName,
-        type: 'Product',
-        categoryId: 'CAT017',
-        subcategoryId: 'SUB187',
-        brand: b.name,
-        description: `Verified high-precision ${prodName.toLowerCase()} engineered to stringent tolerances for ${b.industry.toLowerCase()} applications.`,
-        specifications: `Custom engineered specifications, audited and certified under ${b.isoCertified}`,
-        grade: 'High-Purity / Industrial Grade',
-        standards: b.isoCertified,
-        hsnCode: `${72000000 + idx * 10500}`,
-        countryOfOrigin: 'India',
-        moq: '100 Units',
-        standardOrderQty: '500 Units',
-        monthlyCapacity: '20,000 Units',
-        availableStock: '1,500 Units',
-        leadTimeDays: '14–21 Days',
-        sampleAvailability: idx % 2 === 0 ? 'Available Free' : 'Available Paid',
-        indicativePrice: idx === 0 ? '4,850' : '',
-        currency: 'INR',
-        priceValidity: '60 Days',
-        targetMarkets: 'Domestic & Global Exports',
-        technicalDataSheetDoc: `TDS_${prodName.replace(/[^a-zA-Z0-9]/g, '_')}_Spec.pdf`,
-        coaDoc: idx % 2 === 0 ? `COA_Batch_${b.id.slice(0, 4).toUpperCase()}_2026.pdf` : undefined,
-      }));
-      setCatalogProducts(mapped);
+      setCatalogProducts(
+        b.products.map((prodName, idx) => ({
+          id: `PRD-${b.id}-${idx + 1}`,
+          name: prodName,
+          type: 'Product',
+          categoryId: '',
+          subcategoryId: '',
+          brand: b.name,
+          description: '',
+          specifications: '',
+          grade: '',
+          standards: b.isoCertified,
+          hsnCode: '',
+          countryOfOrigin: 'India',
+          moq: '',
+          standardOrderQty: '',
+          monthlyCapacity: '',
+          availableStock: '',
+          leadTimeDays: '',
+          sampleAvailability: 'Available Free',
+          indicativePrice: '',
+          currency: 'INR',
+          priceValidity: '',
+          targetMarkets: '',
+          images: [],
+        }))
+      );
     } else {
       setCatalogProducts([]);
     }

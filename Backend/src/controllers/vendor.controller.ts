@@ -2045,7 +2045,16 @@ export async function addProduct(req: Request, res: Response) {
       }
       // Process each product with image upload
       const itemsToCreate = req.body.map((item: any) => {
-        const imageUrl = item.imageUrl || productImageUrl || null;
+        // Merge any uploaded multipart image into the product's `images` array
+        const sourceImages =
+          item.images !== undefined && item.images !== null && item.images !== ""
+            ? item.images
+            : item.imageUrl
+            ? [item.imageUrl]
+            : productImageUrl
+            ? [productImageUrl]
+            : [];
+        const bulkImages = normalizeProductImages(sourceImages);
         // Build product object with all fields
         const productData: any = {
           name: item.name?.trim() || "",
@@ -2076,8 +2085,7 @@ export async function addProduct(req: Request, res: Response) {
           currency: item.currency?.trim() || "INR",
           priceValidity: item.priceValidity?.trim() || null,
           targetMarkets: item.targetMarkets?.trim() || null,
-          imageUrl: imageUrl,
-          images: item.images || [],
+          images: bulkImages,
           catalogueDoc: item.catalogueDoc?.trim() || null,
           technicalDataSheetDoc: item.technicalDataSheetDoc?.trim() || null,
           coaDoc: item.coaDoc?.trim() || null,
@@ -2294,7 +2302,6 @@ export async function updateProduct(req: Request, res: Response) {
       "currency",
       "priceValidity",
       "targetMarkets",
-      "imageUrl",
       "images",
       "catalogueDoc",
       "technicalDataSheetDoc",
@@ -2312,6 +2319,13 @@ export async function updateProduct(req: Request, res: Response) {
           (product as any)[key] = req.body[key];
         }
       }
+    }
+
+    // Backwards-compatible single-image payloads fold into the `images` array
+    // (the DB stores product photos as JSON, not a separate column).
+    if (req.body.imageUrl !== undefined && req.body.images === undefined) {
+      const incoming = normalizeProductImages(req.body.imageUrl) || [];
+      product.images = normalizeProductImages([...(product.images || []), ...incoming]);
     }
 
     await product.save();

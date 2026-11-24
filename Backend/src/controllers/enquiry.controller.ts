@@ -313,14 +313,87 @@ export async function replyAdminEnquiry(req: Request, res: Response) {
 
 /**
  * 5. GET /api/v1/vendor/enquiries
- * Authenticated vendor endpoint: In the new flow, buyer enquiries are managed by Super Admin.
+ * Authenticated vendor endpoint: Returns every buyer enquiry/RFQ that is addressed to the
+ * logged-in vendor's own business entity (tenant-isolated by businessId).
  */
 export async function getVendorEnquiries(req: Request, res: Response) {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Please login first", 401, "ERR_UNAUTHORIZED");
+    }
+
+    // Resolve the authenticated vendor's business entity (tenant scope)
+    const business = await BusinessEntity.findOne({
+      where: { ownerUserId: userId },
+    });
+
+    if (!business) {
+      return sendSuccess(res, {
+        enquiries: [],
+        totalCount: 0,
+        message: "No business profile is linked to this account yet.",
+      });
+    }
+
+    const enquiries = await BusinessEnquiry.findAll({
+      where: { businessId: business.id },
+      include: [
+        {
+          model: BusinessProduct,
+          as: "product",
+          attributes: ["id", "name", "hsnCode", "indicativePrice", "currency", "images"],
+          required: false,
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const formatted = enquiries.map((enq: any) => {
+      const createdDate = new Date(enq.createdAt);
+      const dateFormatted = createdDate.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      return {
+        id: String(enq.id),
+        enquiryId: enq.enquiryNumber,
+        enquiryNumber: enq.enquiryNumber,
+        businessId: enq.businessId,
+        targetBusinessName: business.name,
+        targetBusinessSlug: business.slug,
+        buyerName: enq.buyerName,
+        name: enq.buyerName,
+        buyerCompany: enq.buyerCompany || "Enterprise Buyer",
+        company: enq.buyerCompany || "Enterprise Buyer",
+        buyerEmail: enq.buyerEmail,
+        email: enq.buyerEmail,
+        buyerPhone: enq.buyerPhone || "N/A",
+        phone: enq.buyerPhone || "N/A",
+        subject: enq.subject,
+        details: enq.details,
+        message: enq.details,
+        date: dateFormatted,
+        status: enq.status,
+        budget: enq.budget || "Commercial RFQ",
+        productId: enq.productId || null,
+        productName: enq.productName || enq.product?.name || null,
+        product: enq.product || null,
+        replyMessage: enq.replyMessage || null,
+        vendor_notes: enq.replyMessage || null,
+        repliedAt: enq.repliedAt || null,
+        createdAt: enq.createdAt,
+      };
+    });
+
     return sendSuccess(res, {
-      enquiries: [],
-      totalCount: 0,
-      message: "Buyer procurement enquiries are centralized and verified through the BITAINTEL Super Admin Desk.",
+      enquiries: formatted,
+      totalCount: formatted.length,
     });
   } catch (error: any) {
     console.error("Error in vendor enquiries:", error);
@@ -330,14 +403,135 @@ export async function getVendorEnquiries(req: Request, res: Response) {
 
 /**
  * 6. PATCH /api/v1/vendor/enquiries/:id/status
+ * Vendor updates the lifecycle status of an enquiry that belongs to their own business.
  */
 export async function updateEnquiryStatus(req: Request, res: Response) {
-  return updateAdminEnquiryStatus(req, res);
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Please login first", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const business = await BusinessEntity.findOne({ where: { ownerUserId: userId } });
+    if (!business) {
+      return sendError(res, "Business profile not found", 404, "ERR_BUSINESS_NOT_FOUND");
+    }
+
+    const id = typeof req.params.id === "string" ? req.params.id : String(req.params.id || "");
+    const { status } = req.body;
+
+    let enquiry = null;
+    if (/^\d+$/.test(id)) {
+      enquiry = await BusinessEnquiry.findOne({
+        where: { id: Number(id), businessId: business.id },
+      });
+    }
+    if (!enquiry) {
+      enquiry = await BusinessEnquiry.findOne({
+        where: { enquiryNumber: id, businessId: business.id },
+      });
+    }
+
+    if (!enquiry) {
+      return sendError(
+        res,
+        "Enquiry not found or not owned by your company",
+        404,
+        "ERR_ENQUIRY_NOT_FOUND"
+      );
+    }
+
+    enquiry.status = status;
+    await enquiry.save();
+
+    return sendSuccess(
+      res,
+      {
+        id: String(enquiry.id),
+        enquiryId: enquiry.enquiryNumber,
+        enquiryNumber: enquiry.enquiryNumber,
+        status: enquiry.status,
+      },
+      200,
+      { message: `Enquiry status updated to ${status}` }
+    );
+  } catch (error: any) {
+    console.error("Error updating vendor enquiry status:", error);
+    return sendError(res, error.message || "Failed to update enquiry status", 500, "ERR_INTERNAL_SERVER");
+  }
 }
 
 /**
  * 7. POST /api/v1/vendor/enquiries/:id/reply
+ * Vendor responds to an enquiry that belongs to their own business. Any response
+ * already relayed by the Super Admin is preserved and the vendor note is appended.
  */
 export async function replyEnquiry(req: Request, res: Response) {
-  return replyAdminEnquiry(req, res);
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Please login first", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const business = await BusinessEntity.findOne({ where: { ownerUserId: userId } });
+    if (!business) {
+      return sendError(res, "Business profile not found", 404, "ERR_BUSINESS_NOT_FOUND");
+    }
+
+    const id = typeof req.params.id === "string" ? req.params.id : String(req.params.id || "");
+    const { replyMessage } = req.body;
+
+    let enquiry = null;
+    if (/^\d+$/.test(id)) {
+      enquiry = await BusinessEnquiry.findOne({
+        where: { id: Number(id), businessId: business.id },
+      });
+    }
+    if (!enquiry) {
+      enquiry = await BusinessEnquiry.findOne({
+        where: { enquiryNumber: id, businessId: business.id },
+      });
+    }
+
+    if (!enquiry) {
+      return sendError(
+        res,
+        "Enquiry not found or not owned by your company",
+        404,
+        "ERR_ENQUIRY_NOT_FOUND"
+      );
+    }
+
+    const trimmedReply = String(replyMessage || "").trim();
+    if (!trimmedReply) {
+      return sendError(res, "Reply message cannot be empty", 400, "ERR_VALIDATION");
+    }
+
+    // Preserve the Super Admin's relayed response (if any) instead of overwriting it
+    if (enquiry.replyMessage && enquiry.replyMessage.trim()) {
+      enquiry.replyMessage = `${enquiry.replyMessage}\n\n— Vendor response —\n${trimmedReply}`;
+    } else {
+      enquiry.replyMessage = trimmedReply;
+    }
+    enquiry.repliedAt = new Date();
+    enquiry.status = "Responded";
+    await enquiry.save();
+
+    return sendSuccess(
+      res,
+      {
+        id: String(enquiry.id),
+        enquiryId: enquiry.enquiryNumber,
+        enquiryNumber: enquiry.enquiryNumber,
+        status: enquiry.status,
+        replyMessage: enquiry.replyMessage,
+        repliedAt: enquiry.repliedAt,
+      },
+      200,
+      { message: `Response saved for enquiry ${enquiry.enquiryNumber}` }
+    );
+  } catch (error: any) {
+    console.error("Error replying to vendor enquiry:", error);
+    return sendError(res, error.message || "Failed to submit reply", 500, "ERR_INTERNAL_SERVER");
+  }
 }
