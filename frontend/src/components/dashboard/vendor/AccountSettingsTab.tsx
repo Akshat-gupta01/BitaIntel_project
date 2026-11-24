@@ -30,6 +30,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Badge } from '@/components/ui/Badge';
 import { Dialog } from '@/components/ui/Dialog';
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
+import * as vendorService from '@services/vendor.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -147,6 +148,7 @@ export function AccountSettingsTab({
   // Sessions & Confirm Pause Modal
   const [sessions, setSessions] = useState<ActiveSessionItem[]>(INITIAL_SESSIONS);
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
 
   // Load persisted preferences from localStorage on mount
   useEffect(() => {
@@ -197,7 +199,7 @@ export function AccountSettingsTab({
     return { score: 100, label: 'Strong Audit-Grade', color: 'bg-emerald-500' };
   }, [passwordForm.newPassword]);
 
-  function handleSaveContactDetails(e: React.FormEvent) {
+  async function handleSaveContactDetails(e: React.FormEvent) {
     e.preventDefault();
     if (!contactForm.authorizedName.trim() || !contactForm.email.includes('@')) {
       toast.error('Invalid Contact Details', {
@@ -206,36 +208,79 @@ export function AccountSettingsTab({
       return;
     }
 
-    const updatedContacts = [...(dossier.step5.departmentContacts || [])];
-    if (updatedContacts[0] && prefs.rfqEscalationEmail) {
-      updatedContacts[0] = { ...updatedContacts[0], email: prefs.rfqEscalationEmail };
-    }
-
-    const updatedDossier: FullVendorRegistrationDossier = {
-      ...dossier,
-      step1: {
-        ...dossier.step1,
+    setSavingContact(true);
+    try {
+      // 1. Call Backend API to persist in MySQL (users, business_entities, and department contacts)
+      await vendorService.updateVendorProfile({
         authorizedName: contactForm.authorizedName.trim(),
+        fullName: contactForm.authorizedName.trim(),
         designation: contactForm.designation.trim(),
-        email: contactForm.email.trim(),
         mobile: contactForm.mobile.trim(),
-      },
-      step2: {
-        ...dossier.step2,
         registeredAddress: contactForm.registeredAddress.trim(),
-      },
-      step5: {
-        ...dossier.step5,
-        departmentContacts: updatedContacts,
-      },
-      lastUpdated: new Date().toISOString(),
-    };
+        rfqEscalationEmail: prefs.rfqEscalationEmail?.trim(),
+        departmentEmail: prefs.rfqEscalationEmail?.trim(),
+        alternatePhone: prefs.alternatePhone?.trim(),
+        departmentPhone: prefs.alternatePhone?.trim(),
+      });
 
-    onUpdateDossier(updatedDossier);
-    persistPrefs(prefs);
-    toast.success('Authorized Contact & Signatory Saved', {
-      description: 'Synced across your Vendor Dossier, OTP alerts, and RFI routing.',
-    });
+      // 2. Keep local React dossier and local storage in sync
+      const updatedContacts = [...(dossier.step5.departmentContacts || [])];
+      if (updatedContacts.length > 0) {
+        updatedContacts[0] = {
+          ...updatedContacts[0],
+          email: prefs.rfqEscalationEmail || updatedContacts[0].email,
+          phone: prefs.alternatePhone || updatedContacts[0].phone,
+        };
+      } else if (prefs.rfqEscalationEmail || prefs.alternatePhone) {
+        updatedContacts.push({
+          id: 'contact-dept-1',
+          department: 'Sales & Inquiries',
+          name: contactForm.authorizedName.trim(),
+          designation: contactForm.designation.trim(),
+          email: prefs.rfqEscalationEmail || contactForm.email.trim(),
+          phone: prefs.alternatePhone || contactForm.mobile.trim(),
+        });
+      }
+
+      const updatedDossier: FullVendorRegistrationDossier = {
+        ...dossier,
+        step1: {
+          ...dossier.step1,
+          authorizedName: contactForm.authorizedName.trim(),
+          designation: contactForm.designation.trim(),
+          email: contactForm.email.trim(),
+          mobile: contactForm.mobile.trim(),
+        },
+        step2: {
+          ...dossier.step2,
+          registeredAddress: contactForm.registeredAddress.trim(),
+        },
+        step5: {
+          ...dossier.step5,
+          departmentContacts: updatedContacts,
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+
+      onUpdateDossier(updatedDossier);
+      persistPrefs(prefs);
+      toast.success('Authorized Contact & Signatory Saved', {
+        description: 'Successfully updated in database and synced across your Vendor Dossier.',
+      });
+    } catch (err: unknown) {
+      console.error('Failed to update contact details:', err);
+      const errorMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not save contact details to database.';
+      toast.error('Update Failed', {
+        description: String(errorMessage),
+      });
+    } finally {
+      setSavingContact(false);
+    }
   }
 
   function handleUpdatePassword(e: React.FormEvent) {
@@ -537,8 +582,8 @@ export function AccountSettingsTab({
               >
                 Manage plants &amp; executives →
               </button>
-              <Button type="submit" variant="primary" size="sm">
-                Save Contact Details
+              <Button type="submit" variant="primary" size="sm" isLoading={savingContact}>
+                {savingContact ? 'Saving...' : 'Save Contact Details'}
               </Button>
             </div>
           </form>

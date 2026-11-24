@@ -21,6 +21,9 @@ import {
   HelpCircle,
   Loader2,
   CheckCircle2,
+  User,
+  Camera,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as vendorService from '@services/vendor.service';
@@ -53,9 +56,13 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     designation: 'Marketing Head',
     email: '',
     mobile: '',
+    photoUrl: undefined,
     isAuthorizedSignatory: false,
   });
   const [showAddPerson, setShowAddPerson] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const personPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Document Upload State & Input Refs
   interface UploadedDocState {
@@ -257,6 +264,40 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     toast.info('Facility removed.');
   }
 
+  // Upload executive photo using existing single-image upload API
+  async function handlePersonPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setPhotoUploadError('Only JPG, PNG and WebP images are supported.');
+      toast.error('Invalid file format. Please upload JPG, PNG or WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoUploadError('File size exceeds 5MB limit.');
+      toast.error('File too large. Maximum size is 5MB.');
+      return;
+    }
+
+    setPhotoUploadError(null);
+    setIsUploadingPhoto(true);
+
+    try {
+      const uploadedPath = await vendorService.uploadPersonnelPhoto(file);
+      setNewPerson((prev) => ({ ...prev, photoUrl: uploadedPath }));
+      toast.success('Executive Photo Uploaded');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to upload photo';
+      setPhotoUploadError(msg);
+      toast.error('Photo Upload Failed', { description: msg });
+    } finally {
+      setIsUploadingPhoto(false);
+      if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
+    }
+  }
+
   // Add Key Personnel & save to MySQL business_personnel
   async function handleAddPerson() {
     if (!newPerson.name || !newPerson.designation || !newPerson.email) {
@@ -275,6 +316,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       designation: newPerson.designation.trim(),
       email: newPerson.email.trim(),
       mobile: newPerson.mobile ? newPerson.mobile.trim() : '0000000000',
+      photoUrl: newPerson.photoUrl || undefined,
       isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
     };
 
@@ -300,6 +342,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       designation: newPerson.designation || '',
       email: newPerson.email || '',
       mobile: newPerson.mobile || '',
+      photoUrl: newPerson.photoUrl || undefined,
       isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
     };
     onChange({ keyPersonnel: [...data.keyPersonnel, item] });
@@ -308,8 +351,10 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       designation: 'Marketing Head',
       email: '',
       mobile: '',
+      photoUrl: undefined,
       isAuthorizedSignatory: false,
     });
+    setPhotoUploadError(null);
     setShowAddPerson(false);
   }
 
@@ -427,6 +472,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
                 designation: kp.designation || 'Executive',
                 email: kp.email,
                 mobile: kp.mobile || '0000000000',
+                photoUrl: kp.photoUrl || undefined,
                 isAuthorizedSignatory: !!kp.isAuthorizedSignatory,
               });
               if (res?.data?.personnel?.id) {
@@ -899,11 +945,103 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
               <h4 className="text-xs font-bold text-primary-900">Add Executive / Head Profile</h4>
               <button
                 type="button"
-                onClick={() => setShowAddPerson(false)}
+                onClick={() => {
+                  setShowAddPerson(false);
+                  setNewPerson((prev) => ({ ...prev, photoUrl: undefined }));
+                  setPhotoUploadError(null);
+                  if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
+                }}
                 className="text-xs text-slate-500 hover:text-slate-800"
               >
                 Cancel
               </button>
+            </div>
+
+            {/* Profile Photo Upload Section */}
+            <div className="bg-white rounded-xl border border-primary-200/80 p-3 flex flex-col sm:flex-row items-center sm:items-start gap-3.5">
+              <input
+                ref={personPhotoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                className="hidden"
+                disabled={isUploadingPhoto}
+                onChange={handlePersonPhotoSelect}
+              />
+
+              {/* Photo Avatar Preview */}
+              <div className="shrink-0">
+                {newPerson.photoUrl ? (
+                  <div className="size-14 rounded-full overflow-hidden border-2 border-primary-500 shadow-xs bg-slate-100">
+                    <img
+                      src={vendorService.getFullImageUrl(newPerson.photoUrl)}
+                      alt="Executive Preview"
+                      className="size-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="size-14 rounded-full border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400">
+                    <User className="size-6 text-slate-400" />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls & Instructions */}
+              <div className="flex-1 space-y-1 text-center sm:text-left">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    disabled={isUploadingPhoto}
+                    onClick={() => personPhotoInputRef.current?.click()}
+                    className="text-xs font-bold border-primary-300 text-primary-700 hover:bg-primary-50"
+                  >
+                    {isUploadingPhoto ? (
+                      <>
+                        <RefreshCw className="size-3.5 mr-1.5 animate-spin text-primary-600" />
+                        Uploading...
+                      </>
+                    ) : newPerson.photoUrl ? (
+                      <>
+                        <Camera className="size-3.5 mr-1.5 text-primary-600" />
+                        Replace Photo
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="size-3.5 mr-1.5 text-primary-600" />
+                        Upload Photo
+                      </>
+                    )}
+                  </Button>
+
+                  {newPerson.photoUrl && !isUploadingPhoto && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewPerson((prev) => ({ ...prev, photoUrl: undefined }));
+                        if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
+                      }}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 rounded hover:bg-rose-50 transition"
+                    >
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Select a headshot photo from your device (JPG, PNG, WebP &bull; Max 5MB).
+                </p>
+
+                {photoUploadError && (
+                  <p className="text-[11px] text-rose-600 font-medium">{photoUploadError}</p>
+                )}
+                {newPerson.photoUrl && !isUploadingPhoto && (
+                  <p className="text-[11px] text-emerald-700 font-semibold flex items-center justify-center sm:justify-start gap-1">
+                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                    Profile photo ready
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -977,14 +1115,22 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
                 className="rounded-lg border border-slate-200 bg-white p-3.5 flex items-start justify-between gap-3 shadow-xs"
               >
                 <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-full bg-primary-100 font-bold text-primary-800 grid place-items-center text-xs">
-                    {person.name
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </div>
+                  {person.photoUrl ? (
+                    <img
+                      src={vendorService.getFullImageUrl(person.photoUrl)}
+                      alt={person.name}
+                      className="size-10 rounded-full object-cover bg-slate-100 border border-slate-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="size-10 rounded-full bg-primary-100 font-bold text-primary-800 grid place-items-center text-xs shrink-0">
+                      {person.name
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">{person.name}</h4>
                     <span className="text-[11px] font-semibold text-primary-700">{person.designation}</span>

@@ -20,6 +20,32 @@ import { JsonLd } from '@/components/shared/JsonLd';
 import { createPageMetadata } from '@/lib/metadata';
 import { createBusinessJsonLd, createWebPageJsonLd } from '@/lib/schema';
 
+async function fetchBusinessData(slug: string) {
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000/api/v1').replace(/\/api\/v1\/?$/, '');
+  const candidateUrls = Array.from(
+    new Set([
+      `${apiBase}/api/v1/master/business/${slug}`,
+      `http://127.0.0.1:3000/api/v1/master/business/${slug}`,
+      `http://localhost:3000/api/v1/master/business/${slug}`,
+    ])
+  );
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.business) {
+          return json.data.business;
+        }
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase()) || null;
+}
+
 export function generateStaticParams() {
   return businesses.map((b) => ({ slug: b.id }));
 }
@@ -30,16 +56,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  let b = businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase());
-  if (!b) {
-    try {
-      const res = await fetch(`http://127.0.0.1:3000/api/v1/master/business/${slug}`, { next: { revalidate: 10 } });
-      if (res.ok) {
-        const json = await res.json();
-        b = json?.data?.business;
-      }
-    } catch {}
-  }
+  const b = await fetchBusinessData(slug);
 
   if (!b) {
     return createPageMetadata({
@@ -65,18 +82,7 @@ export default async function BusinessProfile({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  let b = businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase());
-  if (!b) {
-    try {
-      const res = await fetch(`http://127.0.0.1:3000/api/v1/master/business/${slug}`, { next: { revalidate: 10 } });
-      if (res.ok) {
-        const json = await res.json();
-        b = json?.data?.business;
-      }
-    } catch (err) {
-      console.warn('Backend business detail fetch note:', err);
-    }
-  }
+  const b = await fetchBusinessData(slug);
 
   if (!b) notFound();
 

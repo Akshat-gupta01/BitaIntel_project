@@ -207,3 +207,7 @@ coverage/
 .nyc_output/
 cypress/videos/
 cypress/screenshots/
+tmp_*.cjs
+tmp_*.js
+AGENTS.md
+**/AGENTS.md

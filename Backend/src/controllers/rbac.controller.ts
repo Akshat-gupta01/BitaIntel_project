@@ -100,3 +100,33 @@ export async function updateRolePermissions(req: Request, res: Response) {
     return sendError(res, error.message || "Failed to update role permissions", 500, "ERR_ROLE_UPDATE");
   }
 }
+
+export async function updateRole(req: Request, res: Response) {
+  try {
+    const roleId = Number(req.params.roleId);
+    const { name, description } = req.body;
+
+    if (!roleId || isNaN(roleId)) {
+      return sendError(res, "Valid roleId is required", 400, "ERR_INVALID_ROLE_ID");
+    }
+
+    const updated = await RbacService.updateRole(roleId, { name, description });
+    return sendSuccess(res, updated);
+  } catch (error: any) {
+    return sendError(res, error.message || "Failed to update role", 400, "ERR_ROLE_UPDATE");
+  }
+}
+
+export async function deleteRole(req: Request, res: Response) {
+  try {
+    const roleId = Number(req.params.roleId);
+    if (!roleId || isNaN(roleId)) {
+      return sendError(res, "Valid roleId is required", 400, "ERR_INVALID_ROLE_ID");
+    }
+
+    const result = await RbacService.deleteRole(roleId);
+    return sendSuccess(res, result);
+  } catch (error: any) {
+    return sendError(res, error.message || "Failed to delete role", 400, "ERR_ROLE_DELETE");
+  }
+}

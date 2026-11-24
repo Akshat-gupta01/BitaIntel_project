@@ -4,7 +4,7 @@ import { Role, Permission, RolePermission, User } from "../models/index.js";
 export interface PermissionDefinition {
   code: string;
   module: string;
-  action: "view" | "create" | "edit" | "delete" | "approve" | "export";
+  action: "view" | "create" | "edit" | "delete" | "approve" | "respond" | "export";
   name: string;
   description: string;
 }
@@ -14,7 +14,7 @@ const permissionCache = new Map<string, Set<string>>();
 // Role activation cache so suspended roles stop authorizing immediately after a change.
 const roleActiveCache = new Map<string, boolean>();
 
-const ALLOWED_ACTIONS = new Set(["view", "create", "edit", "delete", "approve", "export"]);
+const ALLOWED_ACTIONS = new Set(["view", "create", "edit", "delete", "approve", "respond", "export"]);
 
 export class RbacService {
   static clearCache(roleCode?: string) {
@@ -269,6 +269,52 @@ export class RbacService {
         assignedCount: perms.length,
         permissionCodes: perms.map((p) => p.code),
       };
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  }
+
+  static async updateRole(roleId: number, data: { name?: string; description?: string }) {
+    const role = await Role.findByPk(roleId);
+    if (!role) {
+      throw new Error(`Role with ID ${roleId} not found.`);
+    }
+
+    if (role.isSystem || role.code === "super_admin") {
+      throw new Error("System roles cannot have their core definitions modified.");
+    }
+
+    if (data.name && data.name.trim()) {
+      role.name = data.name.trim();
+      role.label = data.name.trim();
+    }
+    if (data.description !== undefined) {
+      role.description = data.description.trim();
+    }
+
+    await role.save();
+    this.clearCache(role.code);
+    return role;
+  }
+
+  static async deleteRole(roleId: number) {
+    const role = await Role.findByPk(roleId);
+    if (!role) {
+      throw new Error(`Role with ID ${roleId} not found.`);
+    }
+
+    if (role.isSystem || role.code === "super_admin") {
+      throw new Error("System protected roles cannot be deleted.");
+    }
+
+    const t = await sequelize.transaction();
+    try {
+      await RolePermission.destroy({ where: { roleId: role.id }, transaction: t });
+      await role.destroy({ transaction: t });
+      await t.commit();
+      this.clearCache(role.code);
+      return { success: true, message: `Role '${role.name}' deleted successfully.` };
     } catch (err) {
       await t.rollback();
       throw err;

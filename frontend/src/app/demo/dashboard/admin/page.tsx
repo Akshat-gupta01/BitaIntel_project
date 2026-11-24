@@ -15,7 +15,7 @@ import {
   replyAdminEnquiry,
 } from '@services/admin.service';
 import { VendorAuditModal } from '@/components/dashboard/admin/VendorAuditModal';
-import { AccessControl } from '@/components/dashboard/admin/AccessControl';
+import { AccessControlWorkspace } from '@/components/dashboard/admin/AccessControlWorkspace';
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
@@ -40,13 +40,18 @@ import {
   Calendar,
   MessageSquare,
   Send,
+  ClipboardList,
+  ExternalLink,
   Mail,
+  Phone,
+  Filter as FilterIcon,
 } from 'lucide-react';
 
 export type AdminNavTab =
   | 'overview'
   | 'queue'
   | 'enquiries'
+  | 'enquiry_records'
   | 'vendors'
   | 'verified'
   | 'action_required'
@@ -92,6 +97,14 @@ export default function AdminDashboardPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [badgeFilter, setBadgeFilter] = useState<string>('all');
   const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>('all');
+
+  // Master Enquiry Table states
+  const [enquirySearchQuery, setEnquirySearchQuery] = useState('');
+  const [enquiryTableStatusFilter, setEnquiryTableStatusFilter] = useState<string>('all');
+  const [enquiryTableVendorFilter, setEnquiryTableVendorFilter] = useState<string>('all');
+  const [tableModalEnquiry, setTableModalEnquiry] = useState<AdminEnquiryItem | null>(null);
+  const [tableModalReplyText, setTableModalReplyText] = useState('');
+  const [tableModalIsReplying, setTableModalIsReplying] = useState(false);
 
   // Modal audit state
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
@@ -201,6 +214,23 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
+  // Handle URL tab parameter if arriving from subpages like /access-control
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab') as AdminNavTab | null;
+      if (tabParam) {
+        if (tabParam === 'access_control') {
+          router.push('/demo/dashboard/admin/access-control');
+        } else {
+          queueMicrotask(() => {
+            setActiveTab((prev) => (prev !== tabParam ? tabParam : prev));
+          });
+        }
+      }
+    }
+  }, [router]);
+
   // Handle Admin Enquiry Status Change
   const handleAdminStatusChange = async (
     id: string,
@@ -254,6 +284,104 @@ export default function AdminDashboardPage() {
       await replyAdminEnquiry(currentId, textToSend);
     } catch {
       // Fallback
+    }
+  };
+
+  // Master Enquiry Table - Unique Target Vendors for Dropdown
+  const uniqueTargetVendors = useMemo(() => {
+    const set = new Set<string>();
+    enquiries.forEach((e) => {
+      if (e.targetBusinessName) set.add(e.targetBusinessName);
+    });
+    return Array.from(set).sort();
+  }, [enquiries]);
+
+  // Master Enquiry Table - Filtered List
+  const filteredTableEnquiries = useMemo(() => {
+    return enquiries.filter((enq) => {
+      if (enquirySearchQuery.trim()) {
+        const q = enquirySearchQuery.toLowerCase().trim();
+        const matchesRef = (enq.enquiryNumber || enq.id || '').toLowerCase().includes(q);
+        const matchesBuyer =
+          (enq.buyerCompany || '').toLowerCase().includes(q) ||
+          (enq.buyerName || '').toLowerCase().includes(q) ||
+          (enq.buyerEmail || '').toLowerCase().includes(q) ||
+          (enq.buyerPhone || '').toLowerCase().includes(q);
+        const matchesVendor = (enq.targetBusinessName || '').toLowerCase().includes(q);
+        const matchesSubject =
+          (enq.subject || '').toLowerCase().includes(q) ||
+          (enq.productName || '').toLowerCase().includes(q) ||
+          (enq.details || '').toLowerCase().includes(q);
+        const matchesReply = (enq.replyMessage || '').toLowerCase().includes(q);
+        if (!matchesRef && !matchesBuyer && !matchesVendor && !matchesSubject && !matchesReply) {
+          return false;
+        }
+      }
+
+      if (enquiryTableStatusFilter !== 'all') {
+        if (enquiryTableStatusFilter === 'has_response') {
+          if (!enq.replyMessage && enq.status !== 'Responded') return false;
+        } else if (enquiryTableStatusFilter === 'pending_response') {
+          if (enq.replyMessage || enq.status === 'Responded') return false;
+        } else if (enq.status !== enquiryTableStatusFilter) {
+          return false;
+        }
+      }
+
+      if (enquiryTableVendorFilter !== 'all') {
+        if (enq.targetBusinessName !== enquiryTableVendorFilter) return false;
+      }
+
+      return true;
+    });
+  }, [enquiries, enquirySearchQuery, enquiryTableStatusFilter, enquiryTableVendorFilter]);
+
+  // Handle Response submission from Master Enquiry Table modal
+  const handleTableModalReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tableModalReplyText.trim() || !tableModalEnquiry) return;
+
+    const currentId = tableModalEnquiry.enquiryNumber || tableModalEnquiry.id;
+    const textToSend = tableModalReplyText.trim();
+    setTableModalIsReplying(true);
+
+    try {
+      await replyAdminEnquiry(currentId, textToSend);
+      await updateAdminEnquiryStatus(currentId, 'Responded');
+
+      setEnquiries((prev) =>
+        prev.map((item) =>
+          item.id === currentId || item.enquiryNumber === currentId
+            ? {
+                ...item,
+                status: 'Responded',
+                replyMessage: textToSend,
+                repliedAt: new Date().toISOString(),
+              }
+            : item
+        )
+      );
+
+      if (tableModalEnquiry.id === currentId || tableModalEnquiry.enquiryNumber === currentId) {
+        setTableModalEnquiry((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'Responded',
+                replyMessage: textToSend,
+                repliedAt: new Date().toISOString(),
+              }
+            : null
+        );
+      }
+
+      toast.success('Admin Response Transmitted', {
+        description: `Official response saved and status updated to Responded.`,
+      });
+    } catch {
+      toast.error('Failed to submit response to backend');
+    } finally {
+      setTableModalIsReplying(false);
     }
   };
 
@@ -413,6 +541,13 @@ export default function AdminDashboardPage() {
       badge: `${metrics.avgScore} Avg`,
       badgeColor: 'bg-primary-100 text-primary-800',
     },
+     {
+      id: 'vendors',
+      label: 'All Vendors Directory',
+      icon: Building2,
+      badge: metrics.total,
+      badgeColor: 'bg-slate-100 text-slate-700',
+    },
     {
       id: 'queue',
       label: 'Verification Queue',
@@ -428,12 +563,13 @@ export default function AdminDashboardPage() {
       badgeColor: 'bg-primary-600 text-white font-bold',
     },
     {
-      id: 'vendors',
-      label: 'All Vendors Directory',
-      icon: Building2,
-      badge: metrics.total,
-      badgeColor: 'bg-slate-100 text-slate-700',
+      id: 'enquiry_records',
+      label: 'Enquiry',
+      icon: ClipboardList,
+      badge: enquiries.length > 0 ? `${enquiries.length}` : null,
+      badgeColor: 'bg-slate-100 text-slate-700 font-semibold',
     },
+   
     {
       id: 'verified',
       label: 'Audited & Verified',
@@ -463,13 +599,6 @@ export default function AdminDashboardPage() {
       badgeColor: 'bg-orange-100 text-orange-800',
     },
     {
-      id: 'scoring',
-      label: 'Trust Scoring Matrix',
-      icon: Scale,
-      badge: '7 Dimensions',
-      badgeColor: 'bg-purple-100 text-purple-800',
-    },
-    {
       id: 'logs',
       label: 'Audit Trail & Logs',
       icon: History,
@@ -477,10 +606,11 @@ export default function AdminDashboardPage() {
       badgeColor: 'bg-slate-100 text-slate-600',
     },
     {
-      id: 'settings',
-      label: 'Auditor Settings',
-      icon: Settings,
-      badge: null,
+      id: 'scoring',
+      label: 'Trust Scoring Matrix',
+      icon: Scale,
+      badge: '7 Dimensions',
+      badgeColor: 'bg-purple-100 text-purple-800',
     },
     {
       id: 'access_control',
@@ -489,6 +619,13 @@ export default function AdminDashboardPage() {
       badge: 'RBAC',
       badgeColor: 'bg-teal-100 text-teal-800',
     },
+    {
+      id: 'settings',
+      label: 'Auditor Settings',
+      icon: Settings,
+      badge: null,
+    }
+   
   ];
 
   // Access Control mutates roles/permissions and requires `users.edit` on the
@@ -633,6 +770,10 @@ export default function AdminDashboardPage() {
               }}
               onAuditComplete={handleAuditComplete}
             />
+          ) : activeTab === 'access_control' ? (
+            <div className="flex-1 flex flex-col min-w-0 p-3 sm:p-4 max-w-7xl mx-auto w-full">
+              <AccessControlWorkspace />
+            </div>
           ) : (
             <div className="flex-1 flex flex-col min-w-0">
               {/* Top Header Bar */}
@@ -652,6 +793,8 @@ export default function AdminDashboardPage() {
                       <span>
                         {activeTab === 'overview' && 'Compliance Operations & Scoring'}
                         {activeTab === 'queue' && 'Vendor Verification Queue (Awaiting Audit)'}
+                        {activeTab === 'enquiries' && 'Buyer Enquiries & RFQ Leads Desk'}
+                        {activeTab === 'enquiry_records' && 'All Enquiry Records & Fulfillment Ledger'}
                         {activeTab === 'vendors' && 'Master Vendor Directory'}
                         {activeTab === 'verified' && 'Audited & Verified Suppliers'}
                         {activeTab === 'action_required' && 'Clarification Required (Action Pending)'}
@@ -660,7 +803,6 @@ export default function AdminDashboardPage() {
                         {activeTab === 'scoring' && '7-Dimension Trust Score Engine Matrix'}
                         {activeTab === 'logs' && 'Auditor Activity Trail & Compliance Log'}
                         {activeTab === 'settings' && 'Auditor Access & Verification Settings'}
-                        {activeTab === 'access_control' && 'Access Control & Role Permissions Matrix'}
                       </span>
                     </h1>
                     <p className="text-[11px] text-slate-500 hidden sm:block">
@@ -1190,7 +1332,7 @@ export default function AdminDashboardPage() {
                             onChange={(e) =>
                               handleAdminStatusChange(
                                 selectedEnquiry.enquiryNumber || selectedEnquiry.id,
-                                e.target.value as any
+                                e.target.value as AdminEnquiryItem['status']
                               )
                             }
                             className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 outline-none focus:border-primary-600"
@@ -1284,6 +1426,427 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* TAB: MASTER ENQUIRY RECORDS TABLE (With Status Sync & Admin Response)     */}
+            {/* ========================================================================= */}
+            {activeTab === 'enquiry_records' && (
+              <div className="space-y-6">
+                {/* 1. Header Banner */}
+                <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="max-w-2xl">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary-300 bg-primary-950 px-2 py-0.5 rounded-full border border-primary-700 inline-flex items-center gap-1.5">
+                      <ClipboardList className="size-3 text-primary-400" />
+                      <span>Centralized Enquiry Ledger</span>
+                    </span>
+                    <h3 className="text-lg font-black mt-1.5">Enterprise Enquiry Records</h3>
+                    <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                      Complete master ledger of all B2B procurement enquiries. Track lifecycle status updates and verified Super Admin responses in one audit-ready ledger.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="p-2 sm:p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
+                      <p className="text-base font-black text-white">{enquiries.length}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Total</p>
+                    </div>
+                    <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-center">
+                      <p className="text-base font-black text-emerald-400">
+                        {enquiries.filter((e) => e.status === 'Responded' || !!e.replyMessage).length}
+                      </p>
+                      <p className="text-[10px] text-emerald-300 font-medium">Responded</p>
+                    </div>
+                    <div className="p-2 sm:p-2.5 rounded-xl bg-amber-950/60 border border-amber-800/60 text-center">
+                      <p className="text-base font-black text-amber-400">
+                        {enquiries.filter((e) => e.status === 'In Discussion').length}
+                      </p>
+                      <p className="text-[10px] text-amber-300 font-medium">In Discussion</p>
+                    </div>
+                    <div className="p-2 sm:p-2.5 rounded-xl bg-primary-950/60 border border-primary-800/60 text-center">
+                      <p className="text-base font-black text-primary-300">
+                        {enquiries.filter((e) => e.status === 'New').length}
+                      </p>
+                      <p className="text-[10px] text-primary-300 font-medium">New</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Filters & Search */}
+                <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search Enquiry #, Buyer, Vendor, or Subject..."
+                        value={enquirySearchQuery}
+                        onChange={(e) => setEnquirySearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-primary-600 focus:ring-1 focus:ring-primary-600 text-slate-900 transition-colors"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Filter Vendor:</span>
+                      <select
+                        value={enquiryTableVendorFilter}
+                        onChange={(e) => setEnquiryTableVendorFilter(e.target.value)}
+                        className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-800 outline-none focus:border-primary-600"
+                      >
+                        <option value="all">All Vendors ({uniqueTargetVendors.length})</option>
+                        {uniqueTargetVendors.map((vnd) => (
+                          <option key={vnd} value={vnd}>
+                            {vnd}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Status:</span>
+                    {[
+                      { id: 'all', label: `All (${enquiries.length})` },
+                      { id: 'has_response', label: `Responded (${enquiries.filter((e) => e.status === 'Responded' || !!e.replyMessage).length})` },
+                      { id: 'In Discussion', label: `In Discussion (${enquiries.filter((e) => e.status === 'In Discussion').length})` },
+                      { id: 'New', label: `New (${enquiries.filter((e) => e.status === 'New').length})` },
+                      { id: 'Viewed', label: `Viewed (${enquiries.filter((e) => e.status === 'Viewed').length})` },
+                      { id: 'pending_response', label: `Pending Response (${enquiries.filter((e) => e.status !== 'Responded' && !e.replyMessage).length})` },
+                      { id: 'Closed/Rejected', label: `Closed (${enquiries.filter((e) => e.status === 'Closed/Rejected').length})` },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setEnquiryTableStatusFilter(tab.id)}
+                        className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-all ${
+                          enquiryTableStatusFilter === tab.id
+                            ? 'bg-slate-900 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. High-Precision Compact Enquiry Table (Fits viewport without horizontal scroll) */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/90 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <th className="py-2.5 px-3 w-[115px] whitespace-nowrap">Ref &amp; Date</th>
+                          <th className="py-2.5 px-3 w-[165px]">Buyer Enterprise</th>
+                          <th className="py-2.5 px-3 w-[125px]">Target Supplier</th>
+                          <th className="py-2.5 px-3 min-w-[200px]">Scope &amp; Budget</th>
+                          <th className="py-2.5 px-3 w-[130px] whitespace-nowrap">Status (Sync)</th>
+                          <th className="py-2.5 px-3 min-w-[170px] max-w-[220px]">Admin Response</th>
+                          <th className="py-2.5 px-3 w-[70px] text-right whitespace-nowrap">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredTableEnquiries.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-10 text-center text-slate-400">
+                              <ClipboardList className="size-7 mx-auto text-slate-300 mb-1.5" />
+                              <p className="text-xs font-bold text-slate-600">No matching enquiry records found</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Try resetting your filters or search keywords.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredTableEnquiries.map((enq) => {
+                            const isResponded = enq.status === 'Responded' || !!enq.replyMessage;
+                            return (
+                              <tr key={enq.id} className="hover:bg-slate-50/80 transition-colors">
+                                {/* Column 1: Ref & Date */}
+                                <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                                  <div className="font-mono text-xs font-bold text-slate-900">
+                                    {enq.enquiryNumber || enq.id}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 mt-0.5">{enq.date}</div>
+                                </td>
+
+                                {/* Column 2: Buyer Enterprise */}
+                                <td className="py-2.5 px-3 align-top">
+                                  <div className="font-bold text-slate-900 leading-snug">{enq.buyerCompany}</div>
+                                  <div className="text-[11px] text-slate-600 font-medium">{enq.buyerName}</div>
+                                  <div className="flex flex-col text-[10px] text-slate-500 font-mono mt-0.5 leading-tight">
+                                    <span>{enq.buyerEmail}</span>
+                                    {enq.buyerPhone && enq.buyerPhone !== 'N/A' && (
+                                      <span>{enq.buyerPhone}</span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Column 3: Target Supplier */}
+                                <td className="py-2.5 px-3 align-top">
+                                  <div className="font-bold text-slate-900 flex items-center gap-1">
+                                    <Building2 className="size-3 text-primary-600 shrink-0" />
+                                    <span>{enq.targetBusinessName}</span>
+                                  </div>
+                                  {enq.targetBusinessSlug && (
+                                    <Link
+                                      href={`/demo/business/${enq.targetBusinessSlug}`}
+                                      target="_blank"
+                                      className="text-[10px] text-primary-600 hover:underline inline-flex items-center gap-0.5 mt-0.5 font-medium"
+                                    >
+                                      <span>View Profile</span>
+                                      <ExternalLink className="size-2.5" />
+                                    </Link>
+                                  )}
+                                </td>
+
+                                {/* Column 4: Scope & Commercials (Combined for Precision) */}
+                                <td className="py-2.5 px-3 align-top">
+                                  <div className="font-semibold text-slate-800 line-clamp-1">{enq.subject}</div>
+                                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                                    <span className="px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-[10px]">
+                                      {enq.budget || 'Commercial RFQ'}
+                                    </span>
+                                    {enq.productName && (
+                                      <span className="px-1.5 py-0.2 rounded bg-blue-50 border border-blue-200 text-blue-700 font-semibold text-[10px]">
+                                        Scope: {enq.productName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 line-clamp-1 mt-1 leading-relaxed">
+                                    {enq.details}
+                                  </p>
+                                </td>
+
+                                {/* Column 5: Status with Live Update */}
+                                <td className="py-2.5 px-3 align-top">
+                                  <select
+                                    value={enq.status}
+                                    onChange={(e) =>
+                                      handleAdminStatusChange(
+                                        enq.enquiryNumber || enq.id,
+                                        e.target.value as AdminEnquiryItem['status']
+                                      )
+                                    }
+                                    className={`text-[11px] font-bold rounded-lg px-2 py-1 border transition-colors outline-none cursor-pointer w-full ${
+                                      enq.status === 'New'
+                                        ? 'bg-primary-50 text-primary-800 border-primary-300'
+                                        : enq.status === 'In Discussion'
+                                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                        : enq.status === 'Responded'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        : enq.status === 'Viewed'
+                                        ? 'bg-slate-100 text-slate-800 border-slate-300'
+                                        : 'bg-rose-50 text-rose-800 border-rose-300'
+                                    }`}
+                                  >
+                                    <option value="New">New</option>
+                                    <option value="Viewed">Viewed</option>
+                                    <option value="In Discussion">In Discussion</option>
+                                    <option value="Responded">Responded</option>
+                                    <option value="Closed/Rejected">Closed/Rejected</option>
+                                  </select>
+                                </td>
+
+                                {/* Column 6: Admin Response */}
+                                <td className="py-2.5 px-3 align-top">
+                                  {isResponded ? (
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700">
+                                        <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                        <span>Official Response Transmitted</span>
+                                      </div>
+                                      {enq.replyMessage ? (
+                                        <p className="text-[11px] text-slate-600 line-clamp-2 bg-slate-50 px-2 py-1 rounded-md border border-slate-200/70 italic leading-snug">
+                                          &ldquo;{enq.replyMessage}&rdquo;
+                                        </p>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 italic">No text logged</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                        <Clock className="size-2.5 text-amber-500" />
+                                        Awaiting Response
+                                      </span>
+                                      <div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setTableModalEnquiry(enq);
+                                            setTableModalReplyText(enq.replyMessage || '');
+                                          }}
+                                          className="text-[11px] font-bold text-primary-600 hover:text-primary-800 hover:underline inline-flex items-center gap-0.5"
+                                        >
+                                          <span>Add Response →</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Column 7: Action */}
+                                <td className="py-2.5 px-3 align-top text-right whitespace-nowrap">
+                                  <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={() => {
+                                      setTableModalEnquiry(enq);
+                                      setTableModalReplyText(enq.replyMessage || '');
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] h-7"
+                                    icon={<Eye className="size-3 text-slate-500" />}
+                                  >
+                                    Details
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. Detail & Response Modal */}
+                {tableModalEnquiry && (
+                  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 my-8">
+                      {/* Modal Header */}
+                      <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-400">
+                              {tableModalEnquiry.enquiryNumber || tableModalEnquiry.id}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                tableModalEnquiry.status === 'New'
+                                  ? 'bg-primary-50 text-primary-700'
+                                  : tableModalEnquiry.status === 'In Discussion'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : tableModalEnquiry.status === 'Responded'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {tableModalEnquiry.status}
+                            </span>
+                          </div>
+                          <h3 className="text-lg font-bold text-slate-900 mt-1">{tableModalEnquiry.subject}</h3>
+                          <p className="text-xs text-slate-500">
+                            Submitted on {tableModalEnquiry.date}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setTableModalEnquiry(null)}
+                          className="size-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 grid place-items-center"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+
+                      {/* Modal Grid: Buyer & Target Info */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Buyer Information
+                          </span>
+                          <p className="font-bold text-slate-900">{tableModalEnquiry.buyerCompany}</p>
+                          <p className="text-slate-600">{tableModalEnquiry.buyerName}</p>
+                          <p className="text-slate-500 font-mono">{tableModalEnquiry.buyerEmail}</p>
+                          {tableModalEnquiry.buyerPhone && tableModalEnquiry.buyerPhone !== 'N/A' && (
+                            <p className="text-slate-500 font-mono">{tableModalEnquiry.buyerPhone}</p>
+                          )}
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            Target Supplier &amp; Commercials
+                          </span>
+                          <p className="font-bold text-slate-900">{tableModalEnquiry.targetBusinessName}</p>
+                          {tableModalEnquiry.productName && (
+                            <p className="text-blue-700 font-semibold">Scope: {tableModalEnquiry.productName}</p>
+                          )}
+                          <p className="text-primary-700 font-bold">Estimated Budget: {tableModalEnquiry.budget}</p>
+                        </div>
+                      </div>
+
+                      {/* Enquiry Details Message */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 block">Buyer Requirement Details</label>
+                        <p className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {tableModalEnquiry.details}
+                        </p>
+                      </div>
+
+                      {/* Lifecycle Status Modifier */}
+                      <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                        <span className="text-xs font-bold text-slate-700">Update Lifecycle Status:</span>
+                        <select
+                          value={tableModalEnquiry.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as AdminEnquiryItem['status'];
+                            handleAdminStatusChange(
+                              tableModalEnquiry.enquiryNumber || tableModalEnquiry.id,
+                              newStatus
+                            );
+                            setTableModalEnquiry((prev) => (prev ? { ...prev, status: newStatus } : null));
+                          }}
+                          className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 outline-none focus:border-primary-600"
+                        >
+                          <option value="New">New</option>
+                          <option value="Viewed">Viewed</option>
+                          <option value="In Discussion">In Discussion</option>
+                          <option value="Responded">Responded</option>
+                          <option value="Closed/Rejected">Closed/Rejected</option>
+                        </select>
+                      </div>
+
+                      {/* Admin Response Composer */}
+                      <form onSubmit={handleTableModalReply} className="space-y-3 pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <Send className="size-3.5 text-primary-600" />
+                            <span>Super Admin Official Response</span>
+                          </label>
+                          {tableModalEnquiry.replyMessage && (
+                            <span className="text-[10px] font-bold text-emerald-700">
+                              ✓ Previously Responded
+                            </span>
+                          )}
+                        </div>
+                        <textarea
+                          rows={3}
+                          value={tableModalReplyText}
+                          onChange={(e) => setTableModalReplyText(e.target.value)}
+                          placeholder="Type official admin response, commercial qualification, or vendor routing guidance..."
+                          className="w-full text-xs p-3.5 rounded-2xl border border-slate-300 bg-white text-slate-900 outline-none focus:border-primary-600 focus:ring-1 focus:ring-primary-600"
+                          required
+                        />
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setTableModalEnquiry(null)}
+                          >
+                            Close
+                          </Button>
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            isLoading={tableModalIsReplying}
+                            icon={<Send className="size-3.5" />}
+                          >
+                            {tableModalIsReplying ? 'Transmitting...' : 'Save & Transmit Response'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1641,9 +2204,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             )}
-
-            {/* TAB: ACCESS CONTROL & RBAC MATRIX */}
-            {activeTab === 'access_control' && <AccessControl />}
           </div>
             </div>
           )}

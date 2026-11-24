@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
+import { authorize } from "../middlewares/rbac.middleware.js";
 import {
   submitEnquiry,
   getVendorEnquiries,
@@ -23,11 +24,12 @@ const enquiryRouter = Router();
 enquiryRouter.post("/", validateEnquiry(createEnquirySchema), submitEnquiry);
 
 // ─── 2. Super Admin Routes (Centralized Review Desk) ────────────────────────
-enquiryRouter.get("/admin", authenticate, getAdminEnquiries);
-enquiryRouter.patch("/admin/:id/status", authenticate, validateEnquiry(updateEnquiryStatusSchema), updateAdminEnquiryStatus);
-enquiryRouter.post("/admin/:id/reply", authenticate, validateEnquiry(replyEnquirySchema), replyAdminEnquiry);
+// Strictly gated to authorized Admin personnel
+enquiryRouter.get("/admin", authenticate, authorize("enquiries.view"), getAdminEnquiries);
+enquiryRouter.patch("/admin/:id/status", authenticate, authorize("enquiries.status"), validateEnquiry(updateEnquiryStatusSchema), updateAdminEnquiryStatus);
+enquiryRouter.post("/admin/:id/reply", authenticate, authorize("enquiries.respond"), validateEnquiry(replyEnquirySchema), replyAdminEnquiry);
 
-// ─── 3. Authenticated Vendor Routes ─────────────────────────────────────────
+// ─── 3. Vendor Routes (Access Blocked with 403 Forbidden) ───────────────────
 enquiryRouter.get("/vendor", authenticate, getVendorEnquiries);
 enquiryRouter.patch("/vendor/:id/status", authenticate, validateEnquiry(updateEnquiryStatusSchema), updateEnquiryStatus);
 enquiryRouter.post("/vendor/:id/reply", authenticate, validateEnquiry(replyEnquirySchema), replyEnquiry);

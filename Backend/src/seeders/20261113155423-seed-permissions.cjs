@@ -50,6 +50,17 @@ module.exports = {
       // 8. Settings
       { code: 'settings.view', module: 'Settings', action: 'view', name: 'View System & Security Settings', description: 'Inspect platform configurations, API integrations and master keys' },
       { code: 'settings.edit', module: 'Settings', action: 'edit', name: 'Configure System Parameters', description: 'Adjust verification SLAs, webhooks and security settings' },
+
+      // 9. Products & Commercial Offerings
+      { code: 'products.view', module: 'Products', action: 'view', name: 'View Products Catalog', description: 'Explore registered supplier products, technical specifications and pricing' },
+      { code: 'products.create', module: 'Products', action: 'create', name: 'Create Product Offering', description: 'Register new commercial products, technical datasheets and images' },
+      { code: 'products.edit', module: 'Products', action: 'edit', name: 'Edit Product Offering', description: 'Update product specifications, prices, MOQ and compliance certificates' },
+      { code: 'products.delete', module: 'Products', action: 'delete', name: 'Delete Product Offering', description: 'Remove or archive product offerings from business catalog' },
+
+      // 10. Buyer Enquiries & Centralized RFQ Leads (Admin exclusive)
+      { code: 'enquiries.view', module: 'Buyer Enquiries', action: 'view', name: 'View Centralized Buyer Enquiries', description: 'Access RFQ leads and buyer communications across platform' },
+      { code: 'enquiries.respond', module: 'Buyer Enquiries', action: 'edit', name: 'Respond to Buyer Enquiries', description: 'Transmit official corporate proposal or response to buyers' },
+      { code: 'enquiries.status', module: 'Buyer Enquiries', action: 'approve', name: 'Update Enquiry Status', description: 'Transition lifecycle status of buyer inquiries' },
     ];
 
     const ROLE_PERMISSIONS_MAP = {
@@ -59,6 +70,8 @@ module.exports = {
         'vendors.view', 'vendors.create', 'vendors.edit', 'vendors.approve', 'vendors.export',
         'verification.view', 'verification.edit', 'verification.approve',
         'documents.view', 'documents.create', 'documents.edit', 'documents.approve',
+        'products.view', 'products.create', 'products.edit', 'products.delete',
+        'enquiries.view', 'enquiries.respond', 'enquiries.status',
         'scoring.view', 'scoring.edit', 'scoring.approve',
         'reports.view', 'reports.export',
         'settings.view', 'settings.edit'
@@ -83,9 +96,16 @@ module.exports = {
         'vendors.view',
         'reports.view'
       ],
+      // Vendor role possesses self-service permissions. All routes additionally enforce ownerUserId isolation.
+      // Vendor role strictly excludes platform-wide administrative viewing (vendors.view) and buyer inquiries.
       vendor: [
-        'vendors.view', 'vendors.edit',
-        'documents.view', 'documents.create'
+        'vendors.edit',
+        'documents.view',
+        'documents.create',
+        'products.view',
+        'products.create',
+        'products.edit',
+        'products.delete'
       ]
     };
 
@@ -168,7 +188,9 @@ module.exports = {
       'documents.view', 'documents.create', 'documents.edit', 'documents.delete', 'documents.approve',
       'scoring.view', 'scoring.edit', 'scoring.approve',
       'reports.view', 'reports.export',
-      'settings.view', 'settings.edit'
+      'settings.view', 'settings.edit',
+      'products.view', 'products.create', 'products.edit', 'products.delete',
+      'enquiries.view', 'enquiries.respond', 'enquiries.status'
     ];
 
     // Delete mappings for these permissions

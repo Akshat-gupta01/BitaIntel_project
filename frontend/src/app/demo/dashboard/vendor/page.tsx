@@ -58,12 +58,6 @@ import {
   FileCheck2,
   Download,
   DollarSign,
-  MessageSquare,
-  Send,
-  RefreshCw,
-  Mail,
-  Phone,
-  Inbox,
 } from 'lucide-react';
 
 interface BackendFacility {
@@ -115,6 +109,7 @@ interface BackendProduct {
   images?: string[];
   productPhotos?: string[];
   imageUrl?: string; // Product main image URL
+  image?: string; // Product fallback image string
   catalogueDoc?: string;
   technicalDataSheetDoc?: string;
   coaDoc?: string;
@@ -147,26 +142,6 @@ interface BackendDocRecord {
   rejectionReason?: string;
   fileSizeBytes?: number;
   fileUrl?: string;
-}
-
-type VendorEnquiryStatus = 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected';
-
-interface VendorEnquiryItem {
-  id: string;
-  enquiryNumber: string;
-  buyerName: string;
-  buyerCompany: string;
-  buyerEmail: string;
-  buyerPhone: string;
-  subject: string;
-  details: string;
-  date: string;
-  status: VendorEnquiryStatus;
-  budget: string;
-  productName?: string | null;
-  replyMessage?: string | null;
-  repliedAt?: string | null;
-  createdAt?: string;
 }
 
 interface BackendBusinessPayload {
@@ -240,7 +215,7 @@ interface BackendBusinessPayload {
   products?: BackendProduct[];
   certifications?: BackendCertification[];
   commercial?: {
-    departmentContacts?: unknown[];
+    departmentContacts?: DepartmentContact[];
     acceptedCurrencies?: string[];
     paymentMethods?: string[];
     advancePaymentPercentage?: string | number;
@@ -319,13 +294,14 @@ interface BackendBusinessPayload {
     authorityConsent?: boolean;
     [key: string]: unknown;
   };
-  departmentContacts?: Record<string, unknown>[];
+  departmentContacts?: DepartmentContact[];
   documents?: BackendDocRecord[];
   registrationNo?: string;
   verificationStatus?: string;
   verified?: boolean;
   score?: number;
   badge?: string;
+  slug?: string;
 }
 
 // Modules A through F per SRS Section 5.3
@@ -554,7 +530,6 @@ export default function VendorDashboardPage() {
     | 'documents'
     | 'score'
     | 'modules'
-    | 'enquiries'
     | 'notifications'
     | 'settings'
   >('overview');
@@ -569,6 +544,7 @@ export default function VendorDashboardPage() {
   });
   const [backendScore, setBackendScore] = useState<number | null>(null);
   const [backendBadge, setBackendBadge] = useState<string | null>(null);
+  const [businessSlug, setBusinessSlug] = useState<string>('meridian-steel-works');
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
   const [onboardingInitialStep, setOnboardingInitialStep] = useState(2);
@@ -583,12 +559,6 @@ export default function VendorDashboardPage() {
 
   // Notifications State
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-
-  // Buyer Enquiries / RFQ State (vendor-tenant scoped)
-  const [enquiries, setEnquiries] = useState<VendorEnquiryItem[]>([]);
-  const [enquiriesLoading, setEnquiriesLoading] = useState(false);
-  const [enquiryReplyDraft, setEnquiryReplyDraft] = useState<Record<string, string>>({});
-  const [enquirySavingId, setEnquirySavingId] = useState<string | null>(null);
 
   // Keep Step 1 & Step 2 synchronized with authenticated user whenever user context updates
   useEffect(() => {
@@ -638,6 +608,9 @@ export default function VendorDashboardPage() {
       .then((res: { data?: { business?: BackendBusinessPayload } }) => {
         const b = res?.data?.business;
         if (b) {
+          if (b.slug) {
+            setBusinessSlug(b.slug);
+          }
           setDossier((prev) => {
             const updatedStep3 = b.capabilities
               ? {
@@ -790,7 +763,7 @@ export default function VendorDashboardPage() {
                         priceValidity: p.priceValidity || '',
                         targetMarkets: p.targetMarkets || '',
                         images: vendorService.normalizeImageArray(
-                          p.images || p.productPhotos || (p as any).imageUrl || (p as any).image
+                          p.images || p.productPhotos || p.imageUrl || p.image
                         ),
                         catalogueDoc: p.catalogueDoc || undefined,
                         technicalDataSheetDoc: p.technicalDataSheetDoc || undefined,
@@ -827,21 +800,21 @@ export default function VendorDashboardPage() {
                     ...prev.step5,
                     departmentContacts:
                       Array.isArray(b.departmentContacts) && b.departmentContacts.length > 0
-                        ? (b.departmentContacts as unknown as DepartmentContact[])
-                        : Array.isArray(b.commercial?.departmentContacts) && (b.commercial.departmentContacts as unknown[]).length > 0
-                        ? (b.commercial.departmentContacts as unknown as DepartmentContact[])
+                        ? b.departmentContacts
+                        : Array.isArray(b.commercial?.departmentContacts) && (b.commercial?.departmentContacts?.length ?? 0) > 0
+                        ? (b.commercial?.departmentContacts as DepartmentContact[])
                         : prev.step5.departmentContacts,
                     acceptedCurrencies:
-                      Array.isArray(b.commercialTerms?.acceptedCurrencies)
-                        ? (b.commercialTerms.acceptedCurrencies as string[])
-                        : Array.isArray(b.commercial?.acceptedCurrencies)
-                        ? (b.commercial.acceptedCurrencies as string[])
+                      Array.isArray(b.commercialTerms?.acceptedCurrencies) && (b.commercialTerms?.acceptedCurrencies?.length ?? 0) > 0
+                        ? (b.commercialTerms?.acceptedCurrencies as string[])
+                        : Array.isArray(b.commercial?.acceptedCurrencies) && (b.commercial?.acceptedCurrencies?.length ?? 0) > 0
+                        ? (b.commercial?.acceptedCurrencies as string[])
                         : prev.step5.acceptedCurrencies,
                     paymentMethods:
-                      Array.isArray(b.commercialTerms?.paymentMethods)
-                        ? (b.commercialTerms.paymentMethods as string[])
-                        : Array.isArray(b.commercial?.paymentMethods)
-                        ? (b.commercial.paymentMethods as string[])
+                      Array.isArray(b.commercialTerms?.paymentMethods) && (b.commercialTerms?.paymentMethods?.length ?? 0) > 0
+                        ? (b.commercialTerms?.paymentMethods as string[])
+                        : Array.isArray(b.commercial?.paymentMethods) && (b.commercial?.paymentMethods?.length ?? 0) > 0
+                        ? (b.commercial?.paymentMethods as string[])
                         : prev.step5.paymentMethods,
                     advancePaymentPercentage:
                       String(b.commercialTerms?.advancePaymentPercentage || b.commercial?.advancePaymentPercentage || prev.step5.advancePaymentPercentage || ''),
@@ -866,10 +839,10 @@ export default function VendorDashboardPage() {
                     annualTradeTurnover:
                       String(b.tradeLogistics?.annualTradeTurnover || b.commercial?.annualTradeTurnover || prev.step5.annualTradeTurnover || ''),
                     preferredIncoterms:
-                      Array.isArray(b.tradeLogistics?.preferredIncoterms)
-                        ? (b.tradeLogistics.preferredIncoterms as string[])
-                        : Array.isArray(b.commercial?.preferredIncoterms)
-                        ? (b.commercial.preferredIncoterms as string[])
+                      Array.isArray(b.tradeLogistics?.preferredIncoterms) && (b.tradeLogistics?.preferredIncoterms?.length ?? 0) > 0
+                        ? (b.tradeLogistics?.preferredIncoterms as string[])
+                        : Array.isArray(b.commercial?.preferredIncoterms) && (b.commercial?.preferredIncoterms?.length ?? 0) > 0
+                        ? (b.commercial?.preferredIncoterms as string[])
                         : prev.step5.preferredIncoterms,
                     freightArrangements:
                       String(b.tradeLogistics?.freightArrangements || b.commercial?.freightArrangements || prev.step5.freightArrangements || ''),
@@ -998,63 +971,6 @@ export default function VendorDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Buyer Enquiries / RFQ Desk (server-side tenant isolation by businessId) ──
-  const loadVendorEnquiries = async () => {
-    setEnquiriesLoading(true);
-    try {
-      const res = await vendorService.getVendorEnquiries();
-      const list = res?.data?.enquiries;
-      setEnquiries(Array.isArray(list) ? (list as VendorEnquiryItem[]) : []);
-    } catch {
-      setEnquiries([]);
-    } finally {
-      setEnquiriesLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadVendorEnquiries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleEnquiryStatusChange = async (enquiry: VendorEnquiryItem, status: VendorEnquiryStatus) => {
-    try {
-      await vendorService.updateEnquiryStatus(enquiry.id, status);
-      setEnquiries((prev) => prev.map((e) => (e.id === enquiry.id ? { ...e, status } : e)));
-      toast.success(`Enquiry ${enquiry.enquiryNumber} marked as ${status}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update enquiry status';
-      toast.error(message);
-    }
-  };
-
-  const handleEnquiryReply = async (enquiry: VendorEnquiryItem) => {
-    const draft = (enquiryReplyDraft[enquiry.id] || '').trim();
-    if (!draft) {
-      toast.error('Please write a response before sending');
-      return;
-    }
-    setEnquirySavingId(enquiry.id);
-    try {
-      const res = await vendorService.replyToEnquiry(enquiry.id, draft);
-      const savedReply = (res?.data?.replyMessage as string | undefined) ?? draft;
-      setEnquiries((prev) =>
-        prev.map((e) =>
-          e.id === enquiry.id
-            ? { ...e, status: 'Responded', replyMessage: savedReply, repliedAt: new Date().toISOString() }
-            : e
-        )
-      );
-      setEnquiryReplyDraft((prev) => ({ ...prev, [enquiry.id]: '' }));
-      toast.success(`Response sent for ${enquiry.enquiryNumber}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to send response';
-      toast.error(message);
-    } finally {
-      setEnquirySavingId(null);
-    }
-  };
-
   // Weighted 0-100: Identity 20%, Govt 20%, Operations 15%, Docs 15%, Financial 15%, Compliance 10%, Completeness 5%
   const trustScore = backendScore !== null ? backendScore : (user?.score || 0);
   const scoreTier =
@@ -1087,8 +1003,7 @@ export default function VendorDashboardPage() {
     { id: 'certifications', label: 'Quality & Standards', icon: Award, badge: `${dossier.step4.certifications.length} Audited` },
     { id: 'commercial', label: 'Commercial & Banking', icon: DollarSign, badge: 'Protected' },
     { id: 'documents', label: 'Document Vault', icon: FileCheck2, badge: `${documents.length} Files` },
-    { id: 'enquiries', label: 'Buyer Enquiries', icon: Inbox, badge: `${enquiries.filter((e) => e.status === 'New').length}` },
-    { id: 'score', label: 'Score & Badge', icon: Award, badge: '89/100' },
+    { id: 'score', label: 'Score & Badge', icon: Award, badge: `${trustScore}/100` },
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: `${notifications.filter(n => !n.read).length}` },
     { id: 'settings', label: 'Account Settings', icon: Settings, badge: null },
   ];
@@ -1234,7 +1149,7 @@ export default function VendorDashboardPage() {
           {/* Bottom Profile & Actions */}
           <div className="p-4 border-t border-slate-200/80 space-y-2 bg-white">
             <Link
-              href="/demo/business/meridian-steel-works"
+              href={`/demo/business/${businessSlug}`}
               className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/70 text-xs font-semibold transition-colors"
             >
               <span className="flex items-center gap-2">
@@ -1292,8 +1207,8 @@ export default function VendorDashboardPage() {
                     {activeTab === 'certifications' && 'Quality & Standards Certifications (Step 4)'}
                     {activeTab === 'commercial' && 'Commercial, Trade & Banking (Step 5)'}
                     {activeTab === 'documents' && 'Document Management Vault (Step 6)'}
-                    {activeTab === 'enquiries' && 'Buyer Enquiries & RFQ Desk'}
                     {activeTab === 'score' && 'BITAINTEL Trust Score & Badge'}
+                    {activeTab === 'modules' && 'Multi-Module Business Information (A–F)'}
                     {activeTab === 'notifications' && 'System Notifications'}
                     {activeTab === 'settings' && 'Account & Security Settings'}
                   </span>
@@ -1868,144 +1783,6 @@ export default function VendorDashboardPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
-
-            {/* ===================================================================== */}
-            {/* TAB: BUYER ENQUIRIES & RFQ DESK (Admin-reviewed buyer leads)          */}
-            {/* ===================================================================== */}
-            {activeTab === 'enquiries' && (
-              <div className="space-y-5 animate-in fade-in">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">Buyer Enquiries &amp; RFQ Desk</h2>
-                    <p className="text-xs text-slate-500">
-                      Verified buyer leads routed to your company by the BITAINTEL Super Admin desk.
-                    </p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={loadVendorEnquiries}
-                    icon={<RefreshCw className={`size-4 ${enquiriesLoading ? 'animate-spin' : ''}`} />}
-                  >
-                    Refresh
-                  </Button>
-                </div>
-
-                {enquiriesLoading ? (
-                  <Card variant="bento" className="p-8 bg-white grid place-items-center">
-                    <RefreshCw className="size-5 text-slate-400 animate-spin" />
-                    <p className="text-xs text-slate-500 mt-2">Loading buyer enquiries…</p>
-                  </Card>
-                ) : enquiries.length === 0 ? (
-                  <Card variant="bento" className="p-10 bg-white text-center">
-                    <div className="size-12 rounded-full bg-slate-100 text-slate-500 grid place-items-center mx-auto mb-3">
-                      <Inbox className="size-6" />
-                    </div>
-                    <p className="text-sm font-bold text-slate-900">No buyer enquiries yet</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      When a buyer submits an RFQ for your business, the Super Admin relays it here.
-                    </p>
-                  </Card>
-                ) : (
-                  <div className="space-y-3">
-                    {enquiries.map((enq) => (
-                      <Card key={enq.id} variant="bento" className="p-4 bg-white space-y-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">{enq.subject}</p>
-                            <p className="text-[11px] text-slate-500 font-mono">
-                              {enq.enquiryNumber} · {enq.date}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                              enq.status === 'New'
-                                ? 'bg-amber-100 text-amber-800'
-                                : enq.status === 'Responded'
-                                ? 'bg-primary-100 text-primary-800'
-                                : enq.status === 'Closed/Rejected'
-                                ? 'bg-slate-200 text-slate-700'
-                                : 'bg-sky-100 text-sky-800'
-                            }`}
-                          >
-                            {enq.status}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-slate-600">
-                          <p className="flex items-center gap-1.5">
-                            <Mail className="size-3.5 text-slate-400" /> {enq.buyerEmail}
-                          </p>
-                          <p className="flex items-center gap-1.5">
-                            <Phone className="size-3.5 text-slate-400" /> {enq.buyerPhone}
-                          </p>
-                          <p className="font-semibold text-slate-800">{enq.buyerName}</p>
-                          <p>{enq.buyerCompany}</p>
-                          {enq.productName && (
-                            <p className="sm:col-span-2 flex items-center gap-1.5">
-                              <FileText className="size-3.5 text-slate-400" /> Product: {enq.productName}
-                            </p>
-                          )}
-                        </div>
-
-                        <p className="text-xs text-slate-700 bg-slate-50 rounded-xl p-3 border border-slate-100 whitespace-pre-wrap">
-                          {enq.details}
-                        </p>
-
-                        {enq.replyMessage && (
-                          <div className="text-xs rounded-xl p-3 border border-primary-100 bg-primary-50/70 text-primary-900 whitespace-pre-wrap">
-                            <p className="font-bold mb-1 flex items-center gap-1.5">
-                              <Send className="size-3.5" /> Conversation thread
-                            </p>
-                            {enq.replyMessage}
-                          </div>
-                        )}
-
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <textarea
-                            value={enquiryReplyDraft[enq.id] || ''}
-                            onChange={(e) =>
-                              setEnquiryReplyDraft((prev) => ({ ...prev, [enq.id]: e.target.value }))
-                            }
-                            placeholder="Write your commercial response / quotation…"
-                            rows={2}
-                            className="flex-1 text-xs rounded-xl border border-slate-200 p-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <div className="flex sm:flex-col gap-2 justify-end">
-                            <Button
-                              variant="primary"
-                              onClick={() => handleEnquiryReply(enq)}
-                              icon={
-                                enquirySavingId === enq.id ? (
-                                  <RefreshCw className="size-3.5 animate-spin" />
-                                ) : (
-                                  <Send className="size-3.5" />
-                                )
-                              }
-                            >
-                              {enquirySavingId === enq.id ? 'Sending…' : 'Send Reply'}
-                            </Button>
-                            <select
-                              value={enq.status}
-                              onChange={(e) =>
-                                handleEnquiryStatusChange(enq, e.target.value as VendorEnquiryStatus)
-                              }
-                              className="text-[11px] font-semibold rounded-lg border border-slate-200 px-2 py-1.5 bg-white"
-                              aria-label="Update enquiry status"
-                            >
-                              <option value="New">New</option>
-                              <option value="Viewed">Viewed</option>
-                              <option value="In Discussion">In Discussion</option>
-                              <option value="Responded">Responded</option>
-                              <option value="Closed/Rejected">Closed/Rejected</option>
-                            </select>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 

@@ -48,6 +48,16 @@ export const createProfileSchema = z.object({
   logoUrl: z.string().optional().nullable(),
   turnover: z.string().default("₹10 Cr - ₹50 Cr").optional(),
   employees: z.string().default("51 - 200").optional(),
+  authorizedName: z.string().optional().nullable(),
+  fullName: z.string().optional().nullable(),
+  designation: z.string().optional().nullable(),
+  mobile: z.string().optional().nullable(),
+  email: z.string().optional().nullable(),
+  rfqEscalationEmail: z.string().optional().nullable(),
+  departmentEmail: z.string().optional().nullable(),
+  alternatePhone: z.string().optional().nullable(),
+  departmentPhone: z.string().optional().nullable(),
+  corporateLandline: z.string().optional().nullable(),
 }).passthrough();
 
 // 2. Update Business Profile Schema (Partial)

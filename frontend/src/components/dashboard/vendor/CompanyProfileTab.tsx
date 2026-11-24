@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Step2CompanyData, FacilityAddress, KeyPersonnel } from '@/types/vendorRegistration';
 import * as vendorService from '../../../../services/vendor.service';
 import { Card } from '@/components/ui/Card';
@@ -16,7 +16,11 @@ import {
   Trash2,
   Edit2,
   CheckCircle2,
-  Lock,
+  User,
+  UploadCloud,
+  Camera,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,6 +42,10 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
   const [pRole, setPRole] = useState('Marketing Head');
   const [pEmail, setPEmail] = useState('');
   const [pMobile, setPMobile] = useState('');
+  const [pPhotoUrl, setPPhotoUrl] = useState<string | null>(null);
+  const [pUploadingPhoto, setPUploadingPhoto] = useState(false);
+  const [pUploadError, setPUploadError] = useState<string | null>(null);
+  const pPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [showEditStatutory, setShowEditStatutory] = useState(false);
   const [editTan, setEditTan] = useState(data.tan || '');
@@ -153,6 +161,44 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
     toast.info('Facility removed.');
   }
 
+  async function handlePhotoSelectAndUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate format
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setPUploadError('Only JPG, PNG and WebP images are supported.');
+      toast.error('Invalid file format. Please upload a JPG, PNG or WebP image.');
+      return;
+    }
+
+    // Validate size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setPUploadError('File size exceeds 5MB limit.');
+      toast.error('File too large. Maximum size is 5MB.');
+      return;
+    }
+
+    setPUploadError(null);
+    setPUploadingPhoto(true);
+
+    try {
+      const uploadedPath = await vendorService.uploadPersonnelPhoto(file);
+      setPPhotoUrl(uploadedPath);
+      toast.success('Executive Photo Uploaded', {
+        description: 'Photo uploaded successfully. Save the executive to store permanently.',
+      });
+    } catch (err: any) {
+      console.error('Personnel photo upload error:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to upload photo';
+      setPUploadError(msg);
+      toast.error('Photo Upload Failed', { description: msg });
+    } finally {
+      setPUploadingPhoto(false);
+    }
+  }
+
   async function handleSavePerson() {
     if (!pName || !pEmail) {
       toast.error('Please enter personnel name and official email.');
@@ -171,6 +217,7 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
       email: pEmail.trim(),
       mobile: pMobile ? pMobile.trim() : '0000000000',
       isAuthorizedSignatory: false,
+      photoUrl: pPhotoUrl || undefined,
     };
 
     let assignedId = `KP-${Date.now()}`;
@@ -193,6 +240,7 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
       designation: pRole,
       email: pEmail,
       mobile: pMobile,
+      photoUrl: pPhotoUrl || undefined,
       isAuthorizedSignatory: false,
     };
     onUpdate({ keyPersonnel: [...data.keyPersonnel, newP] });
@@ -200,6 +248,9 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
     setPName('');
     setPEmail('');
     setPMobile('');
+    setPPhotoUrl(null);
+    setPUploadError(null);
+    if (pPhotoInputRef.current) pPhotoInputRef.current.value = '';
   }
 
   async function handleRemovePerson(id: string) {
@@ -564,18 +615,128 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
 
         {/* Add Person Drawer */}
         {showAddPerson && (
-          <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
-            <h4 className="text-xs font-bold text-primary-950">Add Executive Profile</h4>
+          <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-primary-200/60">
+              <h4 className="text-xs font-bold text-primary-950 flex items-center gap-1.5">
+                <Users className="size-4 text-primary-700" />
+                Add Executive Profile
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddPerson(false);
+                  setPPhotoUrl(null);
+                  setPUploadError(null);
+                  if (pPhotoInputRef.current) pPhotoInputRef.current.value = '';
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Profile Photo Upload Section */}
+            <div className="bg-white rounded-xl border border-primary-200/80 p-3.5 flex flex-col sm:flex-row items-center sm:items-start gap-4">
+              {/* Photo Avatar Preview */}
+              <div className="shrink-0">
+                {pPhotoUrl ? (
+                  <div className="size-16 rounded-full overflow-hidden border-2 border-primary-500 shadow-sm bg-slate-100">
+                    <img
+                      src={vendorService.getFullImageUrl(pPhotoUrl)}
+                      alt="Executive Preview"
+                      className="size-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="size-16 rounded-full border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400">
+                    <User className="size-7 text-slate-400" />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls & Instructions */}
+              <div className="flex-1 space-y-1.5 text-center sm:text-left">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <input
+                    ref={pPhotoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/jpg"
+                    className="hidden"
+                    onChange={handlePhotoSelectAndUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    disabled={pUploadingPhoto}
+                    onClick={() => pPhotoInputRef.current?.click()}
+                    className="text-xs font-bold border-primary-300 text-primary-700 hover:bg-primary-50"
+                  >
+                    {pUploadingPhoto ? (
+                      <>
+                        <RefreshCw className="size-3.5 mr-1.5 animate-spin text-primary-600" />
+                        Uploading Photo...
+                      </>
+                    ) : pPhotoUrl ? (
+                      <>
+                        <Camera className="size-3.5 mr-1.5 text-primary-600" />
+                        Replace Photo
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="size-3.5 mr-1.5 text-primary-600" />
+                        Upload Photo
+                      </>
+                    )}
+                  </Button>
+
+                  {pPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPPhotoUrl(null);
+                        if (pPhotoInputRef.current) pPhotoInputRef.current.value = '';
+                      }}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 rounded hover:bg-rose-50 transition"
+                    >
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Select a headshot photo from your device (JPG, PNG, WebP &bull; Max 5MB).
+                </p>
+
+                {pUploadError && (
+                  <p className="text-[11px] text-rose-600 font-medium">{pUploadError}</p>
+                )}
+                {pPhotoUrl && !pUploadingPhoto && (
+                  <p className="text-[11px] text-emerald-700 font-semibold flex items-center justify-center sm:justify-start gap-1">
+                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                    Profile photo uploaded and ready to save
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Form Fields */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
                 <Input
                   value={pName}
                   onChange={(e) => setPName(e.target.value)}
-                  placeholder="Full Name"
-                  className="text-xs"
+                  placeholder="e.g. Dr. Ananya Roy"
+                  className="text-xs bg-white"
                 />
               </div>
               <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Designation / Role <span className="text-rose-500">*</span>
+                </label>
                 <select
                   value={pRole}
                   onChange={(e) => setPRole(e.target.value)}
@@ -589,24 +750,44 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
                 </select>
               </div>
               <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Official Corporate Email <span className="text-rose-500">*</span>
+                </label>
                 <Input
                   type="email"
                   value={pEmail}
                   onChange={(e) => setPEmail(e.target.value)}
-                  placeholder="Official Email"
-                  className="text-xs"
+                  placeholder="e.g. ananya@company.com"
+                  className="text-xs bg-white"
                 />
               </div>
               <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Direct Mobile
+                </label>
                 <Input
                   value={pMobile}
                   onChange={(e) => setPMobile(e.target.value)}
-                  placeholder="Direct Mobile"
-                  className="text-xs"
+                  placeholder="e.g. +91 98201 44825"
+                  className="text-xs bg-white"
                 />
               </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-primary-200/60">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowAddPerson(false);
+                  setPPhotoUrl(null);
+                  setPUploadError(null);
+                  if (pPhotoInputRef.current) pPhotoInputRef.current.value = '';
+                }}
+                className="text-xs text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -625,21 +806,31 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
               key={person.id}
               className="rounded-xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-3 shadow-2xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="size-11 rounded-full bg-primary-100 text-primary-800 font-extrabold grid place-items-center text-xs">
-                  {person.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase()}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative shrink-0">
+                  {person.photoUrl ? (
+                    <img
+                      src={vendorService.getFullImageUrl(person.photoUrl)}
+                      alt={person.name}
+                      className="size-11 rounded-full object-cover bg-slate-100 border border-slate-200"
+                    />
+                  ) : (
+                    <div className="size-11 rounded-full bg-primary-100 text-primary-800 font-extrabold grid place-items-center text-xs">
+                      {person.name
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">{person.name}</h4>
-                  <span className="text-[11px] font-semibold text-primary-700 block">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-900 truncate">{person.name}</h4>
+                  <span className="text-[11px] font-semibold text-primary-700 block truncate">
                     {person.designation}
                   </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                     {person.email} • {person.mobile}
                   </p>
                 </div>
@@ -647,7 +838,7 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
               <button
                 type="button"
                 onClick={() => handleRemovePerson(person.id)}
-                className="text-slate-400 hover:text-rose-600 p-1"
+                className="text-slate-400 hover:text-rose-600 p-1 shrink-0"
               >
                 <Trash2 className="size-3.5" />
               </button>

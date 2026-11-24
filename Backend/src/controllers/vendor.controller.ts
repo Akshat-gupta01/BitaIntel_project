@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Request, Response } from "express";
+import { Op } from "sequelize";
 import productUpload, { productUploadAsync } from "../config/multer.config.js";
 import {
   User,
@@ -405,6 +406,16 @@ export async function updateProfile(req: Request, res: Response) {
     duns,
     dunsNumber,
     lei,
+    authorizedName,
+    fullName,
+    designation,
+    mobile,
+    email,
+    rfqEscalationEmail,
+    departmentEmail,
+    alternatePhone,
+    departmentPhone,
+    corporateLandline,
   } = req.body;
 
   // Execute entire update workflow in a database transaction
@@ -546,6 +557,112 @@ export async function updateProfile(req: Request, res: Response) {
         }
         statutoryUpdates.statutoryPayload = newPayload;
         await statutory.update(statutoryUpdates, { transaction: t });
+      }
+    }
+
+    // ─── 3. User Table Updates (Authorized Signatory & Contact Routing) ───────────
+    const effectiveAuthorizedName = authorizedName !== undefined ? authorizedName : fullName;
+    const userUpdates: Record<string, any> = {};
+    if (effectiveAuthorizedName !== undefined && String(effectiveAuthorizedName).trim()) {
+      userUpdates.fullName = String(effectiveAuthorizedName).trim();
+    }
+    if (designation !== undefined && String(designation).trim()) {
+      userUpdates.designation = String(designation).trim();
+    }
+    if (mobile !== undefined && String(mobile).trim()) {
+      userUpdates.mobile = String(mobile).trim();
+    }
+    if (email !== undefined && String(email).trim() && String(email).includes("@")) {
+      const cleanEmail = String(email).trim().toLowerCase();
+      // Ensure email is not already taken by another account
+      const existingUser = await User.findOne({
+        where: { email: cleanEmail, id: { [Op.ne]: userId } },
+        transaction: t,
+      });
+      if (!existingUser) {
+        userUpdates.email = cleanEmail;
+      }
+    }
+
+    if (Object.keys(userUpdates).length > 0) {
+      await User.update(userUpdates, {
+        where: { id: userId },
+        transaction: t,
+      });
+    }
+
+    // ─── 4. Business Personnel Updates (Authorized Signatory Sync) ─────────────────
+    if (effectiveAuthorizedName !== undefined || designation !== undefined || mobile !== undefined) {
+      const signatoryPersonnel = await BusinessPersonnel.findOne({
+        where: { businessId: business.id, isAuthorizedSignatory: true },
+        transaction: t,
+      });
+      if (signatoryPersonnel) {
+        const pUpdates: Record<string, any> = {};
+        if (effectiveAuthorizedName !== undefined && String(effectiveAuthorizedName).trim()) {
+          pUpdates.name = String(effectiveAuthorizedName).trim();
+        }
+        if (designation !== undefined && String(designation).trim()) {
+          pUpdates.designation = String(designation).trim();
+        }
+        if (mobile !== undefined && String(mobile).trim()) {
+          pUpdates.mobile = String(mobile).trim();
+        }
+        if (Object.keys(pUpdates).length > 0) {
+          await signatoryPersonnel.update(pUpdates, { transaction: t });
+        }
+      }
+    }
+
+    // ─── 5. Department Contact Updates (Buyer RFI Escalation & Landline) ──────────
+    const effectiveEscalationEmail = rfqEscalationEmail !== undefined 
+      ? rfqEscalationEmail 
+      : (departmentEmail !== undefined ? departmentEmail : undefined);
+    const effectiveEscalationPhone = alternatePhone !== undefined 
+      ? alternatePhone 
+      : (departmentPhone !== undefined ? departmentPhone : (corporateLandline !== undefined ? corporateLandline : undefined));
+
+    if (effectiveEscalationEmail !== undefined || effectiveEscalationPhone !== undefined) {
+      let deptContact = await BusinessDepartmentContact.findOne({
+        where: {
+          businessId: business.id,
+          department: "Sales & Inquiries",
+        },
+        transaction: t,
+      });
+
+      if (!deptContact) {
+        deptContact = await BusinessDepartmentContact.findOne({
+          where: { businessId: business.id },
+          order: [["id", "ASC"]],
+          transaction: t,
+        });
+      }
+
+      if (deptContact) {
+        const cUpdates: Record<string, any> = {};
+        if (effectiveEscalationEmail !== undefined) {
+          cUpdates.email = effectiveEscalationEmail ? String(effectiveEscalationEmail).trim() : null;
+        }
+        if (effectiveEscalationPhone !== undefined) {
+          cUpdates.phone = effectiveEscalationPhone ? String(effectiveEscalationPhone).trim() : null;
+        }
+        if (Object.keys(cUpdates).length > 0) {
+          await deptContact.update(cUpdates, { transaction: t });
+        }
+      } else if ((effectiveEscalationEmail && String(effectiveEscalationEmail).trim()) || (effectiveEscalationPhone && String(effectiveEscalationPhone).trim())) {
+        await BusinessDepartmentContact.create(
+          {
+            businessId: business.id,
+            department: "Sales & Inquiries",
+            name: effectiveAuthorizedName ? String(effectiveAuthorizedName).trim() : (req.user?.fullName || "Sales & Inquiries Desk"),
+            designation: designation ? String(designation).trim() : "Department Head",
+            email: effectiveEscalationEmail ? String(effectiveEscalationEmail).trim() : null,
+            phone: effectiveEscalationPhone ? String(effectiveEscalationPhone).trim() : null,
+            isPrimary: true,
+          },
+          { transaction: t }
+        );
       }
     }
 

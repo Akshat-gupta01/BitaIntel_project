@@ -2,7 +2,7 @@ export interface Permission {
   id: number;
   code: string;
   module: string;
-  action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export';
+  action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'respond' | 'export';
   name: string;
   description: string;
 }
@@ -39,7 +39,7 @@ export interface CreateRolePayload {
 export interface CreatePermissionPayload {
   code: string;
   module: string;
-  action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export';
+  action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'respond' | 'export';
   name: string;
   description?: string;
 }

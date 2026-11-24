@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/rbac.middleware.js";
+import { authorize, requireRole } from "../middlewares/rbac.middleware.js";
 
 import {
   getProfile,
@@ -42,11 +42,6 @@ import {
   submitVerification,
 } from "../controllers/vendor.controller.js";
 import {
-  getVendorEnquiries,
-  updateEnquiryStatus,
-  replyEnquiry,
-} from "../controllers/enquiry.controller.js";
-import {
   uploadSingleImage,
   uploadMultipleImages,
   uploadImageController,
@@ -87,101 +82,93 @@ import {
 
 const vendorRouter = Router();
 
+// Authentication and Role verification required for all vendor self-service endpoints
 vendorRouter.use(authenticate);
+vendorRouter.use(requireRole("vendor", "super_admin"));
 
 // ─── Step 2: Company Profile & Legal Identity ────────────────────────────────
-// NOTE: /create-profile is commented out because registration (POST /auth/register)
-// automatically initializes BusinessEntity. All profile saves/modifications use PATCH /update-profile.
-// vendorRouter.post("/create-profile", validate(createProfileSchema), createProfile);
 vendorRouter.get("/profile", getProfile);
-vendorRouter.patch("/update-profile", validate(updateProfileSchema), updateProfile);
+vendorRouter.patch("/update-profile", validate(updateProfileSchema), authorize("vendors.edit"), updateProfile);
 
 // ─── Step 2: Statutory Identifiers (GSTIN / PAN / CIN) ───────────────────────
 vendorRouter.get("/statutory", getStatutory);
-vendorRouter.post("/create-statutory", validate(createStatutorySchema), createStatutory);
-vendorRouter.patch("/update-statutory", validate(updateStatutorySchema), updateStatutory);
+vendorRouter.post("/create-statutory", validate(createStatutorySchema), authorize("vendors.edit"), createStatutory);
+vendorRouter.patch("/update-statutory", validate(updateStatutorySchema), authorize("vendors.edit"), updateStatutory);
 
 // ─── Step 2: Manufacturing Facilities & Plants ───────────────────────────────
-vendorRouter.post("/add-facilities", validate(addFacilitySchema), addFacility);
+vendorRouter.post("/add-facilities", validate(addFacilitySchema), authorize("vendors.edit"), addFacility);
 vendorRouter.get("/facilities", getFacilities);
-vendorRouter.patch("/facilities/:id", validate(updateFacilitySchema), updateFacility);
-vendorRouter.delete("/facilities/:id", deleteFacility);
+vendorRouter.patch("/facilities/:id", validate(updateFacilitySchema), authorize("vendors.edit"), updateFacility);
+vendorRouter.delete("/facilities/:id", authorize("vendors.edit"), deleteFacility);
 
 // ─── Step 2: Key Personnel & Executive Contacts ─────────────────────────────
-vendorRouter.post("/add-personnel", validate(addPersonnelSchema), addPersonnel);
+vendorRouter.post("/add-personnel", validate(addPersonnelSchema), authorize("vendors.edit"), addPersonnel);
 vendorRouter.get("/personnel", getPersonnel);
-vendorRouter.patch("/personnel/:id", validate(updatePersonnelSchema), updatePersonnel);
-vendorRouter.delete("/personnel/:id", deletePersonnel);
-vendorRouter.post("/personnel/:id/photo", uploadSingleImage, uploadPersonnelPhotoController);
+vendorRouter.patch("/personnel/:id", validate(updatePersonnelSchema), authorize("vendors.edit"), updatePersonnel);
+vendorRouter.delete("/personnel/:id", authorize("vendors.edit"), deletePersonnel);
+vendorRouter.post("/personnel/:id/photo", authorize("vendors.edit"), uploadSingleImage, uploadPersonnelPhotoController);
 
 // ─── Step 2: Foundational Statutory Document Vault ───────────────────────────
-vendorRouter.post("/upload-documents", uploadSingleDocument, uploadStatutoryDocument);
-vendorRouter.get("/documents", getDocuments);
-vendorRouter.delete("/documents/:id", deleteDocument);
+vendorRouter.post("/upload-documents", authorize("documents.create"), uploadSingleDocument, uploadStatutoryDocument);
+vendorRouter.get("/documents", authorize("documents.view"), getDocuments);
+vendorRouter.delete("/documents/:id", authorize("documents.create"), deleteDocument);
 
 // ─── Step 3: Business Classification & Operational Capabilities ──────────────
-vendorRouter.post("/save-capabilities", validate(capabilitiesSchema), saveCapabilities);
+vendorRouter.post("/save-capabilities", validate(capabilitiesSchema), authorize("vendors.edit"), saveCapabilities);
 vendorRouter.get("/capabilities", getCapabilities);
 
 // ─── Step 4: Products & Services Catalog ────────────────────────────────────
-vendorRouter.post("/add-product", validate(addProductInputSchema), addProduct);
-vendorRouter.post("/products", validate(addProductInputSchema), addProduct);
-vendorRouter.get("/products", getProducts);
-vendorRouter.post("/products/upload-images", uploadMultipleImages, uploadMultipleImagesController);
-vendorRouter.post("/products/upload-image", uploadSingleImage, uploadImageController);
-vendorRouter.post("/products/upload-document", uploadSingleDocument, uploadProductDocument);
-vendorRouter.patch("/products/:id", updateProduct);
-vendorRouter.delete("/products/:id", deleteProduct);
-
+vendorRouter.post("/add-product", validate(addProductInputSchema), authorize("products.create"), addProduct);
+vendorRouter.post("/products", validate(addProductInputSchema), authorize("products.create"), addProduct);
+vendorRouter.get("/products", authorize("products.view"), getProducts);
+vendorRouter.post("/products/upload-images", authorize("products.create"), uploadMultipleImages, uploadMultipleImagesController);
+vendorRouter.post("/products/upload-image", authorize("products.create"), uploadSingleImage, uploadImageController);
+vendorRouter.post("/products/upload-document", authorize("products.create"), uploadSingleDocument, uploadProductDocument);
+vendorRouter.patch("/products/:id", authorize("products.edit"), updateProduct);
+vendorRouter.delete("/products/:id", authorize("products.delete"), deleteProduct);
 
 // ─── Step 4: Quality & Regulatory Certifications ─────────────────────────────
-vendorRouter.post("/add-certification", validate(addCertificationInputSchema), addCertification);
-vendorRouter.get("/certifications", getCertifications);
-vendorRouter.patch("/certifications/:id", updateCertification);
-vendorRouter.delete("/certifications/:id", deleteCertification);
-vendorRouter.post("/certifications/upload-document", uploadSingleDocument, uploadCertificationDocument);
+vendorRouter.post("/add-certification", validate(addCertificationInputSchema), authorize("documents.create"), addCertification);
+vendorRouter.get("/certifications", authorize("documents.view"), getCertifications);
+vendorRouter.patch("/certifications/:id", authorize("documents.create"), updateCertification);
+vendorRouter.delete("/certifications/:id", authorize("documents.create"), deleteCertification);
+vendorRouter.post("/certifications/upload-document", authorize("documents.create"), uploadSingleDocument, uploadCertificationDocument);
 
 // ─── Step 4: Quality Systems & Testing Capabilities ──────────────────────────
-vendorRouter.post("/quality-systems", validate(qualitySystemsSchema), updateQualitySystems);
-vendorRouter.patch('/quality-systems',validate(qualitySystemsSchema), updateQualitySystems);
+vendorRouter.post("/quality-systems", validate(qualitySystemsSchema), authorize("vendors.edit"), updateQualitySystems);
+vendorRouter.patch("/quality-systems", validate(qualitySystemsSchema), authorize("vendors.edit"), updateQualitySystems);
 
-// step-5: Department and Banking system
-vendorRouter.post("/add-commercial", validate(commercialDetailsSchema), saveCommercialDetails);
+// ─── Step 5: Department and Banking system ────────────────────────────────────
+vendorRouter.post("/add-commercial", validate(commercialDetailsSchema), authorize("vendors.edit"), saveCommercialDetails);
  
 // 1. Departmental Business Points of Contact (CRUD)
 vendorRouter.get("/commercial/contacts", getDepartmentContacts);
-vendorRouter.post("/add-commercial/contacts", validate(departmentContactSchema), addDepartmentContact);
-vendorRouter.patch("/commercial/contacts/:id", validate(departmentContactSchema.partial()), updateDepartmentContact);
-vendorRouter.delete("/commercial/contacts/:id", deleteDepartmentContact);
+vendorRouter.post("/add-commercial/contacts", validate(departmentContactSchema), authorize("vendors.edit"), addDepartmentContact);
+vendorRouter.patch("/commercial/contacts/:id", validate(departmentContactSchema.partial()), authorize("vendors.edit"), updateDepartmentContact);
+vendorRouter.delete("/commercial/contacts/:id", authorize("vendors.edit"), deleteDepartmentContact);
 
 // 2. Commercial & Payment Terms (CRUD)
 vendorRouter.get("/commercial/terms", getCommercialTerms);
-vendorRouter.post("/add-commercial/terms", validate(commercialTermsSchema), saveCommercialTerms);
-vendorRouter.patch("/commercial/terms", validate(commercialTermsSchema.partial()), saveCommercialTerms);
+vendorRouter.post("/add-commercial/terms", validate(commercialTermsSchema), authorize("vendors.edit"), saveCommercialTerms);
+vendorRouter.patch("/commercial/terms", validate(commercialTermsSchema.partial()), authorize("vendors.edit"), saveCommercialTerms);
 
 // 3. Trade Operations & Logistics (CRUD)
 vendorRouter.get("/commercial/trade", getTradeLogistics);
-vendorRouter.post("/add-commercial/trade", validate(tradeLogisticsSchema), saveTradeLogistics);
-vendorRouter.patch("/commercial/trade", validate(tradeLogisticsSchema.partial()), saveTradeLogistics);
+vendorRouter.post("/add-commercial/trade", validate(tradeLogisticsSchema), authorize("vendors.edit"), saveTradeLogistics);
+vendorRouter.patch("/commercial/trade", validate(tradeLogisticsSchema.partial()), authorize("vendors.edit"), saveTradeLogistics);
 
 // 4. Banking & Financial Settlement Details (CRUD)
 vendorRouter.get("/commercial/banking", getBankingDetails);
-vendorRouter.post("/add-commercial/banking", validate(bankingDetailsSchema), saveBankingDetails);
-vendorRouter.patch("/commercial/banking", validate(bankingDetailsSchema.partial()), saveBankingDetails);
-vendorRouter.post("/commercial/bank-proof", uploadSingleDocument, uploadBankProofDocument);
+vendorRouter.post("/add-commercial/banking", validate(bankingDetailsSchema), authorize("vendors.edit"), saveBankingDetails);
+vendorRouter.patch("/commercial/banking", validate(bankingDetailsSchema.partial()), authorize("vendors.edit"), saveBankingDetails);
+vendorRouter.post("/commercial/bank-proof", authorize("vendors.edit"), uploadSingleDocument, uploadBankProofDocument);
 
 // ─── Step 6: Final Verification Submission ──────────────────────────────────
-vendorRouter.post("/submit-verification", validate(submitVerificationSchema), submitVerification);
-
-
-// ─── Enquiries & RFQs (Vendor Management) ────────────────────────────────────
-vendorRouter.get("/enquiries", getVendorEnquiries);
-vendorRouter.patch("/enquiries/:id/status", updateEnquiryStatus);
-vendorRouter.post("/enquiries/:id/reply", replyEnquiry);
+vendorRouter.post("/submit-verification", validate(submitVerificationSchema), authorize("vendors.edit"), submitVerification);
 
 // ─── Generic Storage Services ───────────────────────────────────────────────
-vendorRouter.post("/upload-image", uploadSingleImage, uploadImageController);
-vendorRouter.post("/upload-images", uploadMultipleImages, uploadMultipleImagesController);
-vendorRouter.post("/upload-file", uploadSingleDocument, uploadGenericDocument);
+vendorRouter.post("/upload-image", authorize("vendors.edit"), uploadSingleImage, uploadImageController);
+vendorRouter.post("/upload-images", authorize("vendors.edit"), uploadMultipleImages, uploadMultipleImagesController);
+vendorRouter.post("/upload-file", authorize("documents.create"), uploadSingleDocument, uploadGenericDocument);
 
 export default vendorRouter;

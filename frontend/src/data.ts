@@ -11,6 +11,7 @@ export type Business = {
   age: number;
   summary: string;
   products: string[];
+  detailedProducts?: any[];
   gstin: string;
   cin: string;
   isoCertified: string;

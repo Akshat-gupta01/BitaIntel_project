@@ -77,6 +77,16 @@ export interface VendorProfileUpdatePayload {
   duns?: string | null;
   dunsNumber?: string | null;
   lei?: string | null;
+  authorizedName?: string | null;
+  fullName?: string | null;
+  designation?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  rfqEscalationEmail?: string | null;
+  departmentEmail?: string | null;
+  alternatePhone?: string | null;
+  departmentPhone?: string | null;
+  corporateLandline?: string | null;
   [key: string]: unknown;
 }
 
@@ -370,6 +380,19 @@ export const getPersonnel = async (): Promise<ApiResponse<PersonnelPayload[]>> =
 export const deletePersonnel = async (id: string | number): Promise<ApiResponse<unknown>> => {
   const res = await api.delete(`/vendor/personnel/${id}`);
   return res.data;
+};
+
+/**
+ * 11a. Upload Personnel Profile Photo
+ * Reuses existing single-image upload API: POST /api/v1/vendor/upload-image
+ */
+export const uploadPersonnelPhoto = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append("image", file);
+  const res = await api.post("/vendor/upload-image", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data?.data?.path || res.data?.data?.url || "";
 };
 
 // ─── Document Vault Services ────────────────────────────────────────────────
@@ -1081,27 +1104,6 @@ export const submitEnquiry = async (
   data: SubmitEnquiryPayload
 ): Promise<ApiResponse<any>> => {
   const res = await api.post("/enquiries", data);
-  return res.data;
-};
-
-export const getVendorEnquiries = async (): Promise<ApiResponse<{ enquiries: BackendEnquiryItem[]; totalCount: number }>> => {
-  const res = await api.get("/vendor/enquiries");
-  return res.data;
-};
-
-export const updateEnquiryStatus = async (
-  id: string,
-  status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected'
-): Promise<ApiResponse<any>> => {
-  const res = await api.patch(`/vendor/enquiries/${id}/status`, { status });
-  return res.data;
-};
-
-export const replyToEnquiry = async (
-  id: string,
-  replyMessage: string
-): Promise<ApiResponse<any>> => {
-  const res = await api.post(`/vendor/enquiries/${id}/reply`, { replyMessage });
   return res.data;
 };
 

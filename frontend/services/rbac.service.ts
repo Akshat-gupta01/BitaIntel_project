@@ -67,11 +67,26 @@ export async function updateRolePermissions(
   return res.data.data;
 }
 
+export async function updateCustomRole(
+  roleId: number,
+  payload: { name?: string; description?: string }
+): Promise<Role> {
+  const res = await api.put<{ success: boolean; data: Role }>(`/rbac/roles/${roleId}`, payload);
+  return res.data.data;
+}
+
+export async function deleteCustomRole(roleId: number): Promise<{ success: boolean; message: string }> {
+  const res = await api.delete<{ success: boolean; message: string }>(`/rbac/roles/${roleId}`);
+  return res.data;
+}
+
 const rbacService = {
   getMyPermissions,
   getAllRoles,
   getAllPermissions,
   createCustomRole,
+  updateCustomRole,
+  deleteCustomRole,
   createCustomPermission,
   updateRolePermissions,
 };

@@ -138,7 +138,10 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
     }
 
     // 1. Live DB catalog (real uploaded product photos + specifications)
-    const apiProducts = (b as unknown as { catalogProducts?: PublicCatalogProduct[] }).catalogProducts;
+    const apiProducts =
+      (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).detailedProducts ||
+      (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).catalogProducts;
+
     if (Array.isArray(apiProducts) && apiProducts.length > 0) {
       setCatalogProducts(
         apiProducts.map((p, idx) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`))
@@ -183,6 +186,25 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
       );
     } else {
       setCatalogProducts([]);
+    }
+
+    // 4. Client-side live detail sync from backend if not already populated
+    if (b.slug || b.id) {
+      vendorService
+        .getPublicBusinessDetail(b.slug || b.id)
+        .then((res) => {
+          const liveB = res?.data?.business;
+          const liveProds = liveB?.detailedProducts || liveB?.catalogProducts;
+          if (Array.isArray(liveProds) && liveProds.length > 0) {
+            setCatalogProducts(
+              liveProds.map((p: any, idx: number) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`))
+            );
+          }
+          if (liveB?.logoUrl) {
+            setCustomLogoUrl(liveB.logoUrl);
+          }
+        })
+        .catch(() => {});
     }
   }, [b]);
 
@@ -587,7 +609,13 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                        <ProductThumbnail images={prod.images} alt={prod.name} size="md" showCountBadge />
+                        <ProductThumbnail
+                          images={prod.images}
+                          src={prod.images && prod.images.length > 0 ? prod.images[0] : (prod as any).imageUrl}
+                          alt={prod.name}
+                          size="md"
+                          showCountBadge
+                        />
                         <div className="space-y-1 flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-50 text-primary-800 border border-primary-200">
@@ -624,11 +652,15 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                         ) : (
                           <div>
                             <span className="text-sm sm:text-base font-black text-slate-900">
-                              {prod.indicativePrice &&
-                              prod.indicativePrice !== '0' &&
-                              prod.indicativePrice.toLowerCase() !== 'on request'
-                                ? `${prod.currency || 'INR'} ${prod.indicativePrice}`
-                                : 'On Request'}
+                              {(() => {
+                                const rawPrice = String(prod.indicativePrice || '').trim();
+                                if (!rawPrice || rawPrice === '0' || rawPrice.toLowerCase() === 'on request') {
+                                  return 'On Request';
+                                }
+                                const cleanNum = Number(rawPrice.replace(/,/g, ''));
+                                const formattedNum = !isNaN(cleanNum) && cleanNum > 0 ? cleanNum.toLocaleString('en-IN') : rawPrice;
+                                return `${prod.currency || 'INR'} ${formattedNum}`;
+                              })()}
                             </span>
                             <span className="text-[10px] text-slate-500 block">
                               MOQ: {prod.moq || '50 Units'}
@@ -818,6 +850,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                 <div className="flex items-start gap-3.5 pb-2">
                   <ProductThumbnail
                     images={selectedProductForModal.images}
+                    src={selectedProductForModal.images && selectedProductForModal.images.length > 0 ? selectedProductForModal.images[0] : (selectedProductForModal as any).imageUrl}
                     alt={selectedProductForModal.name}
                     size="lg"
                     showCountBadge
