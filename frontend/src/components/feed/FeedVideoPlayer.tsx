@@ -50,7 +50,7 @@ export function FeedVideoPlayer({
   const [muted, setMuted] = useState(true);
   const [elapsed, setElapsed] = useState(0);
 
-  const chapters = post.videoChapters || [];
+  const chapters = useMemo(() => post.videoChapters || [], [post.videoChapters]);
 
   const activeChapterIndex = useMemo(() => {
     if (chapters.length === 0) return -1;

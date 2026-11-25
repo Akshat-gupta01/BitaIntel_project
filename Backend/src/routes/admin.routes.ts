@@ -5,12 +5,18 @@ import {
   getVendorDetailForAdmin,
   verifyStatutory,
   reviewDocument,
+  getAuditLogs,
 } from "../controllers/admin.controller.js";
 import {
   getAdminEnquiries,
   updateAdminEnquiryStatus,
   replyAdminEnquiry,
 } from "../controllers/enquiry.controller.js";
+import {
+  getAdminComplaints,
+  updateAdminComplaint,
+} from "../controllers/complaint.controller.js";
+import { validateComplaint, updateComplaintSchema } from "../Validations/complaint.validation.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { authorize, requireRole } from "../middlewares/rbac.middleware.js";
 
@@ -33,5 +39,12 @@ adminRouter.get("/vendors", authorize("vendors.view"), getAllVendors);
 adminRouter.get("/enquiries", authorize("enquiries.view"), getAdminEnquiries);
 adminRouter.patch("/enquiries/:id/status", authorize("enquiries.status"), updateAdminEnquiryStatus);
 adminRouter.post("/enquiries/:id/reply", authorize("enquiries.respond"), replyAdminEnquiry);
+
+// ⚖️ Module 4: Compliance & Buyer Complaints Desk
+adminRouter.get("/complaints", authorize("complaints.view"), getAdminComplaints);
+adminRouter.patch("/complaints/:id", authorize("complaints.edit"), validateComplaint(updateComplaintSchema), updateAdminComplaint);
+
+// 📜 Module 5: Compliance Audit Trail & Logs
+adminRouter.get("/audit-logs", authorize("audit_logs.view"), getAuditLogs);
 
 export default adminRouter;

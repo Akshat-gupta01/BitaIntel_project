@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState } from 'react';
@@ -21,7 +22,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { INITIAL_EMPTY_DOSSIER, saveVendorDossierToStorage } from '@/config/initialVendorDossier';
+import { saveVendorDossierToStorage } from '@/config/initialVendorDossier';
 import * as authService from '@services/auth.service';
 
 export function Step1QuickRegisterForm() {
@@ -187,32 +188,7 @@ export function Step1QuickRegisterForm() {
         password: formData.password,
       });
 
-      // Save initial dossier with Step 1 and company name pre-populated
-      const initialDossier = {
-        ...INITIAL_EMPTY_DOSSIER,
-        step1: {
-          authorizedName: formData.authorizedName,
-          designation: formData.designation,
-          email: formData.email,
-          mobile: formData.mobile,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword,
-          emailOtp: formData.emailOtp || '4921',
-          mobileOtp: formData.mobileOtp || '8142',
-          emailVerified: true,
-          mobileVerified: true,
-          acceptTerms: true,
-        },
-        step2: {
-          ...INITIAL_EMPTY_DOSSIER.step2,
-          legalName: formData.companyName,
-          tradeName: formData.companyName,
-        },
-        completionPercentage: 17,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      saveVendorDossierToStorage(initialDossier, formData.email);
+      saveVendorDossierToStorage();
 
       toast.success('Account Successfully Registered!', {
         description: `Welcome to BITAINTEL, ${formData.authorizedName}. Your workspace is ready.`,

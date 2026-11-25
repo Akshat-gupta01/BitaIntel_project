@@ -4,6 +4,7 @@ import {
   login,
   loginWithOtp,
   resetPassword,
+  changePassword,
   logout,
   sendOtp,
   verifyOtp,
@@ -17,6 +18,7 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/login-with-otp", loginWithOtp);
 router.post("/reset-password", resetPassword);
+router.post("/change-password", authenticate, changePassword);
 router.post("/logout", logout);
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);

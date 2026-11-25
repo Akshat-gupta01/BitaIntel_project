@@ -213,64 +213,53 @@ export function getBadge(score: number): "Platinum" | "Gold" | "Silver" | "Verif
   return "Under Review";
 }
 
-// ─── 7. Unified Auto-Compute & Save Trust Score ──────────────────────────────
-export async function computeAndSaveBusinessTrustScore(businessId: number): Promise<{
+export interface ScoreBreakdownItem {
+  key: string;
+  factor: string;
+  weight: string;
+  maxPoints: number;
   score: number;
-  level: number;
-  badge: "Platinum" | "Gold" | "Silver" | "Verified" | "Under Review";
-  grade: string;
-  risk: string;
-  dimensions: ReturnType<typeof calculateDimensions>;
-} | null> {
-  const business = await BusinessEntity.findByPk(businessId);
-  if (!business) return null;
+  dimensionScore: number;
+  desc: string;
+}
 
-  const statutory = await StatutoryIdentifier.findOne({ where: { businessId } });
-  const owner = business.ownerUserId ? await User.findByPk(business.ownerUserId) : null;
-  const vaultDocs = await DocumentVault.findAll({ where: { businessId } });
-  const certs = await Certification.findAll({ where: { businessId } });
-  const banking = await BusinessBankingDetails.findOne({ where: { businessId } });
-
+export function buildVendorAuditData(params: {
+  business: BusinessEntity;
+  statutory: StatutoryIdentifier | null;
+  owner: User | null;
+  vaultDocs: DocumentVault[];
+  certs: Certification[];
+  banking: BusinessBankingDetails | null;
+}): VendorAuditData {
+  const { business, statutory, owner, vaultDocs, certs, banking } = params;
   const hasGstDoc = vaultDocs.some((d) => d.categoryKey?.includes("gst") || d.categoryKey?.includes("tax"));
   const hasPanDoc = vaultDocs.some((d) => d.categoryKey?.includes("pan"));
   const hasIncorpDoc = vaultDocs.some((d) => d.categoryKey?.includes("incorp") || d.categoryKey?.includes("cin"));
   const hasBankProof = Boolean(banking?.bankProofDoc || vaultDocs.some((d) => d.categoryKey?.includes("bank")));
   const verifiedCertsCount = certs.filter((c) => c.status === "Active" || c.evidenceDoc).length;
   const pendingCertsCount = certs.filter((c) => c.status !== "Active" && !c.evidenceDoc).length;
-
   const isGstinActive = statutory?.gstnStatus === "ACTIVE";
 
-  const auditData: VendorAuditData = {
-    // Identity fields
+  return {
     gstinAdded: Boolean(statutory?.gstin),
     panAdded: Boolean(statutory?.pan),
     cinAdded: Boolean(statutory?.cin),
     gstCertVerified: hasGstDoc || isGstinActive,
     panCardVerified: hasPanDoc || isGstinActive,
     incorpCertVerified: hasIncorpDoc,
-
-    // Tax Compliance
     gstinVerified: isGstinActive,
     udyamOrIecAdded: Boolean(statutory?.udyamMsme || statutory?.iecCode),
-
-    // Business Tenure
-    yearEstablished: business.yearEstablished,
-
-    // Certifications
+    yearEstablished: business.incorporationDate
+      ? new Date(business.incorporationDate).getFullYear() || business.yearEstablished
+      : business.yearEstablished,
     verifiedCertsCount,
     pendingCertsCount,
-
-    // Financial
     bankProofVerified: hasBankProof,
     financialStatementVerified: Boolean(business.turnover),
     annualTurnoverAdded: Boolean(business.turnover),
-
-    // Governance & Risk
     signatoryAuthVerified: Boolean(owner?.isMobileVerified || owner?.isEmailVerified),
     addressProofVerified: Boolean(business.registeredAddress || business.location),
     openComplaintsCount: 0,
-
-    // Profile fields (12 checkpoints)
     businessName: business.name,
     legalName: business.legalName,
     companyType: business.companyType,
@@ -283,8 +272,100 @@ export async function computeAndSaveBusinessTrustScore(businessId: number): Prom
     email: owner?.email || "",
     phone: owner?.mobile || "",
   };
+}
 
+export function formatScoreBreakdown(dimensions: ReturnType<typeof calculateDimensions>): ScoreBreakdownItem[] {
+  return [
+    {
+      key: "identity",
+      factor: "Corporate Identity",
+      weight: "20%",
+      maxPoints: 20,
+      score: Number((dimensions.identityScore * 0.2).toFixed(1)),
+      dimensionScore: dimensions.identityScore,
+      desc: "MCA CIN, PAN & Statutory Docs",
+    },
+    {
+      key: "tax",
+      factor: "Government Verification",
+      weight: "20%",
+      maxPoints: 20,
+      score: Number((dimensions.taxScore * 0.2).toFixed(1)),
+      dimensionScore: dimensions.taxScore,
+      desc: "GSTN Active Status & MSME Udyam / IEC",
+    },
+    {
+      key: "tenure",
+      factor: "Business Operations & Tenure",
+      weight: "15%",
+      maxPoints: 15,
+      score: Number((dimensions.tenureScore * 0.15).toFixed(1)),
+      dimensionScore: dimensions.tenureScore,
+      desc: "Incorporation tenure & operational history",
+    },
+    {
+      key: "certifications",
+      factor: "Documents & Certs",
+      weight: "15%",
+      maxPoints: 15,
+      score: Number((dimensions.certScore * 0.15).toFixed(1)),
+      dimensionScore: dimensions.certScore,
+      desc: "ISO 9001 & Quality accreditations",
+    },
+    {
+      key: "financial",
+      factor: "Financial Standing",
+      weight: "15%",
+      maxPoints: 15,
+      score: Number((dimensions.financialScore * 0.15).toFixed(1)),
+      dimensionScore: dimensions.financialScore,
+      desc: "Bank proof & annual turnover bracket",
+    },
+    {
+      key: "governance",
+      factor: "Statutory Compliance",
+      weight: "10%",
+      maxPoints: 10,
+      score: Number((dimensions.governanceScore * 0.1).toFixed(1)),
+      dimensionScore: dimensions.governanceScore,
+      desc: "Authorized signatory KYC & address proof",
+    },
+    {
+      key: "profile",
+      factor: "Profile Completeness",
+      weight: "5%",
+      maxPoints: 5,
+      score: Number((dimensions.profileScore * 0.05).toFixed(1)),
+      dimensionScore: dimensions.profileScore,
+      desc: "All core profile modules populated",
+    },
+  ];
+}
+
+// ─── 7. Unified Auto-Compute & Save Trust Score ──────────────────────────────
+export async function computeAndSaveBusinessTrustScore(businessId: number): Promise<{
+  score: number;
+  level: number;
+  badge: "Platinum" | "Gold" | "Silver" | "Verified" | "Under Review";
+  grade: string;
+  risk: string;
+  dimensions: ReturnType<typeof calculateDimensions>;
+  breakdown: ScoreBreakdownItem[];
+} | null> {
+  const business = await BusinessEntity.findByPk(businessId);
+  if (!business) return null;
+
+  const [statutory, owner, vaultDocs, certs, banking] = await Promise.all([
+    StatutoryIdentifier.findOne({ where: { businessId } }),
+    business.ownerUserId ? User.findByPk(business.ownerUserId) : Promise.resolve(null),
+    DocumentVault.findAll({ where: { businessId } }),
+    Certification.findAll({ where: { businessId } }),
+    BusinessBankingDetails.findOne({ where: { businessId } }),
+  ]);
+
+  const auditData = buildVendorAuditData({ business, statutory, owner, vaultDocs, certs, banking });
   const dimensions = calculateDimensions(auditData);
+  const breakdown = formatScoreBreakdown(dimensions);
   const newScore = calculateFinalScore(dimensions);
   const newLevel = calculateVerificationLevel(auditData);
   const { grade, risk } = getGradeAndRisk(newScore);
@@ -304,5 +385,6 @@ export async function computeAndSaveBusinessTrustScore(businessId: number): Prom
     grade,
     risk,
     dimensions,
+    breakdown,
   };
 }

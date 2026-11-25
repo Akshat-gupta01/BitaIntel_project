@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { ScoreRing } from './ScoreRing';
 import { BitaintelVerifiedBadge } from './BitaintelVerifiedBadge';
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
+import { formatBusinessLocation, getVerificationStatusBadge } from '@/lib/verificationBadge';
 import { cn } from '@/lib/utils';
 
 export interface BusinessCardProps {
@@ -98,6 +99,8 @@ export function BusinessCard({
     borderHover: 'hover:border-slate-300',
   };
 
+  const verificationBadge = getVerificationStatusBadge(b);
+
   return (
     <div
       className={cn(
@@ -130,7 +133,7 @@ export function BusinessCard({
             </Link>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
               <MapPin className="size-3 text-slate-400 shrink-0" />
-              <span className="truncate">{b.location}</span>
+              <span className="truncate">{formatBusinessLocation(b)}</span>
             </p>
           </div>
         </div>
@@ -146,7 +149,7 @@ export function BusinessCard({
 
       {/* Badges strip with pastel variety */}
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
-        <Badge kind="verified">Verified Entity</Badge>
+        <Badge kind={verificationBadge.kind}>{verificationBadge.label}</Badge>
         {b.isPremiumSubscriber && (
           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide border bg-gradient-to-r from-amber-500/15 via-primary-500/10 to-purple-500/10 text-primary-900 border-amber-300/80 shadow-2xs">
             <Sparkles className="size-3 text-amber-500 shrink-0" />
@@ -198,7 +201,7 @@ export function BusinessCard({
         </div>
         <div>
           <span className="text-[10px] block text-slate-400 uppercase tracking-wider">Turnover</span>
-          <span className="font-semibold text-slate-800">{b.turnover}</span>
+          <span className="font-semibold text-slate-800">{b.turnover || 'Confidential'}</span>
         </div>
         <div>
           <span className="text-[10px] block text-slate-400 uppercase tracking-wider">Audit</span>

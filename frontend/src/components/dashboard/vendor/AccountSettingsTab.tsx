@@ -31,6 +31,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Dialog } from '@/components/ui/Dialog';
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import * as vendorService from '@services/vendor.service';
+import * as authService from '@services/auth.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -103,6 +104,7 @@ interface AccountSettingsTabProps {
   dossier: FullVendorRegistrationDossier;
   user: AuthUser | null;
   role: UserRole;
+  businessSlug?: string;
   onUpdateDossier: (updated: FullVendorRegistrationDossier) => void;
   onUpgradeToPremium: () => void;
   onNavigateTab: (tab: 'profile' | 'documents' | 'score') => void;
@@ -112,24 +114,38 @@ export function AccountSettingsTab({
   dossier,
   user,
   role,
+  businessSlug,
   onUpdateDossier,
   onUpgradeToPremium,
   onNavigateTab,
 }: AccountSettingsTabProps) {
   // Signatory & Contact form state seeded from live dossier/user
   const [contactForm, setContactForm] = useState({
-    authorizedName: dossier.step1.authorizedName || user?.name || 'Vikramaditya Shinde',
-    designation: dossier.step1.designation || user?.designation || 'Managing Director & Authorized Signatory',
-    email: dossier.step1.email || user?.email || 'vikram.shinde@meridiansteel.com',
-    mobile: dossier.step1.mobile || user?.mobile || '+91 98201 44820',
+    authorizedName: dossier.step1.authorizedName || user?.name || '',
+    designation: dossier.step1.designation || user?.designation || '',
+    email: dossier.step1.email || user?.email || '',
+    mobile: dossier.step1.mobile || user?.mobile || '',
     registeredAddress: dossier.step2.registeredAddress || '',
   });
 
+  const primaryDeptContact = useMemo(() => {
+    const contacts = dossier.step5.departmentContacts || [];
+    return (
+      contacts.find((c) => c.department === 'Sales & Inquiries') ||
+      contacts.find((c) => c.isPrimary) ||
+      contacts[0]
+    );
+  }, [dossier.step5.departmentContacts]);
+
+  const storageKey = `${SETTINGS_STORAGE_KEY}:${(dossier.step1.email || user?.email || 'default').toLowerCase()}`;
+
   const [prefs, setPrefs] = useState<VendorSettingsPrefs>(() => ({
     ...DEFAULT_PREFS,
+    alternatePhone: primaryDeptContact?.phone || '',
     rfqEscalationEmail:
-      dossier.step5.departmentContacts?.[0]?.email ||
+      primaryDeptContact?.email ||
       dossier.step1.email ||
+      user?.email ||
       '',
   }));
 
@@ -149,22 +165,39 @@ export function AccountSettingsTab({
   const [sessions, setSessions] = useState<ActiveSessionItem[]>(INITIAL_SESSIONS);
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
-  // Load persisted preferences from localStorage on mount
+  // Load persisted preferences from localStorage scoped to current vendor, and sync backend department contact
   useEffect(() => {
+    let loaded: Partial<VendorSettingsPrefs> = {};
     try {
-      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<VendorSettingsPrefs>;
-        setPrefs((prev) => ({ ...prev, ...parsed }));
+        loaded = JSON.parse(raw) as Partial<VendorSettingsPrefs>;
       }
     } catch {
       // Ignore storage read errors
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrefs((prev) => ({
+      ...prev,
+      ...loaded,
+      rfqEscalationEmail:
+        primaryDeptContact?.email ||
+        loaded.rfqEscalationEmail ||
+        dossier.step1.email ||
+        user?.email ||
+        '',
+      alternatePhone:
+        primaryDeptContact?.phone ||
+        loaded.alternatePhone ||
+        '',
+    }));
+  }, [storageKey, primaryDeptContact?.email, primaryDeptContact?.phone, dossier.step1.email, user?.email]);
 
-  // Keep contact form synced if dossier changes externally (e.g., onboarding wizard)
+  // Keep contact form synced if dossier changes externally (e.g., onboarding wizard or backend load)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setContactForm({
       authorizedName: dossier.step1.authorizedName || user?.name || '',
       designation: dossier.step1.designation || user?.designation || '',
@@ -177,7 +210,7 @@ export function AccountSettingsTab({
   function persistPrefs(nextPrefs: VendorSettingsPrefs) {
     setPrefs(nextPrefs);
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextPrefs));
+      localStorage.setItem(storageKey, JSON.stringify(nextPrefs));
     } catch {
       // Ignore storage quota errors
     }
@@ -283,7 +316,7 @@ export function AccountSettingsTab({
     }
   }
 
-  function handleUpdatePassword(e: React.FormEvent) {
+  async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault();
     if (!passwordForm.currentPassword || !passwordForm.newPassword) {
       toast.error('Password Required', {
@@ -304,10 +337,30 @@ export function AccountSettingsTab({
       return;
     }
 
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    toast.success('Security Credentials Updated', {
-      description: 'Password rotated cleanly. Dual-OTP verification remains enforced.',
-    });
+    setUpdatingPassword(true);
+    try {
+      await authService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Security Credentials Updated', {
+        description: 'Your password has been changed in the database.',
+      });
+    } catch (err: unknown) {
+      const errorMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string; error?: { message?: string } } } }).response?.data?.error?.message ||
+            (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not update password.';
+      toast.error('Password Update Failed', {
+        description: String(errorMessage),
+      });
+    } finally {
+      setUpdatingPassword(false);
+    }
   }
 
   function handleSavePreferences() {
@@ -429,7 +482,9 @@ export function AccountSettingsTab({
               Edit Company &amp; Logo
             </Button>
             <Link
-              href="/demo/business/meridian-steel-works"
+              href={`/demo/business/${businessSlug || user?.businessSlug || 'meridian-steel-works'}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <span>Public Dossier</span>
@@ -690,8 +745,14 @@ export function AccountSettingsTab({
             )}
 
             <div className="pt-1 flex justify-end">
-              <Button type="submit" variant="secondary" size="sm" icon={<KeyRound className="size-3.5" />}>
-                Update Password
+              <Button
+                type="submit"
+                variant="secondary"
+                size="sm"
+                disabled={updatingPassword}
+                icon={<KeyRound className="size-3.5" />}
+              >
+                {updatingPassword ? 'Updating...' : 'Update Password'}
               </Button>
             </div>
           </form>

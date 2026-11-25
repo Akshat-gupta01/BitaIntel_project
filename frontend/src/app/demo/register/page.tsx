@@ -9,11 +9,7 @@ import {
   TrendingUp,
   FileCheck2,
   CheckCircle2,
-  Award,
-  Building2,
-  Users,
 } from 'lucide-react';
-import Link from 'next/link';
 
 export const metadata = createPageMetadata({
   title: 'Register Your Business — Verified Network',

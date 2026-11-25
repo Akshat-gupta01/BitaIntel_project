@@ -1,10 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FullVendorRegistrationDossier,
-  Step6SubmissionData,
-  VendorRegistrationStatus,
   DocumentVaultItem,
 } from '@/types/vendorRegistration';
 import { VENDOR_CATEGORIES, BUSINESS_TYPES } from '@/config/vendorMasterData';
@@ -15,7 +14,6 @@ import {
 } from '@/config/initialVendorDossier';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { Card } from '@/components/ui/Card';
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import {
   CheckCircle2,
@@ -26,13 +24,9 @@ import {
   Send,
   Save,
   ArrowRight,
-  Clock,
-  AlertCircle,
-  Download,
   Building,
   Layers,
   Package,
-  Award,
   DollarSign,
   FileText,
   ExternalLink,

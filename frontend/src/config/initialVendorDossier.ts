@@ -501,7 +501,7 @@ export const DEMO_PREFILLED_DOSSIER: FullVendorRegistrationDossier = {
  * and is persisted to MySQL database via official backend APIs.
  */
 
-export function getStoredVendorDossier(_userEmail?: string): FullVendorRegistrationDossier {
+export function getStoredVendorDossier(): FullVendorRegistrationDossier {
   // Purge any lingering legacy localStorage keys if present
   if (typeof window !== 'undefined') {
     try {
@@ -511,10 +511,7 @@ export function getStoredVendorDossier(_userEmail?: string): FullVendorRegistrat
   return INITIAL_EMPTY_DOSSIER;
 }
 
-export function saveVendorDossierToStorage(
-  _dossier?: FullVendorRegistrationDossier,
-  _userEmail?: string
-): void {
+export function saveVendorDossierToStorage(): void {
   // No-op: LocalStorage persistence is disabled to prevent stale data cross-contamination.
   // Data is persisted directly to MySQL database via vendorService APIs.
   if (typeof window !== 'undefined') {
@@ -524,7 +521,7 @@ export function saveVendorDossierToStorage(
   }
 }
 
-export function clearVendorDossierStorage(_userEmail?: string): void {
+export function clearVendorDossierStorage(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem('bitaintel_vendor_dossier');

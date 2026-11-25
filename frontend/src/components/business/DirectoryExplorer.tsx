@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useMemo, useState, useDeferredValue, useEffect } from 'react';
@@ -21,6 +22,7 @@ import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { ScoreRing } from './ScoreRing';
 import { Badge } from '@/components/ui/Badge';
+import { formatBusinessLocation, getVerificationStatusBadge } from '@/lib/verificationBadge';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
@@ -67,13 +69,23 @@ const industryPastelPill: Record<string, { active: string; inactive: string }> =
   },
 };
 
-export function DirectoryExplorer() {
-  const [query, setQuery] = useState('');
+interface DirectoryExplorerProps {
+  initialQuery?: string;
+  initialIndustry?: string;
+}
+
+export function DirectoryExplorer({
+  initialQuery = '',
+  initialIndustry = '',
+}: DirectoryExplorerProps) {
+  const [query, setQuery] = useState(initialQuery);
   const deferredQuery = useDeferredValue(query);
-  const [industry, setIndustry] = useState('All industries');
+  const [industry, setIndustry] = useState(
+    initialIndustry && industries.includes(initialIndustry) ? initialIndustry : 'All industries'
+  );
   const [level, setLevel] = useState('Any level');
   const [minimumScore, setMinimumScore] = useState(0);
-  const [verifiedOnly, setVerifiedOnly] = useState(true);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [premiumOnly, setPremiumOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'score' | 'tenure' | 'name'>('score');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -114,14 +126,23 @@ export function DirectoryExplorer() {
   const results = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     const filtered = liveBusinesses.filter((b) => {
+      const productNames = Array.isArray(b.products)
+        ? b.products.map((p) =>
+            typeof p === 'string' ? p : String((p as { name?: string })?.name || '')
+          )
+        : [];
+
       const matchesQuery =
         !q ||
-        b.name.toLowerCase().includes(q) ||
-        b.legalName.toLowerCase().includes(q) ||
-        b.industry.toLowerCase().includes(q) ||
-        b.location.toLowerCase().includes(q) ||
-        b.gstin.toLowerCase().includes(q) ||
-        (Array.isArray(b.products) && b.products.some((p) => p.toLowerCase().includes(q)));
+        (b.name || '').toLowerCase().includes(q) ||
+        (b.legalName || '').toLowerCase().includes(q) ||
+        (b.gstin || '').toLowerCase().includes(q) ||
+        (b.cin || '').toLowerCase().includes(q) ||
+        (b.city || '').toLowerCase().includes(q) ||
+        (b.state || '').toLowerCase().includes(q) ||
+        (b.location || '').toLowerCase().includes(q) ||
+        (b.industry || '').toLowerCase().includes(q) ||
+        productNames.some((p) => p.toLowerCase().includes(q));
 
       const matchesIndustry =
         industry === 'All industries' || b.industry === industry;
@@ -190,7 +211,7 @@ export function DirectoryExplorer() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by company name, GSTIN, CIN, industry, product, or city..."
+              placeholder="Search by company name, GSTIN, CIN, product name, or city..."
               className="w-full min-h-12 rounded-full border border-slate-200/90 bg-white px-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-200 focus:border-primary-600 focus:ring-4 focus:ring-primary-100"
             />
             {query && (
@@ -361,7 +382,7 @@ export function DirectoryExplorer() {
         <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
           <div>
             Showing <strong className="font-bold text-slate-900">{results.length}</strong>{' '}
-            verified enterprise entities
+            {verifiedOnly ? 'verified enterprise entities' : 'listed enterprise entities'}
             {premiumOnly && (
               <span className="ml-2 font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
                 ⭐ Premium Subscribers
@@ -483,6 +504,7 @@ export function DirectoryExplorer() {
                         </div>
                         <p className="text-[10px] text-slate-400 font-normal">
                           GSTIN: {b.gstin}
+                          {b.cin && b.cin !== '—' ? ` · CIN: ${b.cin}` : ''}
                         </p>
                       </div>
                     </div>
@@ -576,7 +598,7 @@ export function DirectoryExplorer() {
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-900">{previewBusiness.name}</h4>
-                  <p className="text-xs text-slate-500">{previewBusiness.location}</p>
+                  <p className="text-xs text-slate-500">{formatBusinessLocation(previewBusiness)}</p>
                 </div>
               </div>
               <ScoreRing score={previewBusiness.score} size={48} showGrade />
@@ -584,7 +606,10 @@ export function DirectoryExplorer() {
 
             {/* Badges */}
             <div className="flex flex-wrap gap-2">
-              <Badge kind="verified">Verified Profile</Badge>
+              {(() => {
+                const statusBadge = getVerificationStatusBadge(previewBusiness);
+                return <Badge kind={statusBadge.kind}>{statusBadge.label}</Badge>;
+              })()}
               {previewBusiness.isPremiumSubscriber && (
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide border bg-gradient-to-r from-amber-500/20 via-primary-500/15 to-purple-500/15 text-primary-950 border-amber-300 shadow-2xs">
                   <Sparkles className="size-3 text-amber-500 shrink-0" />
@@ -619,7 +644,7 @@ export function DirectoryExplorer() {
                 ['Identity Verification', previewBusiness.identity, true],
                 ['Document Dossier', previewBusiness.documents, true],
                 ['Audited Tenure', `${previewBusiness.age} Years Operational`, true],
-                ['Annual Turnover Band', previewBusiness.turnover, true],
+                ['Annual Turnover Band', previewBusiness.turnover || 'Confidential', true],
               ].map(([lbl, val, checked]) => (
                 <div key={lbl as string} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0">
                   <span className="text-slate-500">{lbl as string}</span>

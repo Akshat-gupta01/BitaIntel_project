@@ -53,6 +53,7 @@ export function FeedExplorer() {
     if (!sharedSlug) return;
     const match = feedPosts.find((p) => p.slug === sharedSlug);
     if (match) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActivePost(match);
     }
   }, [sharedSlug]);
@@ -60,6 +61,7 @@ export function FeedExplorer() {
   // Keep page state synchronized with browser navigation (?page=N)
   useEffect(() => {
     const paramPage = Math.max(1, Number(searchParams.get('page')) || 1);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(paramPage);
   }, [searchParams]);
 

@@ -101,7 +101,12 @@ export const createEnquirySchema = z
     const finalCompany = (data.company || data.buyerCompany || data.sender_company || "")?.trim() || null;
     const finalMessage = (data.message || data.details || "").trim();
     const finalProduct = data.productName || data.product_name || null;
-    const finalProductId = data.productId || data.product_id ? Number(data.productId || data.product_id) : null;
+    const rawProductId = data.productId ?? data.product_id;
+    const parsedProductId =
+      rawProductId !== undefined && rawProductId !== null && /^\d+$/.test(String(rawProductId).trim())
+        ? Number(String(rawProductId).trim())
+        : null;
+    const finalProductId = parsedProductId;
 
     return {
       businessId: rawTarget!,

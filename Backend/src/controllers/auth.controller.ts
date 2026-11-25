@@ -12,9 +12,11 @@ import {
   sendOtpSchema,
   verifyOtpSchema,
   loginWithOtpSchema,
-  resetPasswordSchema
+  resetPasswordSchema,
+  changePasswordSchema
 } from "../Validations/auth.validation.js";
 import { generateSlug, getInitials } from "../utils/slug.js";
+import { createNotification } from "../services/notification.service.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -389,6 +391,7 @@ export async function register(req: Request, res: Response) {
         legalName: companyName,
         slug,                             // 👈 Public profile URL (e.g. greenleaf-4821)
         initials,                         // 👈 Avatar initials (e.g. GL)
+        location: "Mumbai, Maharashtra, India",
         score: 0.00,                      // 👈 Starting platform trust score (0.00 for newly registered)
         badge: "Under Review",            // 👈 Default badge
         verificationStatus: "registered", // 👈 Initial lifecycle status
@@ -405,6 +408,15 @@ export async function register(req: Request, res: Response) {
       role: newUser.role
     });
     setAuthCookie(res, token);
+
+    await createNotification({
+      userId: newUser.id,
+      businessId: newBusiness.id,
+      type: "SYSTEM",
+      title: "Welcome to BITAINTEL Enterprise Network",
+      message: `Account created for ${newBusiness.name}. Complete your Company Profile, Statutory IDs, and Document Vault to submit for verification.`,
+      actionTab: "profile",
+    });
 
     // Step 8: Clean JSON response return karein (User + Business dono ke sath)
     return sendSuccess(
@@ -738,6 +750,65 @@ export async function resetPassword(req: Request, res: Response) {
   } catch (error) {
     console.error("Reset Password Error:", error);
     return sendError(res, "Internal server error while resetting password", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+/**
+ * Change Authenticated User Password
+ * POST /api/v1/auth/change-password
+ */
+export async function changePassword(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Authentication required", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const result = changePasswordSchema.safeParse(req.body);
+    if (!result.success) {
+      return sendError(res, "Invalid password change request", 400, "ERR_VALIDATION", result.error.issues);
+    }
+
+    const { currentPassword, newPassword } = result.data;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return sendError(res, "User account not found.", 404, "ERR_USER_NOT_FOUND");
+    }
+
+    if (!isAccountActive(user)) {
+      return sendError(
+        res,
+        "This account is not active. Please contact platform support.",
+        403,
+        "ERR_ACCOUNT_INACTIVE"
+      );
+    }
+
+    const isCurrentValid = await comparePassword(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      return sendError(res, "Current password is incorrect.", 401, "ERR_INVALID_CREDENTIALS");
+    }
+
+    if (currentPassword === newPassword) {
+      return sendError(
+        res,
+        "New password must be different from your current password.",
+        400,
+        "ERR_VALIDATION"
+      );
+    }
+
+    user.passwordHash = await hashPassword(newPassword);
+    await user.save();
+
+    return sendSuccess(res, {
+      success: true,
+      message: "Password updated successfully.",
+    });
+  } catch (error) {
+    console.error("Change Password Error:", error);
+    return sendError(res, "Internal server error while updating password", 500, "ERR_INTERNAL_SERVER");
   }
 }
 

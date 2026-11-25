@@ -23,7 +23,6 @@ import {
   Calendar,
   MessageSquare,
   ArrowLeft,
-  ArrowUpRight,
 } from 'lucide-react';
 
 export default function AdminAccessControlPage() {

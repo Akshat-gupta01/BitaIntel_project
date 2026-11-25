@@ -13,7 +13,15 @@ export const metadata = createPageMetadata({
   keywords: ['Company Directory', 'Vendor Search', 'Verified Suppliers India', 'MCA Check'],
 });
 
-export default function DirectoryPage() {
+export default async function DirectoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string; q?: string; industry?: string }>;
+}) {
+  const resolvedParams = await searchParams;
+  const initialQuery = (resolvedParams.search || resolvedParams.q || '').trim();
+  const initialIndustry = (resolvedParams.industry || '').trim();
+
   const schema = createWebPageJsonLd({
     title: 'Business Directory & Intelligence | BITAINTEL',
     description:
@@ -44,7 +52,7 @@ export default function DirectoryPage() {
         </div>
 
         {/* Directory Explorer Component */}
-        <DirectoryExplorer />
+        <DirectoryExplorer initialQuery={initialQuery} initialIndustry={initialIndustry} />
       </Container>
     </section>
   );

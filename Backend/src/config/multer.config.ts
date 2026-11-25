@@ -45,13 +45,6 @@ const fileFilter = (req: any, file: any, cb: any) => {
   }
 };
 
-// Check file size
-const fileSizeLimit = (req: any, file: any, cb: any) => {
-  file.size > MAX_FILE_SIZE
-    ? cb(new Error("File size must be less than 5MB"))
-    : cb(null, true);
-};
-
 export const productUpload = multer({
   storage: storage,
   fileFilter: fileFilter,

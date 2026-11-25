@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
 import { RbacService } from "../services/rbac.service.js";
+import { recordAuditLog } from "../services/audit.service.js";
 
 export async function getMyPermissions(req: Request, res: Response) {
   try {
@@ -95,6 +96,14 @@ export async function updateRolePermissions(req: Request, res: Response) {
     }
 
     const result = await RbacService.updateRolePermissions(roleId, permissionCodes);
+    await recordAuditLog({
+      req,
+      action: "UPDATE_RBAC",
+      targetType: "ROLE",
+      targetId: roleId,
+      summary: `Updated permissions for role #${roleId} (${permissionCodes.length} permissions).`,
+      metadata: { roleId, permissionCount: permissionCodes.length },
+    });
     return sendSuccess(res, result);
   } catch (error: any) {
     return sendError(res, error.message || "Failed to update role permissions", 500, "ERR_ROLE_UPDATE");
@@ -111,6 +120,14 @@ export async function updateRole(req: Request, res: Response) {
     }
 
     const updated = await RbacService.updateRole(roleId, { name, description });
+    await recordAuditLog({
+      req,
+      action: "UPDATE_RBAC",
+      targetType: "ROLE",
+      targetId: roleId,
+      summary: `Updated role #${roleId} metadata (${name || "role"}).`,
+      metadata: { roleId, name },
+    });
     return sendSuccess(res, updated);
   } catch (error: any) {
     return sendError(res, error.message || "Failed to update role", 400, "ERR_ROLE_UPDATE");
@@ -125,6 +142,14 @@ export async function deleteRole(req: Request, res: Response) {
     }
 
     const result = await RbacService.deleteRole(roleId);
+    await recordAuditLog({
+      req,
+      action: "UPDATE_RBAC",
+      targetType: "ROLE",
+      targetId: roleId,
+      summary: `Deleted custom role #${roleId}.`,
+      metadata: { roleId },
+    });
     return sendSuccess(res, result);
   } catch (error: any) {
     return sendError(res, error.message || "Failed to delete role", 400, "ERR_ROLE_DELETE");

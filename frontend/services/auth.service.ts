@@ -56,6 +56,11 @@ export interface ResetPasswordPayload {
   [key: string]: unknown;
 }
 
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
 // ─── Response Interfaces ────────────────────────────────────────────────────
 
 export interface UserBusinessInfo {
@@ -244,5 +249,20 @@ export const resetPassword = async (
     email: normalizedId,
   };
   const res = await api.post("/auth/reset-password", payload);
+  return res.data;
+};
+
+/**
+ * 8. Change Password for Authenticated User
+ * POST http://localhost:3000/api/v1/auth/change-password
+ */
+export const changePassword = async (
+  data: ChangePasswordPayload
+): Promise<{
+  success?: boolean;
+  message?: string;
+  data?: { success?: boolean; message?: string };
+}> => {
+  const res = await api.post("/auth/change-password", data);
   return res.data;
 };

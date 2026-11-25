@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { QualityCertificateRecord, RegulatoryApproval } from '@/types/vendorRegistration';
+import { QualityCertificateRecord } from '@/types/vendorRegistration';
 import * as vendorService from '../../../../services/vendor.service';
 import { STANDARD_CERTIFICATIONS } from '@/config/vendorMasterData';
 import { Card } from '@/components/ui/Card';

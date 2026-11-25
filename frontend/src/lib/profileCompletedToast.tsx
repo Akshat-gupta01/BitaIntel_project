@@ -1,6 +1,6 @@
 import React from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, ShieldCheck, Building2 } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 /**
  * Triggers the official top toaster message when a vendor completes 100%

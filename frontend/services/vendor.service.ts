@@ -1049,13 +1049,33 @@ export const submitVerification = async (
 /**
  * 39. Public Business Directory & Details (Live from MySQL)
  */
-export const getPublicDirectory = async (): Promise<ApiResponse<{ businesses: any[] }>> => {
-  const res = await api.get("/master/directory");
+export interface PublicDirectoryQueryParams {
+  q?: string;
+  search?: string;
+  industry?: string;
+  level?: number | string;
+  minScore?: number;
+  verified?: boolean;
+  sortBy?: 'score' | 'tenure' | 'name';
+  order?: 'asc' | 'desc';
+}
+
+export const getPublicDirectory = async (
+  params?: PublicDirectoryQueryParams
+): Promise<ApiResponse<{ businesses: any[]; total?: number }>> => {
+  const res = await api.get("/master/directory", params ? { params } : undefined);
   return res.data;
 };
 
 export const getPublicBusinessDetail = async (slug: string): Promise<ApiResponse<{ business: any }>> => {
   const res = await api.get(`/master/business/${slug}`);
+  return res.data;
+};
+
+export const compareBusinesses = async (ids: string[]): Promise<ApiResponse<{ businesses: any[]; total?: number }>> => {
+  const res = await api.get("/master/compare", {
+    params: { ids: ids.join(",") },
+  });
   return res.data;
 };
 
@@ -1105,5 +1125,37 @@ export const submitEnquiry = async (
 ): Promise<ApiResponse<any>> => {
   const res = await api.post("/enquiries", data);
   return res.data;
+};
+
+export interface VendorNotificationItem {
+  id: number;
+  userId: number;
+  businessId?: number | null;
+  type: "VERIFICATION" | "DOCUMENT" | "COMPLIANCE" | "SYSTEM";
+  title: string;
+  message: string;
+  isRead: boolean;
+  actionTab?: string | null;
+  createdAt: string;
+}
+
+export const getVendorNotifications = async (): Promise<{
+  unreadCount: number;
+  notifications: VendorNotificationItem[];
+}> => {
+  const res = await api.get("/vendor/notifications");
+  const data = res.data?.data || res.data;
+  return {
+    unreadCount: data?.unreadCount ?? 0,
+    notifications: Array.isArray(data?.notifications) ? data.notifications : [],
+  };
+};
+
+export const markNotificationRead = async (id: number | string): Promise<void> => {
+  await api.patch(`/vendor/notifications/${id}/read`);
+};
+
+export const markAllNotificationsRead = async (): Promise<void> => {
+  await api.patch("/vendor/notifications/read-all");
 };
 

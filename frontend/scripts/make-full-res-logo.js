@@ -1,5 +1,5 @@
-const sharp = require('sharp');
-const fs = require('fs');
+import sharp from 'sharp';
+import fs from 'fs';
 
 async function generateMasterLossless() {
   // 1. Keep original 4264x928 full master resolution in lossless WebP

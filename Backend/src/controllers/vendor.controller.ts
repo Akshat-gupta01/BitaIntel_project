@@ -3,7 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import productUpload, { productUploadAsync } from "../config/multer.config.js";
+import { productUploadAsync } from "../config/multer.config.js";
 import {
   User,
   BusinessEntity,
@@ -27,12 +27,19 @@ import {
   BusinessManufacturingCapability,
   BusinessServiceCapability,
   BusinessOperatingProfile,
+  Notification,
   sequelize,
 } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
 import { generateSlug, getInitials } from "../utils/slug.js";
 import { GstinAdapter } from "../adapters/gstin.adapter.js";
-import { computeAndSaveBusinessTrustScore } from "../services/scoring.service.js";
+import {
+  computeAndSaveBusinessTrustScore,
+  buildVendorAuditData,
+  calculateDimensions,
+  formatScoreBreakdown,
+} from "../services/scoring.service.js";
+import { createNotification } from "../services/notification.service.js";
 
 /**
  * 1. GET /api/v1/vendor/profile
@@ -156,6 +163,16 @@ export async function getProfile(req: Request, res: Response) {
     }
 
     const bJson: any = business.toJSON();
+    // Compute live 7-dimension score breakdown from loaded entities
+    const liveAuditData = buildVendorAuditData({
+      business,
+      statutory: (business as any).statutory || null,
+      owner: (business as any).owner || null,
+      vaultDocs: (business as any).documents || [],
+      certs: (business as any).certifications || [],
+      banking: (business as any).bankingDetails || null,
+    });
+    bJson.scoreBreakdown = formatScoreBreakdown(calculateDimensions(liveAuditData));
     if (!bJson.incorporationDate && bJson.yearEstablished) {
       bJson.incorporationDate = `${bJson.yearEstablished}-01-01`;
     }
@@ -338,7 +355,11 @@ export async function createProfile(req: Request, res: Response) {
       initials,
       industry: industry || "Manufacturing",
       category,
-      location: location || `${city || "Mumbai"}, ${state || "Maharashtra"}`,
+      location:
+        location ||
+        [city || "Mumbai", state || "Maharashtra", country?.trim() || "India"]
+          .filter(Boolean)
+          .join(", "),
       city: city || "Mumbai",
       state: state || "Maharashtra",
       registeredAddress: registeredAddress?.trim() || null,
@@ -478,15 +499,27 @@ export async function updateProfile(req: Request, res: Response) {
     }
 
     if (country?.trim()) updates.country = country.trim();
+    if (city?.trim() || state?.trim() || country?.trim() || !business.location || business.location === "India") {
+      const nextCity = (updates.city ?? business.city ?? "").trim();
+      const nextState = (updates.state ?? business.state ?? "").trim();
+      const nextCountry = (updates.country ?? business.country ?? "India").trim();
+      const locParts = [nextCity, nextState, nextCountry].filter(Boolean);
+      const uniqueLocParts = locParts.filter(
+        (part, idx) => locParts.findIndex((p) => p.toLowerCase() === part.toLowerCase()) === idx
+      );
+      if (uniqueLocParts.length > 0) {
+        updates.location = uniqueLocParts.join(", ");
+      }
+    }
     if (website !== undefined) updates.website = website?.trim() || null;
     if (turnover?.trim()) updates.turnover = turnover.trim();
     if (employees?.trim()) updates.employees = employees.trim();
     if (yearEstablished !== undefined) updates.yearEstablished = Number(yearEstablished) || 2024;
 
-    // Save incorporationDate in Business Entity
+    // Save incorporationDate in Business Entity and keep yearEstablished in sync
     if (incorporationDate !== undefined) {
       updates.incorporationDate = incorporationDate?.trim() || null;
-      if (incorporationDate?.trim() && !yearEstablished) {
+      if (incorporationDate?.trim()) {
         const parsedYear = new Date(incorporationDate.trim()).getFullYear();
         if (!isNaN(parsedYear) && parsedYear > 1800) {
           updates.yearEstablished = parsedYear;
@@ -836,6 +869,14 @@ export async function createStatutory(req: Request, res: Response) {
     try {
       await computeAndSaveBusinessTrustScore(business.id);
     } catch {}
+    await createNotification({
+      userId,
+      businessId: business.id,
+      type: "VERIFICATION",
+      title: "Statutory Identifiers Saved",
+      message: `Statutory IDs${cleanGstin ? ` (GSTIN: ${cleanGstin})` : ""} have been recorded and queued for compliance verification.`,
+      actionTab: "profile",
+    });
     const sJson: any = newStatutory.toJSON();
     sJson.tan = initialPayload.tan || null;
     sJson.duns = initialPayload.duns || null;
@@ -2171,44 +2212,15 @@ export async function addProduct(req: Request, res: Response) {
             : productImageUrl
             ? [productImageUrl]
             : [];
-        const bulkImages = normalizeProductImages(sourceImages);
-        // Build product object with all fields
-        const productData: any = {
-          name: item.name?.trim() || "",
-          type: item.type === "Service" ? "Service" : "Product",
-          categoryId: item.categoryId || "CAT001",
-          subcategoryId: item.subcategoryId || null,
-          brand: item.brand?.trim() || null,
-          description: item.description?.trim() || null,
-          specifications: item.specifications?.trim() || null,
-          grade: item.grade?.trim() || null,
-          standards: item.standards?.trim() || null,
-          hsnCode: item.hsnCode?.trim() || null,
-          countryOfOrigin: item.countryOfOrigin || "India",
-          moq: item.moq?.trim() || null,
-          standardOrderQty: item.standardOrderQty?.trim() || null,
-          monthlyCapacity: item.monthlyCapacity?.trim() || null,
-          availableStock: item.availableStock?.trim() || null,
-          leadTimeDays: item.leadTimeDays?.trim() || null,
-          sampleAvailability:
-            ["Available Free", "Available Paid", "Not Available"].includes(
-              item.sampleAvailability
-            )
-              ? item.sampleAvailability
-              : "Available Free",
-          indicativePrice: item.indicativePrice
-            ? String(item.indicativePrice).trim()
-            : null,
-          currency: item.currency?.trim() || "INR",
-          priceValidity: item.priceValidity?.trim() || null,
-          targetMarkets: item.targetMarkets?.trim() || null,
-          images: bulkImages,
-          catalogueDoc: item.catalogueDoc?.trim() || null,
-          technicalDataSheetDoc: item.technicalDataSheetDoc?.trim() || null,
-          coaDoc: item.coaDoc?.trim() || null,
-          sdsDoc: item.sdsDoc?.trim() || null,
-        };
-        return productData;
+        return sanitizeProductInput(
+          {
+            ...item,
+            name: item.name?.trim() || "",
+            categoryId: item.categoryId || "CAT001",
+            images: sourceImages,
+          },
+          business.id
+        );
       });
       const products = await BusinessProduct.bulkCreate(itemsToCreate);
       return sendSuccess(
@@ -3491,6 +3503,15 @@ export async function saveBankingDetails(req: Request, res: Response) {
       await banking.update(payload);
     }
 
+    await createNotification({
+      userId,
+      businessId: business.id,
+      type: "SYSTEM",
+      title: "Banking Settlement Details Updated",
+      message: "Your corporate banking & settlement details have been saved in the protected vault.",
+      actionTab: "overview",
+    });
+
     return sendSuccess(res, {
       message: "Banking details saved successfully",
       bankingDetails: banking,
@@ -3646,6 +3667,15 @@ export async function submitVerification(req: Request, res: Response) {
       });
     }
 
+    await createNotification({
+      userId,
+      businessId: business.id,
+      type: "VERIFICATION",
+      title: "Verification Dossier Submitted",
+      message: `Your registration dossier (${vendorId} · Ref: ${referenceNumber}) has been submitted to the Central Audit Team.`,
+      actionTab: "overview",
+    });
+
     return sendSuccess(
       res,
       {
@@ -3663,6 +3693,75 @@ export async function submitVerification(req: Request, res: Response) {
   } catch (error: any) {
     console.error("Submit Verification Error:", error);
     return sendError(res, error.message || "Failed to submit dossier for verification", 500);
+  }
+}
+
+// ─── Notifications (SRS §5.11) ───────────────────────────────────────────────
+
+export async function getNotifications(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Unauthorized access", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const notifications = await Notification.findAll({
+      where: { userId },
+      order: [["createdAt", "DESC"]],
+      limit: 50,
+    });
+
+    const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+    return sendSuccess(res, {
+      unreadCount,
+      notifications,
+    });
+  } catch (error) {
+    console.error("Get Notifications Error:", error);
+    return sendError(res, "Failed to fetch notifications", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+export async function markNotificationRead(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Unauthorized access", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const notifId = Number(req.params.id);
+    if (!notifId || isNaN(notifId)) {
+      return sendError(res, "Invalid notification ID", 400, "ERR_INVALID_ID");
+    }
+
+    const notif = await Notification.findOne({ where: { id: notifId, userId } });
+    if (!notif) {
+      return sendError(res, "Notification not found", 404, "ERR_NOT_FOUND");
+    }
+
+    notif.isRead = true;
+    await notif.save();
+
+    return sendSuccess(res, { message: "Notification marked as read", notification: notif });
+  } catch (error) {
+    console.error("Mark Notification Read Error:", error);
+    return sendError(res, "Failed to update notification", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+export async function markAllNotificationsRead(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Unauthorized access", 401, "ERR_UNAUTHORIZED");
+    }
+
+    await Notification.update({ isRead: true }, { where: { userId, isRead: false } });
+    return sendSuccess(res, { message: "All notifications marked as read" });
+  } catch (error) {
+    console.error("Mark All Notifications Read Error:", error);
+    return sendError(res, "Failed to mark notifications as read", 500, "ERR_INTERNAL_SERVER");
   }
 }
 

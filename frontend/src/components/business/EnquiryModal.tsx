@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState } from 'react';
@@ -11,11 +12,12 @@ import * as vendorService from '@services/vendor.service';
 
 interface EnquiryModalProps {
   business: Business;
+  productId?: string | number | null;
   productName?: string;
   triggerButton?: React.ReactNode;
 }
 
-export function EnquiryModal({ business, productName, triggerButton }: EnquiryModalProps) {
+export function EnquiryModal({ business, productId, productName, triggerButton }: EnquiryModalProps) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,9 +52,15 @@ export function EnquiryModal({ business, productName, triggerButton }: EnquiryMo
 
     setIsSubmitting(true);
     try {
+      const numericProductId =
+        productId !== undefined && productId !== null && /^\d+$/.test(String(productId).trim())
+          ? Number(String(productId).trim())
+          : null;
+
       const res = await vendorService.submitEnquiry({
         businessSlug: (business as any).slug || business.id,
         businessId: business.id || (business as any).slug || business.name,
+        productId: numericProductId,
         productName: productName || null,
         name: name.trim(),
         buyerName: name.trim(),

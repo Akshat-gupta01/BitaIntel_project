@@ -11,8 +11,6 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  KeyRound,
-  CheckCircle2,
   Clock,
   AlertCircle,
 } from 'lucide-react';
@@ -26,7 +24,7 @@ export interface LoginFormProps {
   onPortalChange?: (portal: 'vendor' | 'admin') => void;
 }
 
-export function LoginForm({ portal = 'vendor', onPortalChange }: LoginFormProps) {
+export function LoginForm({ portal = 'vendor' }: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get('redirect');
@@ -63,6 +61,7 @@ const [errorMsg, setErrorMsg] = useState('');
   }, [otpSent, timer]);
 
   // Centralized smart role-aware post-login router
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigateAfterLogin = (authUserObj: any) => {
     const userRole = String(authUserObj?.role || authUserObj?.systemRole || '').toLowerCase();
     const isAdmin =
@@ -115,6 +114,7 @@ const [errorMsg, setErrorMsg] = useState('');
 
     setIsLoading(true);
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const authUser: any = await login(identifier, password);
       setIsLoading(false);
       toast.success('Welcome back!', {
@@ -122,9 +122,10 @@ const [errorMsg, setErrorMsg] = useState('');
       });
 
       navigateAfterLogin(authUser);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsLoading(false);
-      const msg = err.message || 'Invalid email or password.';
+      const e = err as { message?: string };
+      const msg = e.message || 'Invalid email or password.';
       setErrorMsg(msg);
       toast.error('Login Failed', { description: msg });
     }
@@ -167,8 +168,9 @@ setTimer(45);
 toast.success('Security OTP Dispatched', {
 description: `A 4-digit verification code was sent to ${identifier}.`,
 });
-} catch (err: any) {
-const msg = err.message || 'Could not send the verification code. Please try again.';
+} catch (err: unknown) {
+const e = err as { message?: string };
+const msg = e.message || 'Could not send the verification code. Please try again.';
 setErrorMsg(msg);
 toast.error('OTP Dispatch Failed', { description: msg });
 } finally {
@@ -190,16 +192,18 @@ return;
 
 setIsLoading(true);
 try {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const authUser: any = await loginWithOtp(identifier, otpCode);
   setIsLoading(false);
   toast.success('Verification Successful', {
     description: 'Logged into your corporate workspace.',
   });
   navigateAfterLogin(authUser);
-} catch (err: any) {
+} catch (err: unknown) {
+  const e = err as { message?: string };
   setIsLoading(false);
-  setErrorMsg(err.message || 'Verification failed');
-  toast.error('Verification Failed', { description: err.message });
+  setErrorMsg(e.message || 'Verification failed');
+  toast.error('Verification Failed', { description: e.message });
 }
 }
 

@@ -12,39 +12,27 @@ import {
   Building2,
   MapPin,
   Award,
-  Layers,
-  ExternalLink,
   ChevronRight,
-  Filter,
   Sparkles,
-  Users,
   Factory,
   Cpu,
   FlaskConical,
   Stethoscope,
   Sun,
   Package,
-  Shield,
-  Lock,
   FileCheck2,
   ArrowUpRight,
   HelpCircle,
   Check,
   Copy,
-  Calendar,
   FileText,
   Zap,
-  Activity,
-  Info,
   BarChart3,
   Fingerprint,
-  Eye,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { Container } from '@/components/layout/Container';
 import { Button } from '@/components/ui/Button';
 import { Badge, type BadgeKind } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
 import { ScoreRing } from '@/components/business/ScoreRing';
 import { BusinessCard } from '@/components/business/BusinessCard';
 import { EnquiryModal } from '@/components/business/EnquiryModal';

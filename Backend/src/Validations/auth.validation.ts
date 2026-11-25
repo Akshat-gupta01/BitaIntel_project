@@ -100,3 +100,9 @@ export const resetPasswordSchema = z.object({
   },
   { message: "Please provide your registered corporate email or mobile number" }
 );
+
+// 7. Change Password (Authenticated) Validation
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters")
+});

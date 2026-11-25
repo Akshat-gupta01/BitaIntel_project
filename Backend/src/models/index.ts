@@ -30,6 +30,9 @@ import BusinessManufacturingCapability from "./BusinessManufacturingCapability.m
 import BusinessServiceCapability from "./BusinessServiceCapability.model.js";
 import BusinessOperatingProfile from "./BusinessOperatingProfile.model.js";
 import BusinessEnquiry from "./BusinessEnquiry.model.js";
+import Complaint from "./Complaint.model.js";
+import AuditLog from "./AuditLog.model.js";
+import Notification from "./Notification.model.js";
 
 // ─── Model Associations ──────────────────────────────────────────────────────
 
@@ -293,6 +296,17 @@ BusinessEnquiry.belongsTo(BusinessProduct, {
   as: "product",
 });
 
+// 8. Compliance & Buyer Complaints (1-to-Many)
+BusinessEntity.hasMany(Complaint, {
+  foreignKey: "businessId",
+  as: "complaints",
+  onDelete: "CASCADE",
+});
+Complaint.belongsTo(BusinessEntity, {
+  foreignKey: "businessId",
+  as: "business",
+});
+
 // ─── RBAC Role-Permission Associations ───────────────────────────────────────
 Role.belongsToMany(Permission, {
   through: RolePermission,
@@ -346,6 +360,9 @@ export {
   BusinessServiceCapability,
   BusinessOperatingProfile,
   BusinessEnquiry,
+  Complaint,
+  AuditLog,
+  Notification,
 };
 export default {
   sequelize,
@@ -381,4 +398,7 @@ export default {
   BusinessServiceCapability,
   BusinessOperatingProfile,
   BusinessEnquiry,
+  Complaint,
+  AuditLog,
+  Notification,
 };

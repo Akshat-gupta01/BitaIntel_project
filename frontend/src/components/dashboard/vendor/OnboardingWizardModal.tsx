@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   FullVendorRegistrationDossier,
-  VendorRegistrationStatus,
 } from '@/types/vendorRegistration';
 import {
   DEMO_PREFILLED_DOSSIER,
@@ -52,9 +52,7 @@ interface OnboardingWizardModalProps {
  * Uses the canonical step validation from initialVendorDossier.
  */
 export function computeDossierCompletion(
-  data: FullVendorRegistrationDossier,
-  _activeStep?: number,
-  _maxStep?: number
+  data: FullVendorRegistrationDossier
 ): number {
   return calculateDossierCompletion(data);
 }
@@ -88,6 +86,7 @@ export function OnboardingWizardModal({
   useEffect(() => {
     if (isOpen && initialStep) {
       const step = Math.max(2, Math.min(6, initialStep));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentStep(step);
       setHighestStepReached((prev) => Math.max(prev, step));
     }
@@ -104,11 +103,11 @@ export function OnboardingWizardModal({
           lastUpdated: new Date().toISOString(),
         };
         onDossierChange(updated);
-        saveVendorDossierToStorage(updated, dossier.step1?.email);
+        saveVendorDossierToStorage();
         updateRegistrationProgress(currentCalculated, currentStep);
       }
     }
-  }, [isOpen, dossier, currentStep]);
+  }, [isOpen, dossier, currentStep, onDossierChange, updateRegistrationProgress]);
 
   if (!isOpen) return null;
 
@@ -125,7 +124,7 @@ export function OnboardingWizardModal({
         lastUpdated: new Date().toISOString(),
       };
       onDossierChange(updated);
-      saveVendorDossierToStorage(updated, dossier.step1?.email);
+      saveVendorDossierToStorage();
       updateRegistrationProgress(newScore, clamped);
     }
   }
@@ -140,13 +139,13 @@ export function OnboardingWizardModal({
       lastUpdated: new Date().toISOString(),
     };
     onDossierChange(completeWithPercentage);
-    saveVendorDossierToStorage(completeWithPercentage, completeWithPercentage.step1?.email);
+    saveVendorDossierToStorage();
     updateRegistrationProgress(score, currentStep);
   }
 
   function handleFillDemo() {
     onDossierChange(DEMO_PREFILLED_DOSSIER);
-    saveVendorDossierToStorage(DEMO_PREFILLED_DOSSIER, DEMO_PREFILLED_DOSSIER.step1?.email);
+    saveVendorDossierToStorage();
     updateRegistrationProgress(100, 6, 'pending_approval');
     toast.success('Enterprise Details Pre-Filled', {
       description: 'Loaded comprehensive audited profile for Meridian Steel Works Ltd.',
@@ -188,47 +187,61 @@ export function OnboardingWizardModal({
           }).catch(() => {});
         }
 
+        let didBackfillIds = false;
+        let nextFacilities = dossier.step2.facilities;
+        let nextPersonnel = dossier.step2.keyPersonnel;
+        let nextProducts = dossier.step4.products;
+        let nextCerts = dossier.step4.certifications;
+
         // Sync pending facilities to business_facilities table
         if (dossier.step2.facilities && dossier.step2.facilities.length > 0) {
-          for (const fac of dossier.step2.facilities) {
-            if (fac.id && fac.id.startsWith('FAC-')) {
-              try {
-                const res = await vendorService.addFacility({
-                  facilityType: fac.type,
-                  facilityName: fac.facilityName,
-                  addressLine: fac.addressLine || 'Facility Address',
-                  city: fac.city || 'Mumbai',
-                  state: fac.state || 'Maharashtra',
-                  pincode: fac.pincode || '400001',
-                  country: fac.country || 'India',
-                  isOwned: fac.isOwned ?? true,
-                });
-                if (res?.data?.facility?.id) {
-                  fac.id = String(res.data.facility.id);
-                }
-              } catch (_) {}
-            }
-          }
+          nextFacilities = await Promise.all(
+            dossier.step2.facilities.map(async (fac) => {
+              if (fac.id && fac.id.startsWith('FAC-')) {
+                try {
+                  const res = await vendorService.addFacility({
+                    facilityType: fac.type,
+                    facilityName: fac.facilityName,
+                    addressLine: fac.addressLine || 'Facility Address',
+                    city: fac.city || 'Mumbai',
+                    state: fac.state || 'Maharashtra',
+                    pincode: fac.pincode || '400001',
+                    country: fac.country || 'India',
+                    isOwned: fac.isOwned ?? true,
+                  });
+                  if (res?.data?.facility?.id) {
+                    didBackfillIds = true;
+                    return { ...fac, id: String(res.data.facility.id) };
+                  }
+                } catch {}
+              }
+              return fac;
+            })
+          );
         }
 
         // Sync pending personnel to business_personnel table
         if (dossier.step2.keyPersonnel && dossier.step2.keyPersonnel.length > 0) {
-          for (const kp of dossier.step2.keyPersonnel) {
-            if (kp.id && kp.id.startsWith('KP-') && kp.name && kp.email) {
-              try {
-                const res = await vendorService.addPersonnel({
-                  name: kp.name,
-                  designation: kp.designation || 'Executive',
-                  email: kp.email,
-                  mobile: kp.mobile || '0000000000',
-                  isAuthorizedSignatory: !!kp.isAuthorizedSignatory,
-                });
-                if (res?.data?.personnel?.id) {
-                  kp.id = String(res.data.personnel.id);
-                }
-              } catch (_) {}
-            }
-          }
+          nextPersonnel = await Promise.all(
+            dossier.step2.keyPersonnel.map(async (kp) => {
+              if (kp.id && kp.id.startsWith('KP-') && kp.name && kp.email) {
+                try {
+                  const res = await vendorService.addPersonnel({
+                    name: kp.name,
+                    designation: kp.designation || 'Executive',
+                    email: kp.email,
+                    mobile: kp.mobile || '0000000000',
+                    isAuthorizedSignatory: !!kp.isAuthorizedSignatory,
+                  });
+                  if (res?.data?.personnel?.id) {
+                    didBackfillIds = true;
+                    return { ...kp, id: String(res.data.personnel.id) };
+                  }
+                } catch {}
+              }
+              return kp;
+            })
+          );
         }
         // Sync Step 3 Business Capabilities to normalized relational tables
         if (dossier.step3.businessTypeCodes && dossier.step3.businessTypeCodes.length > 0) {
@@ -257,71 +270,88 @@ export function OnboardingWizardModal({
               facilityPhotos: dossier.step3.facilityPhotos || null,
               technicalAuditDoc: dossier.step3.technicalAuditDoc || null,
             });
-          } catch (_) {}
+          } catch {}
         }
         // Sync pending Step 4 products to business_products table
         if (dossier.step4.products && dossier.step4.products.length > 0) {
-          for (const prd of dossier.step4.products) {
-            if (prd.id && prd.id.startsWith('PRD-')) {
-              try {
-                const res = await vendorService.addProduct({
-                  name: prd.name,
-                  type: prd.type,
-                  categoryId: prd.categoryId,
-                  subcategoryId: prd.subcategoryId || null,
-                  brand: prd.brand || null,
-                  description: prd.description || null,
-                  specifications: prd.specifications || null,
-                  grade: prd.grade || null,
-                  standards: prd.standards || null,
-                  hsnCode: prd.hsnCode || null,
-                  countryOfOrigin: prd.countryOfOrigin || 'India',
-                  moq: prd.moq || null,
-                  standardOrderQty: prd.standardOrderQty || null,
-                  monthlyCapacity: prd.monthlyCapacity || null,
-                  availableStock: prd.availableStock || null,
-                  leadTimeDays: prd.leadTimeDays || null,
-                  sampleAvailability: prd.sampleAvailability,
-                  indicativePrice: prd.indicativePrice || null,
-                  currency: prd.currency || 'INR',
-                  priceValidity: prd.priceValidity || null,
-                  targetMarkets: prd.targetMarkets || null,
-                  images: prd.images || [],
-                  catalogueDoc: prd.catalogueDoc || null,
-                  technicalDataSheetDoc: prd.technicalDataSheetDoc || null,
-                  coaDoc: prd.coaDoc || null,
-                  sdsDoc: prd.sdsDoc || null,
-                });
-                if (res?.data?.product?.id) {
-                  prd.id = String(res.data.product.id);
-                }
-              } catch (_) {}
-            }
-          }
+          nextProducts = await Promise.all(
+            dossier.step4.products.map(async (prd) => {
+              if (prd.id && prd.id.startsWith('PRD-')) {
+                try {
+                  const res = await vendorService.addProduct({
+                    name: prd.name,
+                    type: prd.type,
+                    categoryId: prd.categoryId,
+                    subcategoryId: prd.subcategoryId || null,
+                    brand: prd.brand || null,
+                    description: prd.description || null,
+                    specifications: prd.specifications || null,
+                    grade: prd.grade || null,
+                    standards: prd.standards || null,
+                    hsnCode: prd.hsnCode || null,
+                    countryOfOrigin: prd.countryOfOrigin || 'India',
+                    moq: prd.moq || null,
+                    standardOrderQty: prd.standardOrderQty || null,
+                    monthlyCapacity: prd.monthlyCapacity || null,
+                    availableStock: prd.availableStock || null,
+                    leadTimeDays: prd.leadTimeDays || null,
+                    sampleAvailability: prd.sampleAvailability,
+                    indicativePrice: prd.indicativePrice || null,
+                    currency: prd.currency || 'INR',
+                    priceValidity: prd.priceValidity || null,
+                    targetMarkets: prd.targetMarkets || null,
+                    images: prd.images || [],
+                    catalogueDoc: prd.catalogueDoc || null,
+                    technicalDataSheetDoc: prd.technicalDataSheetDoc || null,
+                    coaDoc: prd.coaDoc || null,
+                    sdsDoc: prd.sdsDoc || null,
+                  });
+                  if (res?.data?.product?.id) {
+                    didBackfillIds = true;
+                    return { ...prd, id: String(res.data.product.id) };
+                  }
+                } catch {}
+              }
+              return prd;
+            })
+          );
         }
 
         // Step 4 Certifications Sync
         if (dossier.step4?.certifications?.length) {
-          for (const cert of dossier.step4.certifications) {
-            if (cert.id && cert.id.startsWith('CERT-')) {
-              try {
-                const res = await vendorService.addCertification({
-                  certificateType: cert.certificateType,
-                  certificateNumber: cert.certificateNumber,
-                  issuingAuthority: cert.issuingAuthority,
-                  issueDate: cert.issueDate || null,
-                  expiryDate: cert.expiryDate || null,
-                  scope: cert.scope || null,
-                  applicableFacility: cert.applicableFacility || 'All Facilities',
-                  evidenceDoc: cert.evidenceDoc || null,
-                  status: cert.status,
-                });
-                if (res?.data?.certification?.id) {
-                  cert.id = String(res.data.certification.id);
-                }
-              } catch (_) {}
-            }
-          }
+          nextCerts = await Promise.all(
+            dossier.step4.certifications.map(async (cert) => {
+              if (cert.id && cert.id.startsWith('CERT-')) {
+                try {
+                  const res = await vendorService.addCertification({
+                    certificateType: cert.certificateType,
+                    certificateNumber: cert.certificateNumber,
+                    issuingAuthority: cert.issuingAuthority,
+                    issueDate: cert.issueDate || null,
+                    expiryDate: cert.expiryDate || null,
+                    scope: cert.scope || null,
+                    applicableFacility: cert.applicableFacility || 'All Facilities',
+                    evidenceDoc: cert.evidenceDoc || null,
+                    status: cert.status,
+                  });
+                  if (res?.data?.certification?.id) {
+                    didBackfillIds = true;
+                    return { ...cert, id: String(res.data.certification.id) };
+                  }
+                } catch {}
+              }
+              return cert;
+            })
+          );
+        }
+
+        if (didBackfillIds) {
+          onDossierChange({
+            ...dossier,
+            step2: { ...dossier.step2, facilities: nextFacilities, keyPersonnel: nextPersonnel },
+            step4: { ...dossier.step4, products: nextProducts, certifications: nextCerts },
+            lastUpdated: new Date().toISOString(),
+          });
         }
 
         // Step 4 Section 3: Quality Systems & Testing Capabilities Sync
@@ -331,7 +361,7 @@ export function OnboardingWizardModal({
               testingCapabilities: dossier.step4.testingCapabilities?.trim() || null,
               qualityAssuranceProcedures: dossier.step4.qualityAssuranceProcedures?.trim() || null,
             });
-          } catch (_) {}
+          } catch {}
         }
 
         // Step 5: Commercial, Trade & Banking Settlement Sync
@@ -379,7 +409,7 @@ export function OnboardingWizardModal({
               sanctionsFreeDeclaration: Boolean(dossier.step5.sanctionsFreeDeclaration),
               authorityConsent: Boolean(dossier.step5.authorityConsent ?? true),
             });
-          } catch (_) {}
+          } catch {}
         }
         toast.success('Registration Progress Saved', {
           description: `Saved ${dossier.completionPercentage}% of your dossier to database. You can resume anytime.`,
@@ -528,7 +558,6 @@ export function OnboardingWizardModal({
         {/* Stepper Tabs */}
         <div className="px-4 py-2 border-b border-slate-100 bg-white grid grid-cols-5 gap-1.5 shrink-0 overflow-x-auto">
           {steps.map((s) => {
-            const Icon = s.icon;
             const isCurrent = currentStep === s.num;
             const isCompleted =
               s.num === 1

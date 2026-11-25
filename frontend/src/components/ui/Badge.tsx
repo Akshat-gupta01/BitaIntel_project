@@ -95,6 +95,9 @@ export function Badge({
       {icon && (kind === 'warning' || kind === 'amber') && (
         <AlertCircle className="size-3.5 shrink-0 text-amber-600" />
       )}
+      {icon && kind === 'rose' && (
+        <AlertCircle className="size-3.5 shrink-0 text-rose-600" />
+      )}
       {icon && (kind === 'info' || kind === 'sky') && (
         <Info className="size-3.5 shrink-0 text-primary-600" />
       )}

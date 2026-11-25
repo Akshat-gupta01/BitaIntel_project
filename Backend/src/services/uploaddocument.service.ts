@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
+import { createNotification } from "./notification.service.js";
 import {
   BusinessBankingDetails,
   BusinessEntity,
@@ -238,6 +239,15 @@ export async function uploadStatutoryDocument(req: Request, res: Response) {
       checksum,
       metadata
     );
+
+    await createNotification({
+      userId: req.user?.id,
+      businessId: business.id,
+      type: "DOCUMENT",
+      title: `Document Uploaded: ${req.file.originalname}`,
+      message: `"${metadata.categoryName}" has been vaulted and queued for analyst verification.`,
+      actionTab: "documents",
+    });
 
     return sendSuccess(
       res,

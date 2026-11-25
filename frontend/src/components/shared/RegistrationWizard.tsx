@@ -1,16 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FullVendorRegistrationDossier,
-  VendorRegistrationStatus,
 } from '@/types/vendorRegistration';
 import {
   INITIAL_EMPTY_DOSSIER,
   DEMO_PREFILLED_DOSSIER,
   getStoredVendorDossier,
-  saveVendorDossierToStorage,
   calculateDossierCompletion,
 } from '@/config/initialVendorDossier';
 import { Step1Account } from './registration/Step1Account';
@@ -31,7 +30,6 @@ import {
   CheckCircle2,
   Sparkles,
   Save,
-  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -49,6 +47,7 @@ export function RegistrationWizard() {
 
   // Load saved draft on mount & sync live with MySQL database
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     const saved = getStoredVendorDossier();
     if (saved) {
@@ -302,13 +301,6 @@ export function RegistrationWizard() {
     toast.success('Demo Enterprise Data Populated', {
       description: 'Loaded comprehensive dossier for Meridian Steel Works Pvt. Ltd.',
     });
-  }
-
-  // Reset to empty draft
-  function handleResetEmpty() {
-    setDossier(INITIAL_EMPTY_DOSSIER);
-    setCurrentStep(1);
-    toast.info('Registration draft reset to blank state.');
   }
 
   // Save Draft action

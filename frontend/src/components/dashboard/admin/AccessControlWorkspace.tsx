@@ -20,7 +20,6 @@ import {
   ShieldAlert,
   Edit2,
   Trash2,
-  Check,
 } from 'lucide-react';
 import type { Role, Permission } from '@/types/rbac.types';
 import {
@@ -429,6 +428,7 @@ export function AccessControlWorkspace() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData(true);
   }, [fetchData]);
 
@@ -466,12 +466,58 @@ export function AccessControlWorkspace() {
   };
 
   // Helper to resolve canonical permission code
-  const getPermissionCode = (moduleName: string, action: string) => {
+  const getPermissionCode = useCallback((moduleName: string, action: string) => {
     const catalogCode = permissionCodeMap[`${moduleName}::${action}`];
     if (catalogCode) return catalogCode;
     const prefix = ACTION_MAP[moduleName] || moduleName.toLowerCase().replace(/\s+/g, '_');
     return `${prefix}.${action}`;
-  };
+  }, [permissionCodeMap]);
+
+  // Filtered Roles
+  const filteredRoles = useMemo(() => {
+    if (!roleSearchQuery.trim()) return roles;
+    const q = roleSearchQuery.toLowerCase().trim();
+    return roles.filter(
+      (r) =>
+        r.name?.toLowerCase().includes(q) ||
+        r.code?.toLowerCase().includes(q) ||
+        r.description?.toLowerCase().includes(q)
+    );
+  }, [roles, roleSearchQuery]);
+
+  // Filtered Modules
+  const filteredModuleConfigs = useMemo(() => {
+    return moduleConfigs.filter((mod) => {
+      // 1. Filter by Module Dropdown
+      if (moduleFilter !== 'all' && mod.id !== moduleFilter && mod.name !== moduleFilter) {
+        return false;
+      }
+      // 2. Filter by Permission Search Query
+      if (permSearchQuery.trim()) {
+        const q = permSearchQuery.toLowerCase().trim();
+        const matchesModule =
+          mod.name.toLowerCase().includes(q) ||
+          mod.sub.toLowerCase().includes(q) ||
+          mod.id.toLowerCase().includes(q);
+        if (matchesModule) return true;
+
+        // Check if any slot code or name in this module matches
+        const matchesAnySlot = ACTION_VERBS.some((act) => {
+          if (!mod.slots[act]) return false;
+          const code = getPermissionCode(mod.id, act);
+          const detail = permissionDetailMap[code];
+          return (
+            code.toLowerCase().includes(q) ||
+            (detail &&
+              (detail.name.toLowerCase().includes(q) ||
+                detail.description.toLowerCase().includes(q)))
+          );
+        });
+        return matchesAnySlot;
+      }
+      return true;
+    });
+  }, [moduleConfigs, moduleFilter, permSearchQuery, permissionDetailMap, getPermissionCode]);
 
   // Toggle single permission switch
   const handleTogglePermission = (moduleName: string, action: string, isChecked: boolean) => {
@@ -582,52 +628,6 @@ export function AccessControlWorkspace() {
     setSelectedPermissions(new Set(initialPermissions));
     toast.info('Reverted unsaved matrix changes');
   };
-
-  // Filtered Roles
-  const filteredRoles = useMemo(() => {
-    if (!roleSearchQuery.trim()) return roles;
-    const q = roleSearchQuery.toLowerCase().trim();
-    return roles.filter(
-      (r) =>
-        r.name?.toLowerCase().includes(q) ||
-        r.code?.toLowerCase().includes(q) ||
-        r.description?.toLowerCase().includes(q)
-    );
-  }, [roles, roleSearchQuery]);
-
-  // Filtered Modules
-  const filteredModuleConfigs = useMemo(() => {
-    return moduleConfigs.filter((mod) => {
-      // 1. Filter by Module Dropdown
-      if (moduleFilter !== 'all' && mod.id !== moduleFilter && mod.name !== moduleFilter) {
-        return false;
-      }
-      // 2. Filter by Permission Search Query
-      if (permSearchQuery.trim()) {
-        const q = permSearchQuery.toLowerCase().trim();
-        const matchesModule =
-          mod.name.toLowerCase().includes(q) ||
-          mod.sub.toLowerCase().includes(q) ||
-          mod.id.toLowerCase().includes(q);
-        if (matchesModule) return true;
-
-        // Check if any slot code or name in this module matches
-        const matchesAnySlot = ACTION_VERBS.some((act) => {
-          if (!mod.slots[act]) return false;
-          const code = getPermissionCode(mod.id, act);
-          const detail = permissionDetailMap[code];
-          return (
-            code.toLowerCase().includes(q) ||
-            (detail &&
-              (detail.name.toLowerCase().includes(q) ||
-                detail.description.toLowerCase().includes(q)))
-          );
-        });
-        return matchesAnySlot;
-      }
-      return true;
-    });
-  }, [moduleConfigs, moduleFilter, permSearchQuery, permissionDetailMap]);
 
   // Dynamic Role Creation
   const handleCreateRoleSubmit = async (e: React.FormEvent) => {

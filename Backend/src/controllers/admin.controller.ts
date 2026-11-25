@@ -20,15 +20,14 @@ import {
   VendorBusinessType,
   VendorCategory,
   VendorSubcategory,
+  AuditLog,
 } from "../models/index.js";
+import { recordAuditLog } from "../services/audit.service.js";
+import { createNotification } from "../services/notification.service.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
 import {
-  calculateDimensions,
-  calculateFinalScore,
   getGradeAndRisk,
-  calculateVerificationLevel,
   computeAndSaveBusinessTrustScore,
-  type VendorAuditData,
 } from "../services/scoring.service.js";
 
 // ─── Helper: Score se Badge nikaalna (Docs Section 2 Matrix ke mutabiq)
@@ -301,6 +300,25 @@ export async function verifyStatutory(req: Request, res: Response) {
       business.badge = newBadge;
       await business.save();
 
+      await recordAuditLog({
+        req,
+        action: "VERIFY_STATUTORY",
+        targetType: "BUSINESS",
+        targetId: business.id,
+        companyName: business.legalName || business.name,
+        summary: notes || `GSTIN ${statutory.gstin} approved (${newScore}/100, ${newBadge} Badge).`,
+        metadata: { decision: "APPROVED", gstin: statutory.gstin, score: newScore, badge: newBadge, level: newLevel },
+      });
+
+      await createNotification({
+        userId: business.ownerUserId,
+        businessId: business.id,
+        type: "VERIFICATION",
+        title: "Statutory Verification Approved",
+        message: `Your GSTIN (${statutory.gstin}) and profile have been verified! Trust Score: ${newScore}/100 (${newBadge} Badge).`,
+        actionTab: "score",
+      });
+
       return sendSuccess(res, {
         message: "GSTIN verified successfully by Admin. Trust Score and Verification Level updated!",
         businessId: business.id,
@@ -322,6 +340,25 @@ export async function verifyStatutory(req: Request, res: Response) {
       business.verificationStatus = "action_required";
       await business.save();
 
+      await recordAuditLog({
+        req,
+        action: "VERIFY_STATUTORY",
+        targetType: "BUSINESS",
+        targetId: business.id,
+        companyName: business.legalName || business.name,
+        summary: notes || `Clarification requested for GSTIN ${statutory.gstin}.`,
+        metadata: { decision: "ACTION_REQUIRED", gstin: statutory.gstin },
+      });
+
+      await createNotification({
+        userId: business.ownerUserId,
+        businessId: business.id,
+        type: "VERIFICATION",
+        title: "Clarification Required on Verification",
+        message: notes || `Auditor requested additional clarification or documents for GSTIN ${statutory.gstin}.`,
+        actionTab: "documents",
+      });
+
       return sendSuccess(res, {
         message: "Clarification requested. Vendor alerted with action required instructions.",
         businessId: business.id,
@@ -338,6 +375,25 @@ export async function verifyStatutory(req: Request, res: Response) {
 
     business.verificationStatus = "Rejected";
     await business.save();
+
+    await recordAuditLog({
+      req,
+      action: "VERIFY_STATUTORY",
+      targetType: "BUSINESS",
+      targetId: business.id,
+      companyName: business.legalName || business.name,
+      summary: notes || `GSTIN ${statutory.gstin} rejected.`,
+      metadata: { decision: "REJECTED", gstin: statutory.gstin },
+    });
+
+    await createNotification({
+      userId: business.ownerUserId,
+      businessId: business.id,
+      type: "VERIFICATION",
+      title: "Statutory Verification Rejected",
+      message: notes || `Verification for GSTIN ${statutory.gstin} was rejected. Please review and resubmit.`,
+      actionTab: "profile",
+    });
 
     return sendSuccess(res, {
       message: "GSTIN verification rejected by Admin.",
@@ -384,6 +440,27 @@ export async function reviewDocument(req: Request, res: Response) {
     doc.verifiedAt = new Date();
     await doc.save();
 
+    await recordAuditLog({
+      req,
+      action: "REVIEW_DOCUMENT",
+      targetType: "DOCUMENT",
+      targetId: doc.id,
+      summary: `Document "${doc.fileName}" marked as ${normalizedStatus}.${rejectionReason || auditorNotes ? ` Notes: ${rejectionReason || auditorNotes}` : ""}`,
+      metadata: { businessId: doc.businessId, status: normalizedStatus, categoryKey: doc.categoryKey },
+    });
+
+    const docBusiness = await BusinessEntity.findByPk(doc.businessId, { attributes: ["id", "ownerUserId"] });
+    if (docBusiness?.ownerUserId) {
+      await createNotification({
+        userId: docBusiness.ownerUserId,
+        businessId: docBusiness.id,
+        type: "DOCUMENT",
+        title: `Document ${normalizedStatus}: ${doc.fileName}`,
+        message: rejectionReason || auditorNotes || `Your document "${doc.fileName}" status was updated to ${normalizedStatus}.`,
+        actionTab: "documents",
+      });
+    }
+
     return sendSuccess(res, {
       message: `Document status updated to ${normalizedStatus}`,
       document: doc,
@@ -391,5 +468,27 @@ export async function reviewDocument(req: Request, res: Response) {
   } catch (error) {
     console.error("Review Document Error:", error);
     return sendError(res, "Failed to review document", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+/**
+ * 5. GET /api/v1/admin/audit-logs
+ * Returns recent immutable audit trail records from audit_logs table.
+ */
+export async function getAuditLogs(req: Request, res: Response) {
+  try {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const logs = await AuditLog.findAll({
+      order: [["createdAt", "DESC"]],
+      limit,
+    });
+
+    return sendSuccess(res, {
+      total: logs.length,
+      logs,
+    });
+  } catch (error) {
+    console.error("Get Audit Logs Error:", error);
+    return sendError(res, "Failed to fetch audit logs", 500, "ERR_INTERNAL_SERVER");
   }
 }

@@ -6,10 +6,16 @@ import {
   deleteStoredFile,
   describeUploadedFile,
   validateUploadedFile,
+  type UploadKind,
   type UploadedFileInfo,
 } from "../config/upload.js";
 
-export { uploadMultipleImages, uploadSingleImage } from "../config/upload.js";
+export {
+  uploadMultipleImages,
+  uploadSingleImage,
+  uploadMultipleProductImages,
+  uploadSingleProductImage,
+} from "../config/upload.js";
 
 const MAX_PRODUCT_IMAGES = 20;
 
@@ -31,15 +37,16 @@ function findBusinessForRequest(req: Request): Promise<BusinessEntity | null> {
 }
 
 function validateFiles(
-  files: Express.Multer.File[]
+  files: Express.Multer.File[],
+  kind: UploadKind = "images"
 ): { error: string | null } {
   for (const file of files) {
-    const error = validateUploadedFile(file, "images");
+    const error = validateUploadedFile(file, kind);
     if (error) {
       // validateUploadedFile deletes the invalid file; remove the rest too.
       deleteRequestFiles(
         files.filter((candidate) => candidate !== file),
-        "images"
+        kind
       );
       return { error };
     }
@@ -57,7 +64,10 @@ function sendMissingImage(res: Response, fieldName = "image") {
 }
 
 function isManagedImagePath(value: unknown): value is string {
-  return typeof value === "string" && value.includes("/uploads/image/");
+  return (
+    typeof value === "string" &&
+    (value.includes("/uploads/image/") || value.includes("/uploads/products/"))
+  );
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -70,7 +80,8 @@ function deleteReplacedFiles(previous: unknown, next: string[]): void {
   const nextSet = new Set(next);
   for (const imagePath of previous) {
     if (isManagedImagePath(imagePath) && !nextSet.has(imagePath)) {
-      deleteStoredFile("images", imagePath);
+      const kind: UploadKind = imagePath.includes("/uploads/products/") ? "products" : "images";
+      deleteStoredFile(kind, imagePath);
     }
   }
 }
@@ -104,19 +115,20 @@ function resolveSingleImageTarget(
 async function handleSingleImage(
   req: Request,
   res: Response,
-  forcedPersonnelId?: unknown
+  forcedPersonnelId?: unknown,
+  kind: UploadKind = "images"
 ) {
   if (!req.file) return sendMissingImage(res);
 
-  const signatureError = validateUploadedFile(req.file, "images");
+  const signatureError = validateUploadedFile(req.file, kind);
   if (signatureError) {
     return sendError(res, signatureError, 400, "ERR_INVALID_FILE");
   }
 
-  const info = describeUploadedFile(req, req.file, "images");
+  const info = describeUploadedFile(req, req.file, kind);
   const { target, error } = resolveSingleImageTarget(req, forcedPersonnelId);
   if (error) {
-    deleteStoredFile("images", info.path);
+    deleteStoredFile(kind, info.path);
     return sendError(res, error, 400, "ERR_INVALID_TARGET");
   }
 
@@ -236,6 +248,13 @@ export async function uploadImageController(req: Request, res: Response) {
 }
 
 /**
+ * POST /api/v1/vendor/products/upload-image
+ */
+export async function uploadProductImageController(req: Request, res: Response) {
+  return handleSingleImage(req, res, undefined, "products");
+}
+
+/**
  * POST /api/v1/vendor/personnel/:id/photo
  */
 export async function uploadPersonnelPhotoController(req: Request, res: Response) {
@@ -248,18 +267,22 @@ export async function uploadPersonnelPhotoController(req: Request, res: Response
  * Uploads up to 10 images. Without productId it only stores files and returns
  * their paths. With productId it updates the owned product gallery.
  */
-export async function uploadMultipleImagesController(req: Request, res: Response) {
+async function handleMultipleImages(
+  req: Request,
+  res: Response,
+  kind: UploadKind = "images"
+) {
   const files = getUploadedFiles(req);
   if (files.length === 0) {
     return sendMissingImage(res, "images");
   }
 
-  const { error: signatureError } = validateFiles(files);
+  const { error: signatureError } = validateFiles(files, kind);
   if (signatureError) {
     return sendError(res, signatureError, 400, "ERR_INVALID_FILE");
   }
 
-  const details = files.map((file) => describeUploadedFile(req, file, "images"));
+  const details = files.map((file) => describeUploadedFile(req, file, kind));
   const paths = details.map((file) => file.path);
   const body = req.body ?? {};
   const productId = parsePositiveId(
@@ -282,7 +305,7 @@ export async function uploadMultipleImagesController(req: Request, res: Response
 
   const rawMode = String(body.mode ?? "append").toLowerCase();
   if (rawMode !== "append" && rawMode !== "replace") {
-    deleteRequestFiles(files, "images");
+    deleteRequestFiles(files, kind);
     return sendError(
       res,
       'Invalid mode. Use "append" or "replace".',
@@ -295,7 +318,7 @@ export async function uploadMultipleImagesController(req: Request, res: Response
   try {
     const business = await findBusinessForRequest(req);
     if (!business) {
-      deleteRequestFiles(files, "images");
+      deleteRequestFiles(files, kind);
       return sendError(res, "Business profile not found", 404, "ERR_BUSINESS_NOT_FOUND");
     }
 
@@ -303,7 +326,7 @@ export async function uploadMultipleImagesController(req: Request, res: Response
       where: { id: productId, businessId: business.id },
     });
     if (!product) {
-      deleteRequestFiles(files, "images");
+      deleteRequestFiles(files, kind);
       return sendError(
         res,
         "Product not found or not owned by your company",
@@ -317,7 +340,7 @@ export async function uploadMultipleImagesController(req: Request, res: Response
       mode === "replace" ? uniqueStrings(paths) : uniqueStrings([...previousImages, ...paths]);
 
     if (nextImages.length > MAX_PRODUCT_IMAGES) {
-      deleteRequestFiles(files, "images");
+      deleteRequestFiles(files, kind);
       return sendError(
         res,
         `A product can have at most ${MAX_PRODUCT_IMAGES} images.`,
@@ -346,8 +369,16 @@ export async function uploadMultipleImagesController(req: Request, res: Response
       201
     );
   } catch (error) {
-    deleteRequestFiles(files, "images");
+    deleteRequestFiles(files, kind);
     console.error("Upload Multiple Images Error:", error);
     return sendError(res, "Failed to upload images", 500, "ERR_INTERNAL_SERVER");
   }
+}
+
+export async function uploadMultipleImagesController(req: Request, res: Response) {
+  return handleMultipleImages(req, res, "images");
+}
+
+export async function uploadProductImagesController(req: Request, res: Response) {
+  return handleMultipleImages(req, res, "products");
 }

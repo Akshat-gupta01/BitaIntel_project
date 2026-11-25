@@ -40,13 +40,20 @@ import {
   getBankingDetails,
   saveBankingDetails,
   submitVerification,
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from "../controllers/vendor.controller.js";
 import {
   uploadSingleImage,
   uploadMultipleImages,
+  uploadSingleProductImage,
+  uploadMultipleProductImages,
   uploadImageController,
+  uploadProductImageController,
   uploadPersonnelPhotoController,
   uploadMultipleImagesController,
+  uploadProductImagesController,
 } from "../services/uploadimage.service.js";
 import {
   uploadSingleDocument,
@@ -121,8 +128,8 @@ vendorRouter.get("/capabilities", getCapabilities);
 vendorRouter.post("/add-product", validate(addProductInputSchema), authorize("products.create"), addProduct);
 vendorRouter.post("/products", validate(addProductInputSchema), authorize("products.create"), addProduct);
 vendorRouter.get("/products", authorize("products.view"), getProducts);
-vendorRouter.post("/products/upload-images", authorize("products.create"), uploadMultipleImages, uploadMultipleImagesController);
-vendorRouter.post("/products/upload-image", authorize("products.create"), uploadSingleImage, uploadImageController);
+vendorRouter.post("/products/upload-images", authorize("products.create"), uploadMultipleProductImages, uploadProductImagesController);
+vendorRouter.post("/products/upload-image", authorize("products.create"), uploadSingleProductImage, uploadProductImageController);
 vendorRouter.post("/products/upload-document", authorize("products.create"), uploadSingleDocument, uploadProductDocument);
 vendorRouter.patch("/products/:id", authorize("products.edit"), updateProduct);
 vendorRouter.delete("/products/:id", authorize("products.delete"), deleteProduct);
@@ -165,6 +172,11 @@ vendorRouter.post("/commercial/bank-proof", authorize("vendors.edit"), uploadSin
 
 // ─── Step 6: Final Verification Submission ──────────────────────────────────
 vendorRouter.post("/submit-verification", validate(submitVerificationSchema), authorize("vendors.edit"), submitVerification);
+
+// ─── Notifications (SRS §5.11) ──────────────────────────────────────────────
+vendorRouter.get("/notifications", getNotifications);
+vendorRouter.patch("/notifications/read-all", markAllNotificationsRead);
+vendorRouter.patch("/notifications/:id/read", markNotificationRead);
 
 // ─── Generic Storage Services ───────────────────────────────────────────────
 vendorRouter.post("/upload-image", authorize("vendors.edit"), uploadSingleImage, uploadImageController);

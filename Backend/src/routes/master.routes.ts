@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { optionalAuthenticate } from "../middlewares/auth.middleware.js";
 import {
   getBusinessTypes,
   getCategories,
@@ -9,6 +10,7 @@ import {
   getCurrencies,
   getPublicDirectory,
   getPublicBusinessDetail,
+  compareBusinesses,
 } from "../controllers/master.controller.js";
 
 const masterRouter = Router();
@@ -40,8 +42,9 @@ masterRouter.get("/business-activities", getBusinessActivities);
 masterRouter.get("/currencies", getCurrencies);
 
 // 8. Public Business Directory & Details (Live from MySQL business_entities)
-masterRouter.get("/directory", getPublicDirectory);
-masterRouter.get("/business/:slug", getPublicBusinessDetail);
+masterRouter.get("/directory", optionalAuthenticate, getPublicDirectory);
+masterRouter.get("/compare", optionalAuthenticate, compareBusinesses);
+masterRouter.get("/business/:slug", optionalAuthenticate, getPublicBusinessDetail);
 
 export default masterRouter;
 

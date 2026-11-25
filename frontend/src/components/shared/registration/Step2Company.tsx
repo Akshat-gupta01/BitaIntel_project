@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -18,7 +19,6 @@ import {
   FileText,
   UserPlus,
   Shield,
-  HelpCircle,
   Loader2,
   CheckCircle2,
   User,
@@ -166,7 +166,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       toast.success('Document Uploaded Successfully', {
         description: `${title} (${file.name}) saved in Statutory Vault.`,
       });
-    } catch (err: any) {
+    } catch {
       setUploadedDocs((prev) => ({
         ...prev,
         [key]: {
@@ -437,52 +437,68 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
         }
       }
 
+      let updatedAny = false;
+      let nextFacilities = data.facilities || [];
+      let nextPersonnel = data.keyPersonnel || [];
+
       // 3. Sync any pending facilities to business_facilities table
-      if (data.facilities && data.facilities.length > 0) {
-        for (let fac of data.facilities) {
-          if (fac.id && fac.id.startsWith('FAC-')) {
-            try {
-              const res = await vendorService.addFacility({
-                facilityType: fac.type,
-                facilityName: fac.facilityName,
-                addressLine: fac.addressLine || 'Facility Address',
-                city: fac.city || 'Mumbai',
-                state: fac.state || 'Maharashtra',
-                pincode: fac.pincode || '400001',
-                country: fac.country || 'India',
-                isOwned: fac.isOwned ?? true,
-              });
-              if (res?.data?.facility?.id) {
-                fac.id = String(res.data.facility.id);
+      if (nextFacilities.length > 0) {
+        nextFacilities = await Promise.all(
+          nextFacilities.map(async (fac) => {
+            if (fac.id && fac.id.startsWith('FAC-')) {
+              try {
+                const res = await vendorService.addFacility({
+                  facilityType: fac.type,
+                  facilityName: fac.facilityName,
+                  addressLine: fac.addressLine || 'Facility Address',
+                  city: fac.city || 'Mumbai',
+                  state: fac.state || 'Maharashtra',
+                  pincode: fac.pincode || '400001',
+                  country: fac.country || 'India',
+                  isOwned: fac.isOwned ?? true,
+                });
+                if (res?.data?.facility?.id) {
+                  updatedAny = true;
+                  return { ...fac, id: String(res.data.facility.id) };
+                }
+              } catch (facErr: any) {
+                console.warn('Pending facility sync note:', facErr.message);
               }
-            } catch (facErr: any) {
-              console.warn('Pending facility sync note:', facErr.message);
             }
-          }
-        }
+            return fac;
+          })
+        );
       }
 
       // 4. Sync any pending personnel to business_personnel table
-      if (data.keyPersonnel && data.keyPersonnel.length > 0) {
-        for (const kp of data.keyPersonnel) {
-          if (kp.id && kp.id.startsWith('KP-') && kp.name && kp.email) {
-            try {
-              const res = await vendorService.addPersonnel({
-                name: kp.name,
-                designation: kp.designation || 'Executive',
-                email: kp.email,
-                mobile: kp.mobile || '0000000000',
-                photoUrl: kp.photoUrl || undefined,
-                isAuthorizedSignatory: !!kp.isAuthorizedSignatory,
-              });
-              if (res?.data?.personnel?.id) {
-                kp.id = String(res.data.personnel.id);
+      if (nextPersonnel.length > 0) {
+        nextPersonnel = await Promise.all(
+          nextPersonnel.map(async (kp) => {
+            if (kp.id && kp.id.startsWith('KP-') && kp.name && kp.email) {
+              try {
+                const res = await vendorService.addPersonnel({
+                  name: kp.name,
+                  designation: kp.designation || 'Executive',
+                  email: kp.email,
+                  mobile: kp.mobile || '0000000000',
+                  photoUrl: kp.photoUrl || undefined,
+                  isAuthorizedSignatory: !!kp.isAuthorizedSignatory,
+                });
+                if (res?.data?.personnel?.id) {
+                  updatedAny = true;
+                  return { ...kp, id: String(res.data.personnel.id) };
+                }
+              } catch (kpErr: any) {
+                console.warn('Pending personnel sync note:', kpErr.message);
               }
-            } catch (kpErr: any) {
-              console.warn('Pending personnel sync note:', kpErr.message);
             }
-          }
-        }
+            return kp;
+          })
+        );
+      }
+
+      if (updatedAny) {
+        onChange({ facilities: nextFacilities, keyPersonnel: nextPersonnel });
       }
 
       toast.success('Company Profile Saved to Database', {

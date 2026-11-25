@@ -25,6 +25,7 @@ export function FeedShareDialog({ post, onClose }: FeedShareDialogProps) {
   const [canNativeShare, setCanNativeShare] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCopied(false);
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       setCanNativeShare(true);

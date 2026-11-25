@@ -292,7 +292,7 @@ export interface AdminEnquiryItem {
   budget: string;
   productId?: number | null;
   productName?: string | null;
-  product?: any;
+  product?: { id?: number; name?: string; hsnCode?: string | null; [key: string]: unknown } | null;
   replyMessage?: string | null;
   repliedAt?: string | null;
   createdAt?: string;
@@ -310,7 +310,7 @@ export const getAdminEnquiries = async (): Promise<{ total: number; enquiries: A
 export const updateAdminEnquiryStatus = async (
   id: string,
   status: 'New' | 'Viewed' | 'Responded' | 'In Discussion' | 'Closed/Rejected'
-): Promise<any> => {
+): Promise<unknown> => {
   const response = await api.patch(`/admin/enquiries/${id}/status`, { status });
   return response.data?.data || response.data;
 };
@@ -318,7 +318,31 @@ export const updateAdminEnquiryStatus = async (
 export const replyAdminEnquiry = async (
   id: string,
   replyMessage: string
-): Promise<any> => {
+): Promise<unknown> => {
   const response = await api.post(`/admin/enquiries/${id}/reply`, { replyMessage });
   return response.data?.data || response.data;
+};
+
+export interface BackendAuditLogItem {
+  id: number;
+  actorUserId?: number | null;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  targetType: string;
+  targetId?: string | null;
+  companyName?: string | null;
+  summary: string;
+  metadata?: Record<string, unknown> | null;
+  ipAddress?: string | null;
+  createdAt: string;
+}
+
+export const getAdminAuditLogs = async (limit = 100): Promise<{ total: number; logs: BackendAuditLogItem[] }> => {
+  const response = await api.get(`/admin/audit-logs?limit=${limit}`);
+  const data = response.data?.data || response.data;
+  return {
+    total: data?.total ?? (Array.isArray(data?.logs) ? data.logs.length : 0),
+    logs: Array.isArray(data?.logs) ? data.logs : [],
+  };
 };

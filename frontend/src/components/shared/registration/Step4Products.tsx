@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -5,7 +6,6 @@ import {
   Step4ProductsData,
   ProductCatalogItem,
   QualityCertificateRecord,
-  RegulatoryApproval,
 } from '@/types/vendorRegistration';
 import * as vendorService from '../../../../services/vendor.service';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
@@ -22,14 +22,9 @@ import {
   Award,
   Plus,
   Trash2,
-  FileText,
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
-  ShieldCheck,
-  Calendar,
-  Layers,
-  Sparkles,
   Image as ImageIcon,
   Loader2,
   Pencil,
@@ -76,13 +71,14 @@ export function Step4Products({
 
   // Clean up object URLs on unmount
   React.useEffect(() => {
+    const urlMap = previewUrlToFileMapRef.current;
     return () => {
-      for (const url of previewUrlToFileMapRef.current.keys()) {
+      for (const url of urlMap.keys()) {
         try {
           URL.revokeObjectURL(url);
         } catch {}
       }
-      previewUrlToFileMapRef.current.clear();
+      urlMap.clear();
     };
   }, []);
 
@@ -182,8 +178,6 @@ export function Step4Products({
     toast.info(`${type.toUpperCase()} removed`);
   }
 
-  // Product Image Files State (raw File objects, uploaded on save)
-  const [productImageFiles, setProductImageFiles] = useState<File[]>([]);
 
   // Handle Product Images Selection (creates instant local previews, uploads to server on save)
   function handleProductImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -224,7 +218,6 @@ export function Step4Products({
       newPreviewUrls.push(previewUrl);
     }
 
-    setProductImageFiles(Array.from(previewUrlToFileMapRef.current.values()));
     setProductImages((prev) => [...prev, ...newPreviewUrls]);
     setNewProduct((p) => ({
       ...p,
@@ -245,7 +238,6 @@ export function Step4Products({
     if (urlToRemove) {
       if (previewUrlToFileMapRef.current.has(urlToRemove)) {
         previewUrlToFileMapRef.current.delete(urlToRemove);
-        setProductImageFiles(Array.from(previewUrlToFileMapRef.current.values()));
       }
       if (urlToRemove.startsWith('blob:')) {
         try {
@@ -271,7 +263,6 @@ export function Step4Products({
       } catch {}
     }
     previewUrlToFileMapRef.current.clear();
-    setProductImageFiles([]);
     setUploadingItemImage(false);
 
     setEditingProductId(prd.id);
@@ -331,7 +322,6 @@ export function Step4Products({
       } catch {}
     }
     previewUrlToFileMapRef.current.clear();
-    setProductImageFiles([]);
     setUploadingItemImage(false);
 
     setEditingProductId(null);
@@ -515,7 +505,6 @@ export function Step4Products({
           } catch {}
           previewUrlToFileMapRef.current.delete(url);
         }
-        setProductImageFiles([]);
       } catch (err: any) {
         console.error('Product image upload error:', err);
         toast.error('Failed to upload product images to server', {
@@ -798,64 +787,77 @@ export function Step4Products({
       return;
     }
 
+    let updatedAny = false;
     // Sync any pending products that haven't been stored in business_products table
-    for (let prd of data.products) {
-      if (prd.id && prd.id.startsWith('PRD-')) {
-        try {
-          const res = await vendorService.addProduct({
-            name: prd.name,
-            type: prd.type,
-            categoryId: prd.categoryId,
-            subcategoryId: prd.subcategoryId || null,
-            brand: prd.brand || null,
-            description: prd.description || null,
-            specifications: prd.specifications || null,
-            grade: prd.grade || null,
-            standards: prd.standards || null,
-            hsnCode: prd.hsnCode || null,
-            countryOfOrigin: prd.countryOfOrigin || 'India',
-            moq: prd.moq || null,
-            standardOrderQty: prd.standardOrderQty || null,
-            monthlyCapacity: prd.monthlyCapacity || null,
-            availableStock: prd.availableStock || null,
-            leadTimeDays: prd.leadTimeDays || null,
-            sampleAvailability: prd.sampleAvailability,
-            indicativePrice: prd.indicativePrice || null,
-            currency: prd.currency || 'INR',
-            priceValidity: prd.priceValidity || null,
-            targetMarkets: prd.targetMarkets || null,
-            images: prd.images || [],
-            catalogueDoc: prd.catalogueDoc || null,
-            technicalDataSheetDoc: prd.technicalDataSheetDoc || null,
-            coaDoc: prd.coaDoc || null,
-            sdsDoc: prd.sdsDoc || null,
-          });
-          if (res?.data?.product?.id) {
-            prd.id = String(res.data.product.id);
-          }
-        } catch (_) {}
-      }
-    }
+    const nextProducts = await Promise.all(
+      data.products.map(async (prd) => {
+        if (prd.id && prd.id.startsWith('PRD-')) {
+          try {
+            const res = await vendorService.addProduct({
+              name: prd.name,
+              type: prd.type,
+              categoryId: prd.categoryId,
+              subcategoryId: prd.subcategoryId || null,
+              brand: prd.brand || null,
+              description: prd.description || null,
+              specifications: prd.specifications || null,
+              grade: prd.grade || null,
+              standards: prd.standards || null,
+              hsnCode: prd.hsnCode || null,
+              countryOfOrigin: prd.countryOfOrigin || 'India',
+              moq: prd.moq || null,
+              standardOrderQty: prd.standardOrderQty || null,
+              monthlyCapacity: prd.monthlyCapacity || null,
+              availableStock: prd.availableStock || null,
+              leadTimeDays: prd.leadTimeDays || null,
+              sampleAvailability: prd.sampleAvailability,
+              indicativePrice: prd.indicativePrice || null,
+              currency: prd.currency || 'INR',
+              priceValidity: prd.priceValidity || null,
+              targetMarkets: prd.targetMarkets || null,
+              images: prd.images || [],
+              catalogueDoc: prd.catalogueDoc || null,
+              technicalDataSheetDoc: prd.technicalDataSheetDoc || null,
+              coaDoc: prd.coaDoc || null,
+              sdsDoc: prd.sdsDoc || null,
+            });
+            if (res?.data?.product?.id) {
+              updatedAny = true;
+              return { ...prd, id: String(res.data.product.id) };
+            }
+          } catch {}
+        }
+        return prd;
+      })
+    );
 
     // Sync any pending certifications
-    for (const cert of data.certifications) {
-      if (cert.id && cert.id.startsWith('CERT-')) {
-        try {
-          const res = await vendorService.addCertification({
-            certificateType: cert.certificateType,
-            certificateNumber: cert.certificateNumber,
-            issuingAuthority: cert.issuingAuthority,
-            issueDate: cert.issueDate || null,
-            expiryDate: cert.expiryDate || null,
-            scope: cert.scope || null,
-            applicableFacility: cert.applicableFacility || 'All Facilities',
-            status: cert.status,
-          });
-          if (res?.data?.certification?.id) {
-            cert.id = String(res.data.certification.id);
-          }
-        } catch (_) {}
-      }
+    const nextCerts = await Promise.all(
+      data.certifications.map(async (cert) => {
+        if (cert.id && cert.id.startsWith('CERT-')) {
+          try {
+            const res = await vendorService.addCertification({
+              certificateType: cert.certificateType,
+              certificateNumber: cert.certificateNumber,
+              issuingAuthority: cert.issuingAuthority,
+              issueDate: cert.issueDate || null,
+              expiryDate: cert.expiryDate || null,
+              scope: cert.scope || null,
+              applicableFacility: cert.applicableFacility || 'All Facilities',
+              status: cert.status,
+            });
+            if (res?.data?.certification?.id) {
+              updatedAny = true;
+              return { ...cert, id: String(res.data.certification.id) };
+            }
+          } catch {}
+        }
+        return cert;
+      })
+    );
+
+    if (updatedAny) {
+      onChange({ products: nextProducts, certifications: nextCerts });
     }
 
     // 3. Sync Quality Systems, Testing Capabilities & QA Procedures (Section 3)
@@ -1415,7 +1417,6 @@ export function Step4Products({
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {data.products.map((prd) => {
-              const primaryImage = prd.images && prd.images.length > 0 ? prd.images[0] : null;
               return (
                 <div
                   key={prd.id}

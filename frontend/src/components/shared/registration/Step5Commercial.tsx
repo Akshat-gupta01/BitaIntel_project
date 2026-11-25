@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -18,7 +19,6 @@ import {
   Landmark,
   ShieldAlert,
   FileCheck2,
-  Users2,
   PhoneCall,
   Lock,
   UploadCloud,
@@ -281,7 +281,7 @@ export function Step5Commercial({
 
     setIsSaving(true);
     try {
-      let pendingContacts = [...(data.departmentContacts || [])];
+      const pendingContacts = [...(data.departmentContacts || [])];
       if (newContact.name.trim()) {
         const effectiveDept =
           newContact.department === 'Custom / Other'
@@ -564,14 +564,26 @@ export function Step5Commercial({
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveContact(idx, contact.id)}
-                      className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
-                      title="Remove contact"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {!contact.isPrimary && (
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryContact(idx)}
+                          className="text-[10px] font-semibold text-primary-700 hover:text-primary-900 hover:bg-primary-50 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                          title="Mark as primary escalation lead"
+                        >
+                          Set Primary
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveContact(idx, contact.id)}
+                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
+                        title="Remove contact"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-start gap-3">

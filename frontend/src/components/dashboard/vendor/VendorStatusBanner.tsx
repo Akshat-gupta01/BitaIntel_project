@@ -7,17 +7,13 @@ import {
 } from '@/types/vendorRegistration';
 import { Button } from '@/components/ui/Button';
 import {
-  ShieldCheck,
   Clock,
   AlertTriangle,
   CheckCircle2,
-  FileText,
   AlertCircle,
-  FileCheck,
   RefreshCw,
   Printer,
   ChevronRight,
-  ExternalLink,
 } from 'lucide-react';
 
 interface VendorStatusBannerProps {
@@ -32,7 +28,6 @@ export function VendorStatusBanner({
   dossier,
   onOpenSummary,
   onNavigateTab,
-  onSimulateStatusChange,
   onSimulateApprove,
 }: VendorStatusBannerProps) {
   const status = dossier.step6.status || 'Verified';

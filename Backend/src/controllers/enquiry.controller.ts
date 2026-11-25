@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { BusinessEntity, BusinessProduct } from "../models/index.js";
 import BusinessEnquiry from "../models/BusinessEnquiry.model.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import { recordAuditLog } from "../services/audit.service.js";
 
 /**
  * 1. POST /api/v1/enquiries
@@ -75,9 +76,9 @@ export async function submitEnquiry(req: Request, res: Response) {
     let verifiedProductId: number | null = null;
     let verifiedProductName = productName || null;
 
-    if (productId && (typeof productId === "number" || /^\d+$/.test(String(productId)))) {
+    if (productId !== undefined && productId !== null && /^\d+$/.test(String(productId).trim())) {
       const prod = await BusinessProduct.findOne({
-        where: { id: Number(productId), businessId: targetBusiness.id },
+        where: { id: Number(String(productId).trim()), businessId: targetBusiness.id },
       });
       if (prod) {
         verifiedProductId = prod.id;
@@ -247,6 +248,16 @@ export async function updateAdminEnquiryStatus(req: Request, res: Response) {
     enquiry.status = status;
     await enquiry.save();
 
+    await recordAuditLog({
+      req,
+      action: "UPDATE_ENQUIRY_STATUS",
+      targetType: "ENQUIRY",
+      targetId: enquiry.enquiryNumber,
+      companyName: enquiry.buyerCompany || enquiry.buyerName,
+      summary: `Enquiry ${enquiry.enquiryNumber} status changed to ${status}.`,
+      metadata: { enquiryId: enquiry.id, businessId: enquiry.businessId, status },
+    });
+
     return sendSuccess(
       res,
       {
@@ -289,6 +300,16 @@ export async function replyAdminEnquiry(req: Request, res: Response) {
     enquiry.repliedAt = new Date();
     enquiry.status = "Responded";
     await enquiry.save();
+
+    await recordAuditLog({
+      req,
+      action: "REPLY_ENQUIRY",
+      targetType: "ENQUIRY",
+      targetId: enquiry.enquiryNumber,
+      companyName: enquiry.buyerCompany || enquiry.buyerName,
+      summary: `Admin response transmitted for enquiry ${enquiry.enquiryNumber} (${enquiry.buyerEmail}).`,
+      metadata: { enquiryId: enquiry.id, businessId: enquiry.businessId },
+    });
 
     return sendSuccess(
       res,

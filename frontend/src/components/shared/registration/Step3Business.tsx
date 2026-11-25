@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -17,11 +18,7 @@ import {
   Factory,
   Briefcase,
   Check,
-  UploadCloud,
-  FileCheck2,
   Cpu,
-  Flame,
-  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 

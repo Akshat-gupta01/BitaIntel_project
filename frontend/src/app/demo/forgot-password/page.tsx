@@ -3,7 +3,7 @@ import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
 import { JsonLd } from '@/components/shared/JsonLd';
 import { createPageMetadata } from '@/lib/metadata';
 import { createWebPageJsonLd } from '@/lib/schema';
-import { ShieldCheck, Lock, LifeBuoy } from 'lucide-react';
+import { ShieldCheck, LifeBuoy } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata = createPageMetadata({

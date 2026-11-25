@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -55,6 +56,7 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
   const [isSavingStatutory, setIsSavingStatutory] = useState(false);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditTan(data.tan || '');
     setEditDuns(data.duns || '');
     setEditLei(data.lei || '');

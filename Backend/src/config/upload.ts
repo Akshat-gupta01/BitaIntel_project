@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
  */
 export const UPLOAD_ROOT = path.resolve(__dirname, "..", "..", "uploads");
 
-export type UploadKind = "documents" | "images";
+export type UploadKind = "documents" | "images" | "products";
 
 type UploadCategory = {
   directory: string;
@@ -40,6 +40,19 @@ export const UPLOAD_CATEGORIES: Record<UploadKind, UploadCategory> = {
   images: {
     directory: path.join(UPLOAD_ROOT, "image"),
     publicPath: "/uploads/image",
+    maxFileSize: 10 * 1024 * 1024,
+    allowedMimeTypes: [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/avif",
+    ],
+  },
+  products: {
+    directory: path.join(UPLOAD_ROOT, "products"),
+    publicPath: "/uploads/products",
     maxFileSize: 10 * 1024 * 1024,
     allowedMimeTypes: [
       "image/jpeg",
@@ -204,7 +217,7 @@ function createStorage(kind: UploadKind) {
     },
     filename: (_req, file, cb) => {
       const extension = MIME_EXTENSIONS[file.mimetype] ?? "";
-      const prefix = kind === "images" ? "img" : "doc";
+      const prefix = kind === "documents" ? "doc" : kind === "products" ? "prd" : "img";
       cb(null, `${prefix}-${Date.now()}-${crypto.randomUUID()}${extension}`);
     },
   });
@@ -234,6 +247,7 @@ function createUploader(kind: UploadKind) {
 
 const documentUploader = createUploader("documents");
 const imageUploader = createUploader("images");
+const productImageUploader = createUploader("products");
 
 /**
  * Multer errors normally reach the default Express error handler and produce
@@ -268,3 +282,5 @@ function wrapUpload(middleware: RequestHandler): RequestHandler {
 export const uploadSingleDocument = wrapUpload(documentUploader.single("document"));
 export const uploadSingleImage = wrapUpload(imageUploader.single("image"));
 export const uploadMultipleImages = wrapUpload(imageUploader.array("images", 10));
+export const uploadSingleProductImage = wrapUpload(productImageUploader.single("image"));
+export const uploadMultipleProductImages = wrapUpload(productImageUploader.array("images", 10));

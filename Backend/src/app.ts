@@ -11,6 +11,7 @@ import masterRoutes from "./routes/master.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import rbacRoutes from "./routes/rbac.routes.js";
 import enquiryRoutes from "./routes/enquiry.routes.js";
+import complaintRoutes from "./routes/complaint.routes.js";
 
 const app = express();
 
@@ -115,9 +116,11 @@ app.get("/uploads/documents/:filename", (req, res, next) => {
   return res.sendFile(filePath);
 });
 
-app.get("/uploads/image/:filename", (req, res, next) => {
-  const filename = decodeSafeFilename(req.params.filename);
-  const filePath = filename ? findExactUpload("image", filename) : null;
+app.get(["/uploads/image/:filename", "/uploads/products/:filename"], (req, res, next) => {
+  const folder = req.path.startsWith("/uploads/products/") ? "products" : "image";
+  const rawFilename = Array.isArray(req.params.filename) ? req.params.filename[0] : req.params.filename;
+  const filename = decodeSafeFilename(rawFilename || "");
+  const filePath = filename ? findExactUpload(folder, filename) : null;
 
   if (!filePath) return next();
 
@@ -142,6 +145,7 @@ app.get("/uploads/image/:filename", (req, res, next) => {
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/vendor", vendorRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
+app.use("/api/v1/complaints", complaintRoutes);
 app.use("/api/v1/master", masterRoutes); 
 app.use("/api/v1/admin", adminRoutes);   
 app.use("/api/v1/rbac", rbacRoutes);   

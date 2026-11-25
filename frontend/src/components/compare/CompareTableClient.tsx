@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import { Business } from '@/data';
 import { useAuth } from '@/context/AuthContext';
 import { ScoreRing } from '@/components/business/ScoreRing';
@@ -14,24 +16,122 @@ import {
   Sparkles,
   Download,
   ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
-  TrendingUp,
+  Plus,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
+export type CompareBusiness = Business & {
+  verificationStatus?: string;
+  grade?: string;
+  riskLevel?: string;
+  productsCount?: number;
+  facilitiesCount?: number;
+  certificationsCount?: number;
+  openComplaintsCount?: number;
+  creditTermsDays?: string | null;
+  preferredIncoterms?: string[];
+};
+
 interface CompareTableClientProps {
-  selected: Business[];
+  selected: CompareBusiness[];
+  availableBusinesses?: CompareBusiness[];
 }
 
-export function CompareTableClient({ selected }: CompareTableClientProps) {
-  const { role, user } = useAuth();
+function buildCompareExportFilename(): string {
+  return `bitaintel_comparison_matrix_${Date.now()}.xlsx`;
+}
+
+function deriveGradeAndRisk(b: CompareBusiness): { grade: string; risk: string } {
+  if (b.grade && b.riskLevel) return { grade: b.grade, risk: b.riskLevel };
+  if (b.score >= 95) return { grade: 'A+', risk: 'Negligible risk' };
+  if (b.score >= 90) return { grade: 'A', risk: 'Negligible risk' };
+  if (b.score >= 85) return { grade: 'B+', risk: 'Low risk' };
+  if (b.score >= 80) return { grade: 'B', risk: 'Low risk' };
+  if (b.score >= 75) return { grade: 'C+', risk: 'Standard risk' };
+  if (b.score >= 70) return { grade: 'C', risk: 'Standard risk' };
+  if (b.score >= 40) return { grade: 'D', risk: 'Moderate risk' };
+  return { grade: 'F', risk: 'High risk' };
+}
+
+export function CompareTableClient({ selected, availableBusinesses = [] }: CompareTableClientProps) {
+  const router = useRouter();
+  const { role } = useAuth();
+  const [candidateId, setCandidateId] = useState('');
 
   const isVisitor = role === 'visitor';
   const isPremium = role === 'premium_subscriber';
 
-  const attributes: [string, (b: Business) => React.ReactNode, boolean][] = [
+  const selectedKeySet = new Set(
+    selected.flatMap((b) => [b.id.toLowerCase(), (b.slug || '').toLowerCase()].filter(Boolean))
+  );
+  const addableOptions = availableBusinesses.filter(
+    (b) => !selectedKeySet.has(b.id.toLowerCase()) && !selectedKeySet.has((b.slug || '').toLowerCase())
+  );
+
+  function navigateWithIds(nextIds: string[]) {
+    if (nextIds.length === 0) {
+      router.push('/demo/compare');
+      return;
+    }
+    router.push(`/demo/compare?ids=${nextIds.map((id) => encodeURIComponent(id)).join(',')}`);
+  }
+
+  function handleAddCandidate() {
+    if (!candidateId) return;
+    if (selected.length >= 4) {
+      toast.error('Maximum 4 businesses can be compared at once.');
+      return;
+    }
+    const nextIds = [...selected.map((b) => b.id), candidateId];
+    setCandidateId('');
+    navigateWithIds(nextIds);
+  }
+
+  function handleRemoveCompany(idToRemove: string) {
+    const nextIds = selected.filter((b) => b.id !== idToRemove).map((b) => b.id);
+    navigateWithIds(nextIds);
+  }
+
+  function handleExportMatrix() {
+    try {
+      const exportRows = selected.map((b) => {
+        const { grade, risk } = deriveGradeAndRisk(b);
+        return {
+          Company: b.name,
+          'Legal Name': b.legalName,
+          Industry: b.industry,
+          Location: b.location,
+          'Trust Score': `${b.score}/100`,
+          Grade: grade,
+          'Risk Level': risk,
+          'Verification Tier': `Tier ${b.level}`,
+          Status: b.verified ? 'Verified' : b.verificationStatus || 'Pending Verification',
+          'Tenure (Years)': b.age,
+          'Corporate CIN': isVisitor ? `${(b.cin || 'N/A').slice(0, 7)}****` : b.cin || '—',
+          GSTIN: isVisitor ? `${(b.gstin || 'N/A').slice(0, 4)}******` : b.gstin || '—',
+          Certifications: b.isoCertified || '—',
+          'Turnover Band': isVisitor ? 'Gated for Visitors' : b.turnover,
+          'Workforce Band': isVisitor ? 'Gated for Visitors' : b.employees,
+          'Catalog Products': (b.products || []).join(', ') || '—',
+          'Open Complaints': b.openComplaintsCount ?? 0,
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Comparison_Matrix');
+      XLSX.writeFile(wb, buildCompareExportFilename());
+      toast.success('Comparative Matrix Exported (XLSX)', {
+        description: `Downloaded comparison report for ${selected.length} supplier(s).`,
+      });
+    } catch {
+      toast.error('Failed to export XLSX comparison matrix.');
+    }
+  }
+
+  const attributes: [string, (b: CompareBusiness) => React.ReactNode, boolean][] = [
     [
       'Trust Index & Grade',
       (b) => (
@@ -54,7 +154,16 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
     ],
     [
       'Statutory Status',
-      () => <Badge kind="verified">Active & Compliant</Badge>,
+      (b) => {
+        const statusStr = String(b.verificationStatus || '').toLowerCase();
+        if (b.verified || statusStr === 'verified' || statusStr === 'approved') {
+          return <Badge kind="verified">Verified & Compliant</Badge>;
+        }
+        if (statusStr.includes('pending') || statusStr.includes('review')) {
+          return <Badge kind="amber">Verification Pending</Badge>;
+        }
+        return <Badge kind="neutral">Registered / Unverified</Badge>;
+      },
       false,
     ],
     ['Operational Tenure', (b) => <strong className="text-slate-900">{b.age} Years Operational</strong>, false],
@@ -62,28 +171,32 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
     // Statutory Deep Attributes (Gated for Visitors)
     [
       'Corporate CIN',
-      (b) =>
-        isVisitor ? (
+      (b) => {
+        const cinVal = b.cin || '—';
+        return isVisitor ? (
           <span className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
             <Lock className="size-3 text-slate-400" />
-            <span>{b.cin.slice(0, 7)}****</span>
+            <span>{cinVal !== '—' ? `${cinVal.slice(0, 7)}****` : 'Gated'}</span>
           </span>
         ) : (
-          <code className="text-[11px] font-mono text-slate-700">{b.cin}</code>
-        ),
+          <code className="text-[11px] font-mono text-slate-700">{cinVal}</code>
+        );
+      },
       isVisitor,
     ],
     [
       'GSTIN Identifier',
-      (b) =>
-        isVisitor ? (
+      (b) => {
+        const gstVal = b.gstin || '—';
+        return isVisitor ? (
           <span className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
             <Lock className="size-3 text-slate-400" />
-            <span>{b.gstin.slice(0, 4)}******</span>
+            <span>{gstVal !== '—' ? `${gstVal.slice(0, 4)}******` : 'Gated'}</span>
           </span>
         ) : (
-          <code className="text-[11px] font-mono text-slate-700">{b.gstin}</code>
-        ),
+          <code className="text-[11px] font-mono text-slate-700">{gstVal}</code>
+        );
+      },
       isVisitor,
     ],
     ['ISO / Quality Audit', (b) => <span className="text-xs font-semibold text-primary-800">{b.isoCertified}</span>, false],
@@ -140,22 +253,79 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
       isVisitor,
     ],
     [
-      'Core Capabilities',
+      'Facilities & Catalog',
       (b) => (
-        <div className="flex flex-wrap gap-1">
-          {b.products.slice(0, 2).map((p) => (
-            <span key={p} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 font-medium">
-              {p}
-            </span>
-          ))}
-        </div>
+        <span className="text-xs font-semibold text-slate-700">
+          {b.facilitiesCount ?? 1} Plant(s) · {b.productsCount ?? (b.products?.length || 0)} Catalog Item(s)
+        </span>
       ),
+      false,
+    ],
+    [
+      'Core Capabilities',
+      (b) => {
+        const prods = Array.isArray(b.products) ? b.products.slice(0, 3) : [];
+        if (prods.length === 0) {
+          return <span className="text-xs text-slate-400 italic">No catalog items listed</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {prods.map((p) => (
+              <span key={p} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 font-medium">
+                {p}
+              </span>
+            ))}
+          </div>
+        );
+      },
       false,
     ],
   ];
 
   return (
     <div className="space-y-6">
+      {/* Inline Selector Bar: Add Live DB or Demo Business (2-4) */}
+      {availableBusinesses.length > 0 && selected.length < 4 && (
+        <div className="rounded-2xl border border-slate-200 bg-white/90 p-3.5 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs text-slate-600">
+            {selected.length < 2 ? (
+              <span className="font-semibold text-amber-800">
+                1 company selected — pick a 2nd company below to compare side-by-side:
+              </span>
+            ) : (
+              <span>
+                Comparing <strong className="text-slate-900">{selected.length} of 4</strong> companies. Add another candidate:
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={candidateId}
+              onChange={(e) => setCandidateId(e.target.value)}
+              className="flex-1 sm:w-64 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-primary-600"
+            >
+              <option value="">Select company to add...</option>
+              {addableOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.name} ({opt.city || opt.location})
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={!candidateId}
+              onClick={handleAddCandidate}
+              icon={<Plus className="size-3.5" />}
+              className="shrink-0 text-xs font-bold"
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Tier Switcher / Mode Bar */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -188,11 +358,7 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
           {isPremium && (
             <Button
               size="sm"
-              onClick={() =>
-                toast.success('Comparative Matrix Exported (XLSX)', {
-                  description: 'Downloaded side-by-side due diligence spreadsheet.',
-                })
-              }
+              onClick={handleExportMatrix}
               className="text-xs bg-primary-600 hover:bg-primary-700 text-white font-bold h-8"
               icon={<Download className="size-3.5" />}
             >
@@ -218,23 +384,31 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3 pt-1">
-            {selected.map((b) => (
-              <div key={b.id} className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
-                <span className="text-xs font-bold text-white block truncate">{b.name}</span>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Credit Risk:</span>
-                  <span className="font-bold text-emerald-400">AA (Low Risk)</span>
+            {selected.map((b) => {
+              const { grade, risk } = deriveGradeAndRisk(b);
+              const openComplaints = b.openComplaintsCount ?? 0;
+              return (
+                <div key={b.id} className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                  <span className="text-xs font-bold text-white block truncate">{b.name}</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Audit Grade & Risk:</span>
+                    <span className="font-bold text-emerald-400">
+                      {grade} ({risk})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Open Complaints:</span>
+                    <span className={cn('font-bold', openComplaints === 0 ? 'text-cyan-400' : 'text-amber-400')}>
+                      {openComplaints} Active
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Verification Level:</span>
+                    <span className="font-bold text-emerald-400">Tier {b.level} Audited</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">GSTR-3B Filing:</span>
-                  <span className="font-bold text-cyan-400">100% On-Time</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Default Probability:</span>
-                  <span className="font-bold text-emerald-400">&lt; 0.2%</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -261,12 +435,25 @@ export function CompareTableClient({ selected }: CompareTableClientProps) {
                         {b.city}, {b.state}
                       </span>
                     </div>
-                    <Link
-                      href={`/demo/business/${b.id}`}
-                      className="rounded-full bg-slate-900 p-1.5 !text-white text-white hover:bg-slate-800"
-                    >
-                      <ExternalLink className="size-3" />
-                    </Link>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Link
+                        href={`/demo/business/${b.id}`}
+                        className="rounded-full bg-slate-900 p-1.5 !text-white text-white hover:bg-slate-800"
+                        title={`Open ${b.name} dossier`}
+                      >
+                        <ExternalLink className="size-3" />
+                      </Link>
+                      {selected.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCompany(b.id)}
+                          className="rounded-full bg-slate-200/80 p-1.5 text-slate-600 hover:bg-rose-100 hover:text-rose-700 transition-colors"
+                          title={`Remove ${b.name} from comparison`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </th>
               ))}

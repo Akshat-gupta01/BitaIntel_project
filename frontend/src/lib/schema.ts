@@ -112,10 +112,12 @@ export function createBusinessJsonLd(b: Business) {
     },
     numberOfEmployees: {
       '@type': 'QuantitativeValue',
-      description: b.employees,
+      description: b.employees || 'Confidential',
     },
     knowsAbout: b.products,
-    award: `${b.isoCertified} (Tier ${b.level} Audited)`,
+    award: b.isoCertified
+      ? `${b.isoCertified} (Tier ${b.level} Audited)`
+      : `Tier ${b.level} Audited`,
   };
 }
 

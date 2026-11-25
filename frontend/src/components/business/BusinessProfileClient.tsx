@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Business } from '@/data';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
@@ -12,29 +12,31 @@ import { ScoreRing } from '@/components/business/ScoreRing';
 import { BitaintelVerifiedBadge } from '@/components/business/BitaintelVerifiedBadge';
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import { EnquiryModal } from '@/components/business/EnquiryModal';
+import { ComplaintModal } from '@/components/business/ComplaintModal';
 import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
-import { getStoredVendorDossier } from '@/config/initialVendorDossier';
 import * as vendorService from '@services/vendor.service';
 import { ProductCatalogItem } from '@/types/vendorRegistration';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
+  formatBusinessLocation,
+  getVerificationStatusBadge,
+  resolveBackendDocumentUrl,
+} from '@/lib/verificationBadge';
+import {
   MapPin,
   ShieldCheck,
-  ArrowLeft,
   LockKeyhole,
   CheckCircle2,
-  Layers,
   Sparkles,
   Download,
   AlertTriangle,
   FileText,
   UserCheck,
-  TrendingUp,
-  Award,
   Lock,
-  ExternalLink,
   Package,
   Send,
+  Search,
+  Eye,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -67,17 +69,26 @@ interface PublicCatalogProduct {
   priceValidity?: string | null;
   targetMarkets?: string | null;
   images?: unknown;
+  hasCatalogue?: boolean;
+  hasTds?: boolean;
+  hasCoa?: boolean;
+  hasSds?: boolean;
   catalogueDoc?: string | null;
   technicalDataSheetDoc?: string | null;
   coaDoc?: string | null;
   sdsDoc?: string | null;
 }
 
+type ProfileCatalogItem = ProductCatalogItem & {
+  hasTds?: boolean;
+  hasCoa?: boolean;
+};
+
 function toSampleAvailability(value?: string | null): ProductCatalogItem['sampleAvailability'] {
   return value === 'Available Paid' || value === 'Not Available' ? value : 'Available Free';
 }
 
-function mapPublicProduct(p: PublicCatalogProduct, fallbackId: string): ProductCatalogItem {
+function mapPublicProduct(p: PublicCatalogProduct, fallbackId: string): ProfileCatalogItem {
   return {
     id: p.id !== null && p.id !== undefined ? String(p.id) : fallbackId,
     name: (p.name || 'Product').trim(),
@@ -102,11 +113,53 @@ function mapPublicProduct(p: PublicCatalogProduct, fallbackId: string): ProductC
     priceValidity: p.priceValidity || '',
     targetMarkets: p.targetMarkets || '',
     images: vendorService.normalizeImageArray(p.images),
+    hasTds: Boolean(p.hasTds || p.technicalDataSheetDoc),
+    hasCoa: Boolean(p.hasCoa || p.coaDoc),
     catalogueDoc: p.catalogueDoc || undefined,
     technicalDataSheetDoc: p.technicalDataSheetDoc || undefined,
     coaDoc: p.coaDoc || undefined,
     sdsDoc: p.sdsDoc || undefined,
   };
+}
+
+function deriveInitialCatalogProducts(b: Business): ProfileCatalogItem[] {
+  const apiProducts =
+    (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).detailedProducts ||
+    (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).catalogProducts;
+
+  if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+    return apiProducts.map((p, idx) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`));
+  }
+
+  if (b.products && b.products.length > 0) {
+    return b.products.map((prodName, idx) => ({
+      id: `PRD-${b.id}-${idx + 1}`,
+      name: prodName,
+      type: 'Product',
+      categoryId: '',
+      subcategoryId: '',
+      brand: b.name,
+      description: '',
+      specifications: '',
+      grade: '',
+      standards: b.isoCertified,
+      hsnCode: '',
+      countryOfOrigin: 'India',
+      moq: '',
+      standardOrderQty: '',
+      monthlyCapacity: '',
+      availableStock: '',
+      leadTimeDays: '',
+      sampleAvailability: 'Available Free',
+      indicativePrice: '',
+      currency: 'INR',
+      priceValidity: '',
+      targetMarkets: '',
+      images: [],
+    }));
+  }
+
+  return [];
 }
 
 export function BusinessProfileClient({ business: b }: BusinessProfileClientProps) {
@@ -117,111 +170,132 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
   const isPendingApproval = role === 'pending_approval';
   const isApproved = role === 'approved_business';
   const isPremium = role === 'premium_subscriber';
+  // Docs policy: detailed statutory filings, commercial pricing, and TDS/COA downloads require
+  // an authenticated, GST/audit-approved B2B account (or platform admin).
+  const isVerifiedB2BViewer =
+    isApproved || isPremium || role === 'admin' || role === 'super_admin';
+  const isGatedViewer = !isVerifiedB2BViewer;
 
   // Commercial Products Catalog State
-  const [catalogProducts, setCatalogProducts] = useState<ProductCatalogItem[]>([]);
-  const [selectedProductForModal, setSelectedProductForModal] = useState<ProductCatalogItem | null>(null);
-  const [customLogoUrl, setCustomLogoUrl] = useState<string | undefined>(undefined);
+  const currentBusinessKey = b.slug || b.id;
+  const initialProducts = useMemo(() => deriveInitialCatalogProducts(b), [b]);
+  const [liveDetail, setLiveDetail] = useState<{
+    key: string;
+    products: ProfileCatalogItem[] | null;
+    logoUrl?: string;
+    turnover?: string | null;
+    employees?: string | null;
+  } | null>(null);
+  const [selectedProductForModal, setSelectedProductForModal] = useState<ProfileCatalogItem | null>(null);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+
+  const catalogProducts = useMemo(
+    () =>
+      liveDetail?.key === currentBusinessKey && liveDetail.products
+        ? liveDetail.products
+        : initialProducts,
+    [liveDetail, currentBusinessKey, initialProducts]
+  );
+
+  const filteredCatalogProducts = useMemo(() => {
+    const q = catalogSearchQuery.trim().toLowerCase();
+    if (!q) return catalogProducts;
+    return catalogProducts.filter((prod) =>
+      [prod.name, prod.brand, prod.hsnCode, prod.specifications, prod.description, prod.grade]
+        .filter(Boolean)
+        .some((val) => String(val).toLowerCase().includes(q))
+    );
+  }, [catalogProducts, catalogSearchQuery]);
+
+  function formatIndicativePrice(prod: ProfileCatalogItem): string {
+    const rawPrice = String(prod.indicativePrice || '').trim();
+    if (!rawPrice || rawPrice === '0' || rawPrice.toLowerCase() === 'on request') {
+      return 'On Request';
+    }
+    const cleanNum = Number(rawPrice.replace(/,/g, ''));
+    const formattedNum = !isNaN(cleanNum) && cleanNum > 0 ? cleanNum.toLocaleString('en-IN') : rawPrice;
+    return `${prod.currency || 'INR'} ${formattedNum}`;
+  }
+  const customLogoUrl =
+    (liveDetail?.key === currentBusinessKey ? liveDetail.logoUrl : undefined) ||
+    b.logoUrl ||
+    undefined;
+  const effectiveTurnover =
+    (liveDetail?.key === currentBusinessKey && liveDetail.turnover !== undefined
+      ? liveDetail.turnover
+      : b.turnover) || null;
+  const effectiveEmployees =
+    (liveDetail?.key === currentBusinessKey && liveDetail.employees !== undefined
+      ? liveDetail.employees
+      : b.employees) || null;
 
   useEffect(() => {
-    const stored = getStoredVendorDossier();
-    const isReferenceDemo = b.id === 'meridian-steel-works' || b.name.toLowerCase().includes('meridian');
-    const isPropack = b.id.toLowerCase().includes('propack') || b.name.toLowerCase().includes('propack');
-
-    if (b.logoUrl) {
-      setCustomLogoUrl(b.logoUrl);
-    }
-    // A dossier-stored logo is only a fallback for the reference demo / the
-    // vendor's own preview; live DB data always wins for product catalog.
-    if (stored?.step2?.logoUrl && (isReferenceDemo || isPropack)) {
-      setCustomLogoUrl(stored.step2.logoUrl);
-    }
-
-    // 1. Live DB catalog (real uploaded product photos + specifications)
+    if (!currentBusinessKey) return;
     const apiProducts =
       (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).detailedProducts ||
       (b as unknown as { catalogProducts?: PublicCatalogProduct[]; detailedProducts?: PublicCatalogProduct[] }).catalogProducts;
+    const hasInitialProducts = Array.isArray(apiProducts) && apiProducts.length > 0;
+    const needsVerifiedSync = isVerifiedB2BViewer && !b.canViewB2BDetails;
 
-    if (Array.isArray(apiProducts) && apiProducts.length > 0) {
-      setCatalogProducts(
-        apiProducts.map((p, idx) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`))
-      );
+    if (hasInitialProducts && !needsVerifiedSync) {
       return;
     }
 
-    // 2. Reference demo or vendor preview with a locally stored dossier
-    if (isReferenceDemo && stored?.step4?.products && stored.step4.products.length > 0) {
-      setCatalogProducts(stored.step4.products);
-      return;
-    }
+    let cancelled = false;
+    // Sync live detail from backend when SSR lacked products or after verified B2B auth loads
+    vendorService
+      .getPublicBusinessDetail(currentBusinessKey)
+      .then((res) => {
+        if (cancelled) return;
+        const liveB = res?.data?.business;
+        const liveProds = liveB?.detailedProducts || liveB?.catalogProducts;
+        const mappedProducts =
+          Array.isArray(liveProds) && liveProds.length > 0
+            ? liveProds.map((p: PublicCatalogProduct, idx: number) =>
+                mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`)
+              )
+            : null;
+        if (mappedProducts || liveB?.logoUrl || liveB?.turnover || liveB?.employees) {
+          setLiveDetail({
+            key: currentBusinessKey,
+            products: mappedProducts,
+            logoUrl: liveB?.logoUrl || undefined,
+            turnover: liveB?.turnover ?? undefined,
+            employees: liveB?.employees ?? undefined,
+          });
+        }
+      })
+      .catch(() => {});
 
-    // 3. Static seed businesses (no DB record) expose product names only.
-    if (b.products && b.products.length > 0) {
-      setCatalogProducts(
-        b.products.map((prodName, idx) => ({
-          id: `PRD-${b.id}-${idx + 1}`,
-          name: prodName,
-          type: 'Product',
-          categoryId: '',
-          subcategoryId: '',
-          brand: b.name,
-          description: '',
-          specifications: '',
-          grade: '',
-          standards: b.isoCertified,
-          hsnCode: '',
-          countryOfOrigin: 'India',
-          moq: '',
-          standardOrderQty: '',
-          monthlyCapacity: '',
-          availableStock: '',
-          leadTimeDays: '',
-          sampleAvailability: 'Available Free',
-          indicativePrice: '',
-          currency: 'INR',
-          priceValidity: '',
-          targetMarkets: '',
-          images: [],
-        }))
-      );
-    } else {
-      setCatalogProducts([]);
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [b, currentBusinessKey, isVerifiedB2BViewer]);
 
-    // 4. Client-side live detail sync from backend if not already populated
-    if (b.slug || b.id) {
-      vendorService
-        .getPublicBusinessDetail(b.slug || b.id)
-        .then((res) => {
-          const liveB = res?.data?.business;
-          const liveProds = liveB?.detailedProducts || liveB?.catalogProducts;
-          if (Array.isArray(liveProds) && liveProds.length > 0) {
-            setCatalogProducts(
-              liveProds.map((p: any, idx: number) => mapPublicProduct(p, `PRD-${b.id}-${idx + 1}`))
-            );
-          }
-          if (liveB?.logoUrl) {
-            setCustomLogoUrl(liveB.logoUrl);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [b]);
+  const safeCin = b.cin || '—';
+  const safeGstin = b.gstin || 'Pending GSTIN';
+  const maskedCin = safeCin !== '—' ? `${safeCin.slice(0, 8)}********` : 'Gated';
+  const maskedGstin =
+    safeGstin.length > 7 ? `${safeGstin.slice(0, 5)}******${safeGstin.slice(-2)}` : 'Gated';
+  const gatedText = isVisitor ? 'Gated for Visitors' : 'Verified B2B Only';
+  const verificationBadge = getVerificationStatusBadge(b);
+  const formattedLocation = formatBusinessLocation(b);
 
   const metadataRows = [
     ['Legal Entity Name', b.legalName],
-    ['Corporate CIN', isVisitor ? `${b.cin.slice(0, 8)}********` : b.cin],
-    ['GSTIN Identifier', isVisitor ? `${b.gstin.slice(0, 5)}******${b.gstin.slice(-2)}` : b.gstin],
+    ['Corporate CIN', isGatedViewer ? maskedCin : safeCin],
+    ['GSTIN Identifier', isGatedViewer ? maskedGstin : safeGstin],
     ['Industry Sector', b.industry],
-    ['Registered Location', b.location],
+    ['Registered Location', formattedLocation],
     ['Operational Tenure', `${b.age} years active`],
-    ['Headcount Band', isVisitor ? 'Gated for Visitors' : `${b.employees} personnel`],
-    ['Annual Turnover Band', isVisitor ? 'Gated for Visitors' : b.turnover],
+    ['Headcount Band', isGatedViewer ? gatedText : `${effectiveEmployees || '10–50'} personnel`],
+    ['Annual Turnover Band', isGatedViewer ? gatedText : effectiveTurnover || 'Confidential'],
     ['Verification Tier', `Tier ${b.level} (Audited)`],
     ['Membership Status', b.isPremiumSubscriber ? '⭐ Verified Premium Subscriber' : 'Standard Empanelled'],
     ['Last Audit Date', b.lastAudited],
   ];
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const checkpoints = [
     { label: 'Corporate Legal Identity', value: b.identity, max: 10, pct: 100 },
     { label: 'Statutory Document Dossier', value: isVisitor ? 'Gated' : b.documents, max: 20, pct: isVisitor ? 50 : 95 },
@@ -229,6 +303,160 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
     { label: 'Physical Plant / Office Geolocation', value: b.address, max: 5, pct: 90 },
     { label: 'Public Profile Completeness', value: `${b.profile}/15`, max: 15, pct: 100 },
   ];
+
+  function escapeHtml(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function handleDownloadProductDoc(docPath: string | null | undefined, docLabel: string) {
+    const resolvedUrl = resolveBackendDocumentUrl(docPath);
+    if (!resolvedUrl) {
+      toast.info(`${docLabel} file not available yet`, {
+        description: 'The vendor has not attached a downloadable PDF for this document.',
+      });
+      return;
+    }
+
+    const a = document.createElement('a');
+    a.href = resolvedUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.download = resolvedUrl.split('/').pop() || `${docLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success(`Downloading ${docLabel}`);
+  }
+
+  function handleExportDossierPdf() {
+    const productsList = Array.isArray(b.products)
+      ? b.products
+          .map((p) => (typeof p === 'string' ? p : (p as { name?: string })?.name || ''))
+          .filter(Boolean)
+      : [];
+    const exportCin = isGatedViewer ? maskedCin : safeCin;
+    const exportGstin = isGatedViewer ? maskedGstin : safeGstin;
+    const exportTurnover = isGatedViewer ? gatedText : effectiveTurnover || 'Confidential';
+    const exportGrade = b.grade || (b.score >= 95 ? 'A+' : b.score >= 90 ? 'A' : b.score >= 80 ? 'B' : 'C');
+    const exportRisk = b.riskLevel || 'Low Risk';
+    const exportComplaints = b.openComplaintsCount ?? 0;
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>BITAINTEL Dossier - ${escapeHtml(b.name)}</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; padding: 0; line-height: 1.45; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 18px; }
+    .brand { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.02em; }
+    .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+    .score-box { text-align: right; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 8px 14px; }
+    .score-val { font-size: 20px; font-weight: 800; color: #1e3a8a; }
+    .score-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #3b82f6; }
+    h1 { font-size: 18px; margin: 0 0 4px 0; }
+    .section { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; margin: 0 0 10px 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; font-size: 12px; }
+    .label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; display: block; }
+    .val { font-weight: 600; color: #0f172a; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 11px; }
+    .metric strong { display: block; font-size: 13px; color: #1e3a8a; margin: 4px 0; }
+    ul { margin: 6px 0 0 18px; padding: 0; font-size: 12px; }
+    .footer { margin-top: 20px; font-size: 10px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">BITAINTEL · Enterprise Intelligence Dossier</div>
+      <div class="sub">Verify Before You Trust · Generated ${escapeHtml(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }))}</div>
+    </div>
+    <div class="score-box">
+      <div class="score-lbl">${escapeHtml(b.badge)} · Level ${escapeHtml(b.level)}</div>
+      <div class="score-val">${escapeHtml(b.score)} / 100</div>
+    </div>
+  </div>
+
+  <h1>${escapeHtml(b.name)}</h1>
+  <div class="sub">${escapeHtml(b.legalName)} · ${escapeHtml(b.location)}</div>
+
+  <div class="section">
+    <div class="section-title">Corporate &amp; Statutory Metadata</div>
+    <div class="grid">
+      <div><span class="label">Legal Entity Name</span><span class="val">${escapeHtml(b.legalName)}</span></div>
+      <div><span class="label">Corporate CIN</span><span class="val">${escapeHtml(exportCin)}</span></div>
+      <div><span class="label">GSTIN Identifier</span><span class="val">${escapeHtml(exportGstin)}</span></div>
+      <div><span class="label">Industry Sector</span><span class="val">${escapeHtml(b.industry || 'N/A')}</span></div>
+      <div><span class="label">Operational Tenure</span><span class="val">${escapeHtml(b.age)} years</span></div>
+      <div><span class="label">Turnover Band</span><span class="val">${escapeHtml(exportTurnover)}</span></div>
+      <div><span class="label">Certifications</span><span class="val">${escapeHtml(b.isoCertified || 'None listed')}</span></div>
+      <div><span class="label">Verification Status</span><span class="val">${escapeHtml(verificationBadge.label)}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Audit Score &amp; Risk Summary</div>
+    <div class="metrics">
+      <div class="metric"><span class="label">Audit Grade &amp; Risk</span><strong>${escapeHtml(exportGrade)} (${escapeHtml(exportRisk)})</strong>Derived from 7-dimension BITAINTEL trust model</div>
+      <div class="metric"><span class="label">Open Complaints</span><strong>${escapeHtml(exportComplaints)} Active</strong>Live governance &amp; dispute status</div>
+      <div class="metric"><span class="label">Last Audited</span><strong>${escapeHtml(b.lastAudited || 'Recently Audited')}</strong>Verification Tier ${escapeHtml(b.level)}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Registered Products &amp; Services (${productsList.length})</div>
+    ${
+      productsList.length > 0
+        ? `<ul>${productsList.map((name) => `<li>${escapeHtml(name)}</li>`).join('')}</ul>`
+        : '<div class="sub">No products listed.</div>'
+    }
+  </div>
+
+  <div class="footer">
+    <span>BITAINTEL Verified Network · ${escapeHtml(b.id)}</span>
+    <span>Confidential Procurement Intelligence Report</span>
+  </div>
+</body>
+</html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      iframe.remove();
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      toast.success(`Dossier Ready for ${b.name}`, {
+        description: 'Select "Save as PDF" in the print dialog to download the PDF.',
+      });
+      setTimeout(() => iframe.remove(), 1500);
+    }, 150);
+  }
 
   return (
     <div className="space-y-6">
@@ -331,7 +559,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   </h1>
 
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <Badge kind="verified">Verified Entity</Badge>
+                    <Badge kind={verificationBadge.kind}>{verificationBadge.label}</Badge>
                     {b.isPremiumSubscriber && (
                       <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold tracking-wide border transition-all duration-200 select-none bg-gradient-to-r from-amber-500/20 via-primary-500/15 to-purple-500/15 text-primary-950 border-amber-300 shadow-2xs">
                         <Sparkles className="size-3.5 text-amber-500 shrink-0 animate-pulse" />
@@ -349,7 +577,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                     </p>
                     <p className="flex items-center gap-1.5">
                       <MapPin className="size-3 text-slate-400 shrink-0" />
-                      <span>{b.location} · {b.industry}</span>
+                      <span>{formattedLocation} · {b.industry}</span>
                     </p>
                   </div>
 
@@ -395,10 +623,10 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   Turnover Band
                 </span>
                 <span className="mt-1 text-sm font-bold text-slate-900 block">
-                  {isVisitor ? '₹ Confidential' : b.turnover}
+                  {isGatedViewer ? '₹ Confidential' : effectiveTurnover || 'Confidential'}
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  {isVisitor ? 'Gated for Visitors' : 'Audited Financials'}
+                  {isGatedViewer ? gatedText : 'Audited Financials'}
                 </span>
               </div>
               <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4">
@@ -406,9 +634,11 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   Quality Standard
                 </span>
                 <span className="mt-1 text-sm font-bold text-primary-700 block truncate">
-                  {b.isoCertified}
+                  {b.isoCertified || 'No Certifications Listed'}
                 </span>
-                <span className="text-[11px] text-slate-500">Active Certification</span>
+                <span className="text-[11px] text-slate-500">
+                  {b.isoCertified ? 'Active Certification' : 'Standard Compliance'}
+                </span>
               </div>
             </div>
           </Card>
@@ -437,11 +667,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() =>
-                      toast.success(`Dossier Exported for ${b.name}`, {
-                        description: 'Downloaded complete intelligence report in PDF format.',
-                      })
-                    }
+                    onClick={handleExportDossierPdf}
                     className="text-xs bg-primary-600 hover:bg-primary-500 text-white font-bold h-8"
                     icon={<Download className="size-3.5" />}
                   >
@@ -525,7 +751,135 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   const chosenColor = barColors[idx % barColors.length];
                   const [grad, textColor] = chosenColor.split(' ');
 
-                  return (
+                  function escapeHtml(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function handleExportDossierPdf() {
+    const productsList = Array.isArray(b.products)
+      ? b.products
+          .map((p) => (typeof p === 'string' ? p : (p as { name?: string })?.name || ''))
+          .filter(Boolean)
+      : [];
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>BITAINTEL Dossier - ${escapeHtml(b.name)}</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; padding: 0; line-height: 1.45; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 18px; }
+    .brand { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.02em; }
+    .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+    .score-box { text-align: right; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 8px 14px; }
+    .score-val { font-size: 20px; font-weight: 800; color: #1e3a8a; }
+    .score-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #3b82f6; }
+    h1 { font-size: 18px; margin: 0 0 4px 0; }
+    .section { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; margin: 0 0 10px 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; font-size: 12px; }
+    .label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; display: block; }
+    .val { font-weight: 600; color: #0f172a; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 11px; }
+    .metric strong { display: block; font-size: 13px; color: #1e3a8a; margin: 4px 0; }
+    ul { margin: 6px 0 0 18px; padding: 0; font-size: 12px; }
+    .footer { margin-top: 20px; font-size: 10px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">BITAINTEL · Enterprise Intelligence Dossier</div>
+      <div class="sub">Verify Before You Trust · Generated ${escapeHtml(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }))}</div>
+    </div>
+    <div class="score-box">
+      <div class="score-lbl">${escapeHtml(b.badge)} · Level ${escapeHtml(b.level)}</div>
+      <div class="score-val">${escapeHtml(b.score)} / 100</div>
+    </div>
+  </div>
+
+  <h1>${escapeHtml(b.name)}</h1>
+  <div class="sub">${escapeHtml(b.legalName)} · ${escapeHtml(b.location)}</div>
+
+  <div class="section">
+    <div class="section-title">Corporate &amp; Statutory Metadata</div>
+    <div class="grid">
+      <div><span class="label">Legal Entity Name</span><span class="val">${escapeHtml(b.legalName)}</span></div>
+      <div><span class="label">Corporate CIN</span><span class="val">${escapeHtml(b.cin || 'N/A')}</span></div>
+      <div><span class="label">GSTIN Identifier</span><span class="val">${escapeHtml(b.gstin || 'N/A')}</span></div>
+      <div><span class="label">Industry Sector</span><span class="val">${escapeHtml(b.industry || 'N/A')}</span></div>
+      <div><span class="label">Operational Tenure</span><span class="val">${escapeHtml(b.age)} years</span></div>
+      <div><span class="label">Turnover Band</span><span class="val">${escapeHtml(b.turnover || 'N/A')}</span></div>
+      <div><span class="label">Certifications</span><span class="val">${escapeHtml(b.isoCertified || 'N/A')}</span></div>
+      <div><span class="label">Last Audited</span><span class="val">${escapeHtml(b.lastAudited || 'Verified')}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Competitor Intelligence &amp; Radar Benchmark</div>
+    <div class="metrics">
+      <div class="metric"><span class="label">Statutory Filing Consistency</span><strong>99.2% (Top 2%)</strong>24 months consecutive GSTR-3B filed without penalty</div>
+      <div class="metric"><span class="label">Credit &amp; Solvency Grade</span><strong>AA+ High Solvency</strong>Calculated via MCA charge filings &amp; bank confirmations</div>
+      <div class="metric"><span class="label">Procurement Repeat Ratio</span><strong>91.4% Retention</strong>Based on cross-vendor buyer feedback &amp; RFI awards</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Registered Products &amp; Services (${productsList.length})</div>
+    ${
+      productsList.length > 0
+        ? `<ul>${productsList.map((name) => `<li>${escapeHtml(name)}</li>`).join('')}</ul>`
+        : '<div class="sub">No products listed.</div>'
+    }
+  </div>
+
+  <div class="footer">
+    <span>BITAINTEL Verified Network · ${escapeHtml(b.id)}</span>
+    <span>Confidential Procurement Intelligence Report</span>
+  </div>
+</body>
+</html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      iframe.remove();
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      toast.success(`Dossier Ready for ${b.name}`, {
+        description: 'Select "Save as PDF" in the print dialog to download the PDF.',
+      });
+      setTimeout(() => iframe.remove(), 1500);
+    }, 150);
+  }
+
+  return (
                     <div key={cp.label} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-slate-800">{cp.label}</span>
@@ -549,44 +903,71 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
           {/* COMMERCIAL PRODUCTS & AUDITED OFFERINGS SECTION (ROLE & VISITOR AWARE)     */}
           {/* ========================================================================= */}
           {catalogProducts.length > 0 && (
-            <Card variant="bento" className="p-6 bg-white space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2.5">
-                  <div className="size-9 rounded-xl bg-primary-50 text-primary-700 border border-primary-200 grid place-items-center shrink-0">
+            <Card variant="bento" className="p-6 bg-white space-y-4">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex items-start gap-3">
+                  <div className="size-10 rounded-xl bg-primary-50 text-primary-700 grid place-items-center shrink-0 border border-primary-100">
                     <Package className="size-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold text-slate-900">
-                        Commercial Products &amp; Verified Offerings
+                      <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                        Commercial Products &amp; Services Catalog
                       </h2>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 border border-primary-200">
-                        {catalogProducts.length} {catalogProducts.length === 1 ? 'Product' : 'Products'}
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                        {catalogProducts.length}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Audited product lines, certified technical documents (TDS &amp; COA), and supply parameters.
+                    <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
+                      Products visible to corporate buyers with audited Technical Data Sheets (TDS) and Certificates of Analysis (COA)
                     </p>
                   </div>
                 </div>
+
+                <div className="relative w-full sm:w-56 shrink-0">
+                  <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={catalogSearchQuery}
+                    onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                    placeholder="Search products or HSN..."
+                    className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all bg-white"
+                  />
+                </div>
               </div>
 
-              {/* Visitor Gating Notice or Verified Buyer Banner */}
-              {isVisitor ? (
+              {/* Visitor / Unverified Gating Notice or Verified B2B Buyer Banner */}
+              {isGatedViewer ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="flex items-start sm:items-center gap-2.5">
                     <Lock className="size-4 text-amber-700 shrink-0 mt-0.5 sm:mt-0" />
                     <p className="text-amber-900 leading-relaxed">
-                      <strong className="font-bold">Visitor Preview Mode:</strong> Commercial unit pricing and downloadable certified batch compliance documents (TDS &amp; COA) are gated for visitors.
+                      {isVisitor ? (
+                        <>
+                          <strong className="font-bold">Visitor Preview Mode:</strong> Commercial unit pricing and downloadable certified batch compliance documents (TDS &amp; COA) require a verified B2B account.
+                        </>
+                      ) : (
+                        <>
+                          <strong className="font-bold">GST &amp; Account Verification Required:</strong> Commercial unit pricing and certified TDS &amp; COA downloads unlock automatically once your B2B entity verification is approved.
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button href="/demo/login" size="xs" variant="primary" className="text-xs font-bold">
-                      Sign In
-                    </Button>
-                    <Button href="/demo/register" size="xs" variant="outline" className="text-xs bg-white font-bold">
-                      Register Free
-                    </Button>
+                    {isVisitor ? (
+                      <>
+                        <Button href="/demo/login" size="xs" variant="primary" className="text-xs font-bold">
+                          Sign In
+                        </Button>
+                        <Button href="/demo/register" size="xs" variant="outline" className="text-xs bg-white font-bold">
+                          Register Free
+                        </Button>
+                      </>
+                    ) : (
+                      <Button href="/demo/dashboard/vendor" size="xs" variant="primary" className="text-xs font-bold">
+                        Complete Verification
+                      </Button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -594,221 +975,224 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   <div className="flex items-center gap-2 text-emerald-900 font-medium">
                     <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
                     <span>
-                      <strong className="font-bold">Verified Buyer Mode ({role.replace('_', ' ').toUpperCase()}):</strong> Commercial unit pricing and downloadable certified compliance files (TDS &amp; COA) are unlocked.
+                      <strong className="font-bold">Verified B2B Mode ({role.replace('_', ' ').toUpperCase()}):</strong> Commercial unit pricing and downloadable certified compliance files (TDS &amp; COA) are unlocked.
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* Product Cards List */}
-              <div className="grid gap-4">
-                {catalogProducts.map((prod) => (
-                  <div
-                    key={prod.id}
-                    className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 hover:border-primary-300 hover:shadow-xs transition-all space-y-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                        <ProductThumbnail
-                          images={prod.images}
-                          src={prod.images && prod.images.length > 0 ? prod.images[0] : (prod as any).imageUrl}
-                          alt={prod.name}
-                          size="md"
-                          showCountBadge
-                        />
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-50 text-primary-800 border border-primary-200">
-                              {prod.brand || b.name}
-                            </span>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                              {prod.type || 'Product'}
-                            </span>
-                            {prod.hsnCode && (
-                              <span className="text-[10px] font-mono text-slate-400">
-                                HSN: {prod.hsnCode}
+              {/* Catalog Table (matching Vendor Catalog UI) */}
+              <div className="rounded-2xl border border-slate-200 overflow-x-auto bg-white">
+                <table className="w-full min-w-[700px] text-left text-xs">
+                  <thead className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="p-3">Product / Service</th>
+                      <th className="p-3">HSN Code</th>
+                      <th className="p-3">MOQ &amp; Batch</th>
+                      <th className="p-3">Lead Time</th>
+                      <th className="p-3">Price / Currency</th>
+                      <th className="p-3">Technical Docs (TDS / COA)</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredCatalogProducts.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
+                          No matching catalog products found for &ldquo;{catalogSearchQuery}&rdquo;.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCatalogProducts.map((prod) => {
+                        const hasTds = Boolean(prod.hasTds || prod.technicalDataSheetDoc);
+                        const hasCoa = Boolean(prod.hasCoa || prod.coaDoc);
+
+                        return (
+                          <tr key={prod.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-3 max-w-[240px]">
+                              <div className="flex items-center gap-3">
+                                <ProductThumbnail
+                                  images={prod.images}
+                                  src={prod.images && prod.images.length > 0 ? prod.images[0] : (prod as any).imageUrl}
+                                  alt={prod.name}
+                                  size="sm"
+                                  showCountBadge
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-[10px] font-bold text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200/80 inline-block mb-1">
+                                    {prod.brand || b.name}
+                                  </span>
+                                  <strong className="text-slate-900 block truncate" title={prod.name}>
+                                    {prod.name}
+                                  </strong>
+                                  <span className="text-[11px] text-slate-500 line-clamp-1">
+                                    {prod.specifications || prod.description || prod.grade || 'Audited specification'}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="p-3 font-mono text-slate-700 whitespace-nowrap">
+                              {prod.hsnCode || '—'}
+                            </td>
+
+                            <td className="p-3 whitespace-nowrap">
+                              <span className="font-semibold text-slate-800 block">
+                                {prod.moq || '50 Units'}
                               </span>
-                            )}
-                          </div>
-                          <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
-                            {prod.name}
-                          </h3>
-                          <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
-                            {prod.description || prod.specifications}
-                          </p>
-                        </div>
-                      </div>
+                              <span className="text-[10px] text-slate-400">
+                                {prod.standardOrderQty ? `Batch: ${prod.standardOrderQty}` : 'Standard Batch'}
+                              </span>
+                            </td>
 
-                      {/* Price / Commercial Status */}
-                      <div className="shrink-0 text-left sm:text-right">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-                          Indicative Price
-                        </span>
-                        {isVisitor ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold">
-                            <Lock className="size-3 text-slate-400" />
-                            <span>Gated for Visitors</span>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="text-sm sm:text-base font-black text-slate-900">
-                              {(() => {
-                                const rawPrice = String(prod.indicativePrice || '').trim();
-                                if (!rawPrice || rawPrice === '0' || rawPrice.toLowerCase() === 'on request') {
-                                  return 'On Request';
-                                }
-                                const cleanNum = Number(rawPrice.replace(/,/g, ''));
-                                const formattedNum = !isNaN(cleanNum) && cleanNum > 0 ? cleanNum.toLocaleString('en-IN') : rawPrice;
-                                return `${prod.currency || 'INR'} ${formattedNum}`;
-                              })()}
-                            </span>
-                            <span className="text-[10px] text-slate-500 block">
-                              MOQ: {prod.moq || '50 Units'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                            <td className="p-3 text-slate-700 font-medium whitespace-nowrap">
+                              {prod.leadTimeDays || '14 Days'}
+                            </td>
 
-                    {/* Specifications & Compliance Info */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-2.5 px-3 rounded-xl bg-slate-50/80 border border-slate-100 text-[11px]">
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-bold">MOQ</span>
-                        <span className="font-semibold text-slate-800">{prod.moq || '50 Units'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-bold">Lead Time</span>
-                        <span className="font-semibold text-slate-800">{prod.leadTimeDays || '14 Days'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-bold">Grade / Standard</span>
-                        <span className="font-semibold text-slate-800 truncate block">
-                          {prod.grade || prod.standards || 'Standard Spec'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-bold">Sample Availability</span>
-                        <span className="font-semibold text-slate-800 block truncate">
-                          {prod.sampleAvailability || 'Available Free'}
-                        </span>
-                      </div>
-                    </div>
+                            <td className="p-3 whitespace-nowrap">
+                              {isGatedViewer ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold"
+                                  title={gatedText}
+                                >
+                                  <Lock className="size-3 text-slate-400" />
+                                  <span>{gatedText}</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="font-black text-slate-900 block">
+                                    {formatIndicativePrice(prod)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block">
+                                    {prod.sampleAvailability || 'Available Free'}
+                                  </span>
+                                </>
+                              )}
+                            </td>
 
-                    {/* Technical Documents (TDS & COA) and Actions */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">
-                          Technical Docs:
-                        </span>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {/* TDS Pill */}
+                                {isGatedViewer && hasTds ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toast.info('Access Restricted to Verified B2B Accounts', {
+                                        description: isVisitor
+                                          ? 'Please sign in with an approved B2B account to download Technical Data Sheets (TDS).'
+                                          : 'Complete GST and entity verification to unlock TDS downloads.',
+                                      })
+                                    }
+                                    className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Verified B2B required to download TDS"
+                                  >
+                                    <Lock className="size-2.5 text-slate-400" />
+                                    <span>TDS</span>
+                                  </button>
+                                ) : prod.technicalDataSheetDoc ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDownloadProductDoc(
+                                        prod.technicalDataSheetDoc,
+                                        'Technical Data Sheet (TDS)'
+                                      )
+                                    }
+                                    className="px-2.5 py-1 rounded-full bg-emerald-50 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 transition-all shadow-2xs group cursor-pointer"
+                                    title={`Download TDS: ${prod.technicalDataSheetDoc}`}
+                                  >
+                                    <FileText className="size-3 text-emerald-600 group-hover:scale-110 transition-transform" />
+                                    <span>TDS</span>
+                                    <span className="size-1.5 rounded-full bg-emerald-500 inline-block" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">TDS N/A</span>
+                                )}
 
-                        {/* TDS */}
-                        {isVisitor ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.info('Access Restricted to Verified Buyers', {
-                                description: 'Please sign in or create an account to view and download certified Technical Data Sheets (TDS).',
-                              })
-                            }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
-                            title="Sign in to view TDS"
-                          >
-                            <Lock className="size-3 text-slate-400" />
-                            <span>TDS Available</span>
-                          </button>
-                        ) : prod.technicalDataSheetDoc ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.success('Technical Data Sheet Downloaded', {
-                                description: `Downloaded ${prod.technicalDataSheetDoc}`,
-                              })
-                            }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary-50 hover:bg-primary-100 text-primary-800 border border-primary-200 transition-colors shadow-2xs cursor-pointer"
-                            title={`Download ${prod.technicalDataSheetDoc}`}
-                          >
-                            <FileText className="size-3.5 text-primary-700" />
-                            <span>TDS Sheet</span>
-                            <Download className="size-3 text-primary-600 ml-0.5" />
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">TDS on Request</span>
-                        )}
+                                {/* COA Pill */}
+                                {isGatedViewer && hasCoa ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toast.info('Access Restricted to Verified B2B Accounts', {
+                                        description: isVisitor
+                                          ? 'Please sign in with an approved B2B account to download Certificates of Analysis (COA).'
+                                          : 'Complete GST and entity verification to unlock COA downloads.',
+                                      })
+                                    }
+                                    className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Verified B2B required to download COA"
+                                  >
+                                    <Lock className="size-2.5 text-slate-400" />
+                                    <span>COA</span>
+                                  </button>
+                                ) : prod.coaDoc ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDownloadProductDoc(
+                                        prod.coaDoc,
+                                        'Certificate of Analysis (COA)'
+                                      )
+                                    }
+                                    className="px-2.5 py-1 rounded-full bg-blue-50 text-[10px] font-bold text-blue-800 hover:bg-blue-100 border border-blue-300 flex items-center gap-1.5 transition-all shadow-2xs group cursor-pointer"
+                                    title={`Download COA: ${prod.coaDoc}`}
+                                  >
+                                    <CheckCircle2 className="size-3 text-blue-600 group-hover:scale-110 transition-transform" />
+                                    <span>COA</span>
+                                    <span className="size-1.5 rounded-full bg-blue-500 inline-block" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">COA N/A</span>
+                                )}
+                              </div>
+                            </td>
 
-                        {/* COA */}
-                        {isVisitor ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.info('Access Restricted to Verified Buyers', {
-                                description: 'Please sign in or create an account to view and download certified Certificates of Analysis (COA).',
-                              })
-                            }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
-                            title="Sign in to view COA"
-                          >
-                            <Lock className="size-3 text-slate-400" />
-                            <span>COA Available</span>
-                          </button>
-                        ) : prod.coaDoc ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.success('Certificate of Analysis Downloaded', {
-                                description: `Downloaded ${prod.coaDoc}`,
-                              })
-                            }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors shadow-2xs cursor-pointer"
-                            title={`Download ${prod.coaDoc}`}
-                          >
-                            <ShieldCheck className="size-3.5 text-emerald-700" />
-                            <span>COA Report</span>
-                            <Download className="size-3 text-emerald-600 ml-0.5" />
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">COA on Request</span>
-                        )}
-                      </div>
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProductForModal(prod)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-primary-700 font-semibold text-[11px] transition-colors cursor-pointer"
+                                  title="View Full Specifications"
+                                >
+                                  <Eye className="size-3.5" />
+                                  <span>Specs</span>
+                                </button>
 
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedProductForModal(prod)}
-                          className="text-xs font-semibold"
-                        >
-                          Full Specs
-                        </Button>
-
-                        {isVisitor ? (
-                          <Button
-                            href="/demo/login"
-                            variant="primary"
-                            size="sm"
-                            className="text-xs font-bold"
-                          >
-                            <Lock className="size-3 mr-1" /> Request RFQ
-                          </Button>
-                        ) : (
-                          <EnquiryModal
-                            business={b}
-                            productName={prod.name}
-                            triggerButton={
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                className="text-xs font-bold shadow-2xs"
-                              >
-                                <Send className="size-3 mr-1" /> Request Quote
-                              </Button>
-                            }
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                                {isVisitor ? (
+                                  <Button
+                                    href="/demo/login"
+                                    variant="primary"
+                                    size="xs"
+                                    className="text-[11px] font-bold"
+                                  >
+                                    <Lock className="size-3 mr-1" /> RFQ
+                                  </Button>
+                                ) : (
+                                  <EnquiryModal
+                                    business={b}
+                                    productId={prod.id}
+                                    productName={prod.name}
+                                    triggerButton={
+                                      <Button
+                                        variant="primary"
+                                        size="xs"
+                                        className="text-[11px] font-bold shadow-2xs"
+                                      >
+                                        <Send className="size-3 mr-1" /> RFQ
+                                      </Button>
+                                    }
+                                  />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
 
               {/* High-Level Manufacturing Capability Keywords */}
@@ -900,10 +1284,10 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
 
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                   <span className="text-slate-400 uppercase text-[10px] font-bold block">Commercial Pricing &amp; Terms</span>
-                  {isVisitor ? (
+                  {isGatedViewer ? (
                     <div className="flex items-center gap-2 text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
                       <Lock className="size-4 text-slate-400 shrink-0" />
-                      <span className="font-semibold">Indicative Price is Gated for Visitors.</span>
+                      <span className="font-semibold">Indicative Price is available to Verified B2B accounts only.</span>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200">
@@ -929,58 +1313,62 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   <span className="text-slate-400 uppercase text-[10px] font-bold block">Technical &amp; Compliance Documents</span>
                   <div className="flex gap-2 flex-wrap">
                     {/* TDS */}
-                    {isVisitor ? (
+                    {isGatedViewer &&
+                    (selectedProductForModal.hasTds || selectedProductForModal.technicalDataSheetDoc) ? (
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedProductForModal(null);
-                          toast.info('Sign in to view certified TDS documents');
+                          toast.info('Verified B2B account required to download certified TDS documents');
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
                       >
-                        <Lock className="size-3 text-slate-400" /> TDS Document (Login to view)
+                        <Lock className="size-3 text-slate-400" /> TDS Document ({gatedText})
                       </button>
                     ) : selectedProductForModal.technicalDataSheetDoc ? (
                       <button
                         type="button"
                         onClick={() =>
-                          toast.success('Technical Data Sheet Downloaded', {
-                            description: `Downloaded ${selectedProductForModal.technicalDataSheetDoc}`,
-                          })
+                          handleDownloadProductDoc(
+                            selectedProductForModal.technicalDataSheetDoc,
+                            'Technical Data Sheet (TDS)'
+                          )
                         }
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-50 border border-primary-200 text-primary-800 hover:bg-primary-100 cursor-pointer"
                       >
                         <FileText className="size-3.5 text-primary-700" />
-                        Download TDS ({selectedProductForModal.technicalDataSheetDoc})
+                        Download TDS PDF
                       </button>
                     ) : (
                       <span className="text-xs text-slate-400">No TDS attached</span>
                     )}
 
                     {/* COA */}
-                    {isVisitor ? (
+                    {isGatedViewer &&
+                    (selectedProductForModal.hasCoa || selectedProductForModal.coaDoc) ? (
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedProductForModal(null);
-                          toast.info('Sign in to view certified COA documents');
+                          toast.info('Verified B2B account required to download certified COA documents');
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
                       >
-                        <Lock className="size-3 text-slate-400" /> COA Document (Login to view)
+                        <Lock className="size-3 text-slate-400" /> COA Document ({gatedText})
                       </button>
                     ) : selectedProductForModal.coaDoc ? (
                       <button
                         type="button"
                         onClick={() =>
-                          toast.success('Certificate of Analysis Downloaded', {
-                            description: `Downloaded ${selectedProductForModal.coaDoc}`,
-                          })
+                          handleDownloadProductDoc(
+                            selectedProductForModal.coaDoc,
+                            'Certificate of Analysis (COA)'
+                          )
                         }
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                       >
                         <ShieldCheck className="size-3.5 text-emerald-700" />
-                        Download COA ({selectedProductForModal.coaDoc})
+                        Download COA PDF
                       </button>
                     ) : (
                       <span className="text-xs text-slate-400">No COA attached</span>
@@ -999,6 +1387,7 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
                   ) : (
                     <EnquiryModal
                       business={b}
+                      productId={selectedProductForModal.id}
                       productName={selectedProductForModal.name}
                       triggerButton={
                         <Button variant="primary" size="sm" className="font-bold">
@@ -1056,6 +1445,10 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
               >
                 Compare with Another Business
               </Button>
+
+              {!isVisitor && (
+                <ComplaintModal business={b} />
+              )}
             </div>
           </Card>
 

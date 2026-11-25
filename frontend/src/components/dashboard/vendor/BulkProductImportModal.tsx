@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -9,17 +10,11 @@ import {
   UploadCloud,
   Download,
   FileSpreadsheet,
-  FileText,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
   X,
-  FileCheck2,
   HelpCircle,
-  Package,
-  Layers,
-  ArrowRight,
-  ShieldCheck,
   Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -93,6 +88,10 @@ const SAMPLE_TEMPLATE_DATA = [
   },
 ];
 
+function buildCatalogExportFilename(ext: 'xlsx' | 'csv'): string {
+  return `bitaintel_current_catalog_export_${Date.now()}.${ext}`;
+}
+
 export function BulkProductImportModal({
   open,
   onClose,
@@ -102,7 +101,6 @@ export function BulkProductImportModal({
   const [activeTab, setActiveTab] = useState<'upload' | 'templates' | 'guide'>('upload');
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [parsedRows, setParsedRows] = useState<ParsedProductRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,7 +180,7 @@ export function BulkProductImportModal({
       const ws = XLSX.utils.json_to_sheet(exportRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Current_Catalog');
-      XLSX.writeFile(wb, `bitaintel_current_catalog_export_${Date.now()}.xlsx`);
+      XLSX.writeFile(wb, buildCatalogExportFilename('xlsx'));
       toast.success('Current Catalog Exported to Excel', {
         description: `${exportRows.length} active products exported for bulk editing.`,
       });
@@ -221,7 +219,7 @@ export function BulkProductImportModal({
 
       const ws = XLSX.utils.json_to_sheet(exportRows);
       const csvContent = XLSX.utils.sheet_to_csv(ws);
-      downloadBlob(csvContent, `bitaintel_current_catalog_export_${Date.now()}.csv`, 'text/csv;charset=utf-8;');
+      downloadBlob(csvContent, buildCatalogExportFilename('csv'), 'text/csv;charset=utf-8;');
       toast.success('Current Catalog Exported to CSV');
     } catch (err: any) {
       toast.error('Failed to export CSV: ' + (err?.message || ''));
@@ -244,7 +242,6 @@ export function BulkProductImportModal({
 
   function handleFileSelected(file: File) {
     setSelectedFile(file);
-    setIsProcessing(true);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -255,7 +252,6 @@ export function BulkProductImportModal({
 
         if (!sheetName) {
           toast.error('No sheets found in workbook.');
-          setIsProcessing(false);
           return;
         }
 
@@ -264,7 +260,6 @@ export function BulkProductImportModal({
 
         if (!rawJson || rawJson.length === 0) {
           toast.error('The selected file contains no data rows.');
-          setIsProcessing(false);
           return;
         }
 
@@ -354,7 +349,6 @@ export function BulkProductImportModal({
         });
 
         setParsedRows(analyzed);
-        setIsProcessing(false);
 
         const updates = analyzed.filter((r) => r.status === 'update').length;
         const news = analyzed.filter((r) => r.status === 'new').length;
@@ -367,7 +361,6 @@ export function BulkProductImportModal({
         toast.error('File parsing error', {
           description: err?.message || 'Unsupported format or corrupted file.',
         });
-        setIsProcessing(false);
       }
     };
 

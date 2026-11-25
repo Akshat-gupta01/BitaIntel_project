@@ -39,3 +39,26 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return sendError(res, "Authentication failed", 500, "ERR_INTERNAL_SERVER");
   }
 }
+
+/**
+ * Optional authentication middleware for public/semi-public endpoints.
+ * Attaches req.user when a valid active session token is provided, and
+ * falls through as an anonymous visitor otherwise.
+ */
+export async function optionalAuthenticate(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
+    if (!token) return next();
+
+    const decoded = verifyToken<{ userId: number }>(token);
+    if (!decoded?.userId) return next();
+
+    const user = await User.findByPk(decoded.userId);
+    if (user && user.status === "ACTIVE") {
+      req.user = user;
+    }
+  } catch {
+    // Treat invalid/expired tokens on public routes as unauthenticated visitors
+  }
+  return next();
+}

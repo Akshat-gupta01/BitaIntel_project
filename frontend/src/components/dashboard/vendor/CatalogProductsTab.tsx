@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -22,9 +23,7 @@ import {
   X,
   FileCheck2,
   ShieldCheck,
-  Eye,
   RefreshCw,
-  AlertCircle,
   Pencil,
   Image as ImageIcon,
   Loader2,
@@ -41,6 +40,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductCatalogItem | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   // Document Inspection modal state
   const [viewingDoc, setViewingDoc] = useState<{
@@ -55,6 +55,8 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
     type: 'TDS' | 'COA';
   } | null>(null);
   const [quickUploadFileName, setQuickUploadFileName] = useState('');
+  const [quickUploadFile, setQuickUploadFile] = useState<File | null>(null);
+  const [uploadingDocType, setUploadingDocType] = useState<'TDS' | 'COA' | null>(null);
 
   // Add/Edit Product form state
   const [newItem, setNewItem] = useState<Partial<ProductCatalogItem>>({
@@ -209,153 +211,236 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
     }
   }
 
-  function handleSaveProduct() {
+  async function handleSaveProduct() {
     if (!newItem.name?.trim()) {
       toast.error('Please enter a product name.');
       return;
     }
 
-    if (editingProduct) {
-      // Update existing product
-      const updatedProduct: ProductCatalogItem = {
-        ...editingProduct,
-        name: newItem.name.trim(),
-        type: newItem.type || editingProduct.type || 'Product',
-        categoryId: newItem.categoryId || editingProduct.categoryId || 'CAT001',
-        subcategoryId: newItem.subcategoryId || editingProduct.subcategoryId || 'SUB187',
-        brand: newItem.brand?.trim() || 'Proprietary',
-        description: newItem.specifications || '',
-        specifications: newItem.specifications || '',
-        grade: newItem.grade || 'Standard',
-        standards: newItem.standards || 'ISO / ASME Compliant',
-        hsnCode: newItem.hsnCode || '73072100',
-        countryOfOrigin: newItem.countryOfOrigin || 'India',
-        moq: newItem.moq || '50 Units',
-        standardOrderQty: newItem.standardOrderQty || '200 Units',
-        monthlyCapacity: newItem.monthlyCapacity || '10,000 Units',
-        availableStock: newItem.availableStock || '500 Units',
-        leadTimeDays: newItem.leadTimeDays || '14 Days',
-        sampleAvailability: newItem.sampleAvailability || 'Available Free',
-        indicativePrice: newItem.indicativePrice?.trim() || '',
-        currency: newItem.currency || 'INR',
-        priceValidity: newItem.priceValidity || '60 Days',
-        targetMarkets: newItem.targetMarkets || 'India, Global',
-        technicalDataSheetDoc: newItem.technicalDataSheetDoc?.trim() || undefined,
-        coaDoc: newItem.coaDoc?.trim() || undefined,
-        images:
-          newItem.images && newItem.images.length > 0
-            ? newItem.images
-            : (editingProduct.images || []),
-      };
-
-      const updatedList = products.map((p) => (p.id === editingProduct.id ? updatedProduct : p));
-      onUpdateProducts(updatedList);
-      setShowAddModal(false);
-      resetNewItem();
-      toast.success(`Product "${updatedProduct.name}" updated successfully.`);
-      return;
-    }
-
-    // Add new product
-    const item: ProductCatalogItem = {
-      id: `PRD-${Date.now()}`,
+    const payload = {
       name: newItem.name.trim(),
-      type: newItem.type || 'Product',
-      categoryId: newItem.categoryId || 'CAT001',
-      subcategoryId: 'SUB187',
+      type: (newItem.type || editingProduct?.type || 'Product') as 'Product' | 'Service',
+      categoryId: newItem.categoryId || editingProduct?.categoryId || 'CAT001',
+      subcategoryId: newItem.subcategoryId || editingProduct?.subcategoryId || 'SUB187',
       brand: newItem.brand?.trim() || 'Proprietary',
       description: newItem.specifications || '',
       specifications: newItem.specifications || '',
       grade: newItem.grade || 'Standard',
-      standards: 'ISO / ASME Compliant',
+      standards: newItem.standards || 'ISO / ASME Compliant',
       hsnCode: newItem.hsnCode || '73072100',
-      countryOfOrigin: 'India',
+      countryOfOrigin: newItem.countryOfOrigin || 'India',
       moq: newItem.moq || '50 Units',
       standardOrderQty: newItem.standardOrderQty || '200 Units',
-      monthlyCapacity: '10,000 Units',
-      availableStock: '500 Units',
+      monthlyCapacity: newItem.monthlyCapacity || '10,000 Units',
+      availableStock: newItem.availableStock || '500 Units',
       leadTimeDays: newItem.leadTimeDays || '14 Days',
-      sampleAvailability: newItem.sampleAvailability || 'Available Free',
+      sampleAvailability: (newItem.sampleAvailability || 'Available Free') as
+        | 'Available Free'
+        | 'Available Paid'
+        | 'Not Available',
       indicativePrice: newItem.indicativePrice?.trim() || '',
       currency: newItem.currency || 'INR',
-      priceValidity: '60 Days',
-      targetMarkets: 'India, Global',
-      technicalDataSheetDoc: newItem.technicalDataSheetDoc?.trim() || undefined,
-      coaDoc: newItem.coaDoc?.trim() || undefined,
-      images: newItem.images || [],
+      priceValidity: newItem.priceValidity || '60 Days',
+      targetMarkets: newItem.targetMarkets || 'India, Global',
+      technicalDataSheetDoc: newItem.technicalDataSheetDoc?.trim() || null,
+      coaDoc: newItem.coaDoc?.trim() || null,
+      images:
+        newItem.images && newItem.images.length > 0
+          ? newItem.images
+          : editingProduct?.images || [],
     };
 
-    onUpdateProducts([...products, item]);
-    setShowAddModal(false);
-    resetNewItem();
+    setSavingProduct(true);
+    try {
+      if (editingProduct) {
+        const isNumericId = /^\d+$/.test(String(editingProduct.id));
+        let savedId = editingProduct.id;
+        if (isNumericId) {
+          await vendorService.updateProduct(editingProduct.id, payload);
+        } else {
+          const res = await vendorService.addProduct(payload);
+          const created = res?.data?.product || res?.product;
+          if (created?.id) savedId = String(created.id);
+        }
 
-    const docCount = (item.technicalDataSheetDoc ? 1 : 0) + (item.coaDoc ? 1 : 0);
-    toast.success('Product saved to commercial catalog.', {
-      description: docCount > 0 ? `${docCount} technical compliance document(s) attached.` : 'No technical docs attached.',
-    });
+        const updatedProduct: ProductCatalogItem = {
+          ...editingProduct,
+          ...payload,
+          id: savedId,
+          technicalDataSheetDoc: payload.technicalDataSheetDoc || undefined,
+          coaDoc: payload.coaDoc || undefined,
+        };
+
+        const updatedList = products.map((p) => (p.id === editingProduct.id ? updatedProduct : p));
+        onUpdateProducts(updatedList);
+        setShowAddModal(false);
+        resetNewItem();
+        toast.success(`Product "${updatedProduct.name}" updated successfully.`);
+        return;
+      }
+
+      // Add new product in backend MySQL
+      const res = await vendorService.addProduct(payload);
+      const created = res?.data?.product || res?.product;
+
+      const item: ProductCatalogItem = {
+        ...payload,
+        id: created?.id ? String(created.id) : `PRD-${Date.now()}`,
+        technicalDataSheetDoc: payload.technicalDataSheetDoc || undefined,
+        coaDoc: payload.coaDoc || undefined,
+      };
+
+      onUpdateProducts([...products, item]);
+      setShowAddModal(false);
+      resetNewItem();
+
+      const docCount = (item.technicalDataSheetDoc ? 1 : 0) + (item.coaDoc ? 1 : 0);
+      toast.success('Product saved to commercial catalog.', {
+        description: docCount > 0 ? `${docCount} technical compliance document(s) attached.` : 'Persisted in database.',
+      });
+    } catch (err: unknown) {
+      const errorMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string }; message?: string } } }).response?.data?.error?.message ||
+            (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not save product to database.';
+      toast.error('Save Failed', {
+        description: String(errorMessage),
+      });
+    } finally {
+      setSavingProduct(false);
+    }
   }
 
-  function handleRemoveProduct(id: string) {
-    onUpdateProducts(products.filter((p) => p.id !== id));
-    toast.info('Product removed from catalog.');
+  async function handleRemoveProduct(id: string) {
+    try {
+      if (/^\d+$/.test(String(id))) {
+        await vendorService.deleteProduct(id);
+      }
+      onUpdateProducts(products.filter((p) => p.id !== id));
+      toast.info('Product removed from catalog.');
+    } catch (err: unknown) {
+      const errorMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string }; message?: string } } }).response?.data?.error?.message ||
+            (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not remove product from database.';
+      toast.error('Delete Failed', {
+        description: String(errorMessage),
+      });
+    }
   }
 
   // Handle file selection in Add Product form
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'TDS' | 'COA') {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'TDS' | 'COA') {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    setUploadingDocType(type);
+    try {
+      const res = await vendorService.uploadProductDocument(
+        file,
+        type === 'TDS' ? 'tds' : 'coa'
+      );
+      const uploadedPath =
+        res?.data?.path || res?.data?.url || res?.path || res?.url || file.name;
+
       if (type === 'TDS') {
-        setNewItem((prev) => ({ ...prev, technicalDataSheetDoc: file.name }));
-        toast.success(`TDS file selected: ${file.name}`);
+        setNewItem((prev) => ({ ...prev, technicalDataSheetDoc: String(uploadedPath) }));
+        toast.success(`TDS uploaded: ${file.name}`);
       } else {
-        setNewItem((prev) => ({ ...prev, coaDoc: file.name }));
-        toast.success(`COA file selected: ${file.name}`);
+        setNewItem((prev) => ({ ...prev, coaDoc: String(uploadedPath) }));
+        toast.success(`COA uploaded: ${file.name}`);
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload document.';
+      toast.error(`${type} Upload Failed`, { description: msg });
+    } finally {
+      setUploadingDocType(null);
+      e.target.value = '';
     }
   }
 
   // Quick upload for an existing product in the table
-  function handleQuickUploadSubmit() {
-    if (!quickUpload || !quickUploadFileName.trim()) {
-      toast.error('Please select or enter a document file name.');
+  async function handleQuickUploadSubmit() {
+    if (!quickUpload || (!quickUploadFile && !quickUploadFileName.trim())) {
+      toast.error('Please select a document file to upload.');
       return;
     }
 
-    const updated = products.map((p) => {
-      if (p.id === quickUpload.product.id) {
-        return {
-          ...p,
-          ...(quickUpload.type === 'TDS'
-            ? { technicalDataSheetDoc: quickUploadFileName.trim() }
-            : { coaDoc: quickUploadFileName.trim() }),
-        };
+    setUploadingDocType(quickUpload.type);
+    try {
+      let storedDocValue = quickUploadFileName.trim();
+      if (quickUploadFile) {
+        const res = await vendorService.uploadProductDocument(
+          quickUploadFile,
+          quickUpload.type === 'TDS' ? 'tds' : 'coa'
+        );
+        storedDocValue = String(
+          res?.data?.path || res?.data?.url || res?.path || res?.url || quickUploadFile.name
+        );
       }
-      return p;
-    });
 
-    onUpdateProducts(updated);
-    toast.success(`${quickUpload.type === 'TDS' ? 'Technical Data Sheet (TDS)' : 'Certificate of Analysis (COA)'} attached!`, {
-      description: `Attached to ${quickUpload.product.name}.`,
-    });
-    setQuickUpload(null);
-    setQuickUploadFileName('');
+      const docField =
+        quickUpload.type === 'TDS'
+          ? { technicalDataSheetDoc: storedDocValue }
+          : { coaDoc: storedDocValue };
+
+      if (/^\d+$/.test(String(quickUpload.product.id))) {
+        await vendorService.updateProduct(quickUpload.product.id, docField);
+      }
+
+      const updated = products.map((p) => {
+        if (p.id === quickUpload.product.id) {
+          return { ...p, ...docField };
+        }
+        return p;
+      });
+
+      onUpdateProducts(updated);
+      toast.success(`${quickUpload.type === 'TDS' ? 'Technical Data Sheet (TDS)' : 'Certificate of Analysis (COA)'} attached!`, {
+        description: `Attached to ${quickUpload.product.name}.`,
+      });
+      setQuickUpload(null);
+      setQuickUploadFileName('');
+      setQuickUploadFile(null);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to attach document.';
+      toast.error('Update Failed', { description: errorMessage });
+    } finally {
+      setUploadingDocType(null);
+    }
   }
 
   // Remove document from a product
-  function handleDetachDoc(productId: string, type: 'TDS' | 'COA') {
-    const updated = products.map((p) => {
-      if (p.id === productId) {
-        return {
-          ...p,
-          ...(type === 'TDS' ? { technicalDataSheetDoc: undefined } : { coaDoc: undefined }),
-        };
+  async function handleDetachDoc(productId: string, type: 'TDS' | 'COA') {
+    const docField = type === 'TDS' ? { technicalDataSheetDoc: null } : { coaDoc: null };
+    try {
+      if (/^\d+$/.test(String(productId))) {
+        await vendorService.updateProduct(productId, docField);
       }
-      return p;
-    });
 
-    onUpdateProducts(updated);
-    setViewingDoc(null);
-    toast.info(`${type} document detached from product.`);
+      const updated = products.map((p) => {
+        if (p.id === productId) {
+          return {
+            ...p,
+            ...(type === 'TDS' ? { technicalDataSheetDoc: undefined } : { coaDoc: undefined }),
+          };
+        }
+        return p;
+      });
+
+      onUpdateProducts(updated);
+      setViewingDoc(null);
+      toast.info(`${type} document detached from product.`);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to detach document.';
+      toast.error('Update Failed', { description: errorMessage });
+    }
   }
 
   return (
@@ -845,11 +930,14 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
               ) : (
                 <button
                   type="button"
+                  disabled={uploadingDocType === 'TDS'}
                   onClick={() => tdsInputRef.current?.click()}
-                  className="rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 px-3 py-2.5 text-center text-xs text-slate-600 transition-colors flex items-center justify-center gap-2"
+                  className="rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 disabled:opacity-60 px-3 py-2.5 text-center text-xs text-slate-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <UploadCloud className="size-4 text-slate-400" />
-                  <span className="text-[11px] font-medium">Upload Technical Data Sheet (PDF)</span>
+                  <span className="text-[11px] font-medium">
+                    {uploadingDocType === 'TDS' ? 'Uploading TDS...' : 'Upload Technical Data Sheet (PDF)'}
+                  </span>
                 </button>
               )}
 
@@ -886,11 +974,14 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
               ) : (
                 <button
                   type="button"
+                  disabled={uploadingDocType === 'COA'}
                   onClick={() => coaInputRef.current?.click()}
-                  className="rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 px-3 py-2.5 text-center text-xs text-slate-600 transition-colors flex items-center justify-center gap-2"
+                  className="rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 disabled:opacity-60 px-3 py-2.5 text-center text-xs text-slate-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <UploadCloud className="size-4 text-slate-400" />
-                  <span className="text-[11px] font-medium">Upload Certificate of Analysis (PDF)</span>
+                  <span className="text-[11px] font-medium">
+                    {uploadingDocType === 'COA' ? 'Uploading COA...' : 'Upload Certificate of Analysis (PDF)'}
+                  </span>
                 </button>
               )}
             </div>
@@ -910,10 +1001,15 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
             </button>
             <button
               type="button"
+              disabled={savingProduct}
               onClick={handleSaveProduct}
-              className="rounded-full bg-[#1e3a8a] hover:bg-[#172554] text-white px-7 py-2 text-xs font-bold shadow-sm transition-all"
+              className="rounded-full bg-[#1e3a8a] hover:bg-[#172554] disabled:opacity-60 text-white px-7 py-2 text-xs font-bold shadow-sm transition-all"
             >
-              {editingProduct ? 'Save Changes' : 'Save to Catalog'}
+              {savingProduct
+                ? 'Saving...'
+                : editingProduct
+                  ? 'Save Changes'
+                  : 'Save to Catalog'}
             </button>
           </div>
         </div>
@@ -1037,9 +1133,33 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    toast.success(`Downloading ${viewingDoc.fileName}`, {
-                      description: 'Official verified technical PDF downloaded.',
-                    });
+                    const raw = viewingDoc.fileName?.trim() || '';
+                    if (!raw || (!raw.startsWith('/uploads/') && !/^https?:\/\//i.test(raw))) {
+                      toast.info('No PDF file uploaded yet', {
+                        description: 'Use "Replace Revision" to upload a PDF file first.',
+                      });
+                      return;
+                    }
+                    let resolvedUrl = raw;
+                    if (!/^https?:\/\//i.test(resolvedUrl)) {
+                      const apiBase =
+                        typeof window !== 'undefined' &&
+                        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+                        (process.env.NEXT_PUBLIC_API_URL || '').includes('192.168.')
+                          ? 'http://localhost:3000/api/v1'
+                          : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+                      const origin = apiBase.replace(/\/api\/v1\/?$/, '');
+                      resolvedUrl = `${origin}${resolvedUrl.startsWith('/') ? '' : '/'}${resolvedUrl}`;
+                    }
+                    const a = document.createElement('a');
+                    a.href = resolvedUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.download = raw.split('/').pop() || `${viewingDoc.type}_${viewingDoc.product.name}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    toast.success(`Downloading ${viewingDoc.type} PDF`);
                   }}
                   className="text-xs font-bold"
                 >
@@ -1060,6 +1180,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
           onClose={() => {
             setQuickUpload(null);
             setQuickUploadFileName('');
+            setQuickUploadFile(null);
           }}
           title={`Attach ${quickUpload.type === 'TDS' ? 'Technical Data Sheet (TDS)' : 'Certificate of Analysis (COA)'}`}
           description={`Upload technical compliance document for ${quickUpload.product.name}`}
@@ -1092,6 +1213,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) {
+                      setQuickUploadFile(f);
                       setQuickUploadFileName(f.name);
                       toast.success(`Selected file: ${f.name}`);
                     }
@@ -1129,10 +1251,11 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
                 type="button"
                 variant="primary"
                 size="sm"
+                disabled={uploadingDocType !== null}
                 onClick={handleQuickUploadSubmit}
                 className="font-bold"
               >
-                Attach Document
+                {uploadingDocType ? 'Uploading...' : 'Attach Document'}
               </Button>
             </div>
           </div>

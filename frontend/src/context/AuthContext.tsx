@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -22,6 +23,7 @@ export interface AuthUser {
   mobile: string;
   designation?: string;
   businessName: string;
+  businessSlug?: string;
   cin: string;
   gstin: string;
   score: number;
@@ -45,6 +47,7 @@ export const PERSONA_PROFILES: Record<UserRole, AuthUser | null> = {
     mobile: '+91 98450 12345',
     designation: 'Founder & Managing Partner',
     businessName: 'GreenLeaf Herbal Extracts LLP',
+    businessSlug: 'greenleaf-herbal-extracts',
     cin: 'AAK-8921-LLP',
     gstin: 'Pending GSTIN Entry',
     score: 42,
@@ -63,6 +66,7 @@ export const PERSONA_PROFILES: Record<UserRole, AuthUser | null> = {
     mobile: '+91 97123 45678',
     designation: 'Director — Statutory Compliance',
     businessName: 'Nexora Cloud & Precision Systems Ltd',
+    businessSlug: 'nexora-cloud-systems',
     cin: 'U72900MH2018PTC309821',
     gstin: '27AABCN9812M1ZF',
     score: 68,
@@ -82,6 +86,7 @@ export const PERSONA_PROFILES: Record<UserRole, AuthUser | null> = {
     mobile: '+91 98201 44521',
     designation: 'Managing Director & Authorized Signatory',
     businessName: 'Meridian Steel Works Ltd',
+    businessSlug: 'meridian-steel-works',
     cin: 'U27100PN2003PTC148921',
     gstin: '27AABCM8291Q1Z4',
     score: 89,
@@ -100,6 +105,7 @@ export const PERSONA_PROFILES: Record<UserRole, AuthUser | null> = {
     mobile: '+91 98330 98765',
     designation: 'Chief Procurement & Commercial Officer',
     businessName: 'Apex Global Logistics & Infra Ltd',
+    businessSlug: 'apex-global-logistics',
     cin: 'L60200MH1998PLC112345',
     gstin: '27AAACA4512N1ZQ',
     score: 96,
@@ -206,6 +212,7 @@ export function mapBackendUser(bUser: any): AuthUser {
       bUser?.business?.name ||
       bUser?.companyName ||
       (isAdmin || isSuperAdmin ? 'BITAINTEL Operations' : 'Business Entity'),
+    businessSlug: bUser?.business?.slug || undefined,
     cin: bUser?.business?.cin || 'Pending Registration',
     gstin: bUser?.business?.gstin || 'Pending GSTIN',
     score: Number(bUser?.business?.score || (isAdmin || isSuperAdmin ? 100 : 0)),
@@ -228,7 +235,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isMounted: boolean;
-  login: (email: string, password?: string, businessName?: string) => Promise<AuthUser | null>;
+  login: (email: string, password?: string) => Promise<AuthUser | null>;
   loginWithOtp: (identifier: string, otp: string) => Promise<AuthUser | null>;
   logout: () => Promise<void>;
   setRole: (role: UserRole) => void;
@@ -252,6 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
 
     // Bootstrap user session from Express Backend (HttpOnly JWT Cookie / Session Token)
@@ -297,7 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const login = async (email: string, password?: string, businessName?: string): Promise<AuthUser | null> => {
+  const login = async (email: string, password?: string): Promise<AuthUser | null> => {
     if (password) {
       // Real backend authentication (Sets HttpOnly JWT Cookie in browser + returns Bearer token)
       const res: any = await authService.login({ email, password });
@@ -367,6 +375,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mobile: bUser?.mobile || data.mobile,
         // ✅ DB mein jo businessName save hua woh show hoga (legalName → name → fallback)
         businessName: bBusiness?.legalName || bBusiness?.name || data.companyName,
+        businessSlug: bBusiness?.slug || undefined,
         cin: bBusiness?.cin || 'Pending Registration',
         gstin: bBusiness?.gstin || 'Pending GSTIN',
         score: Number(bBusiness?.score || 0),

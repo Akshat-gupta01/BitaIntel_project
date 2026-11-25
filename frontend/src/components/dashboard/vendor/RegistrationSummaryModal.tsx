@@ -2,20 +2,16 @@
 
 import React from 'react';
 import { FullVendorRegistrationDossier } from '@/types/vendorRegistration';
-import { VENDOR_CATEGORIES, BUSINESS_TYPES } from '@/config/vendorMasterData';
 import { Button } from '@/components/ui/Button';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import {
   X,
   Printer,
-  Download,
   ShieldCheck,
   Building2,
   Package,
   Award,
   CheckCircle2,
-  Calendar,
-  Lock,
 } from 'lucide-react';
 
 interface RegistrationSummaryModalProps {
@@ -30,14 +26,6 @@ export function RegistrationSummaryModal({
   dossier,
 }: RegistrationSummaryModalProps) {
   if (!isOpen) return null;
-
-  const businessTypeNames = dossier.step3.businessTypeCodes
-    .map((c) => BUSINESS_TYPES.find((bt) => bt.code === c)?.name || c)
-    .join(', ');
-
-  const categoryNames = dossier.step3.selectedCategoryIds
-    .map((c) => VENDOR_CATEGORIES.find((cat) => cat.id === c)?.name || c)
-    .join(', ');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
@@ -104,7 +92,7 @@ export function RegistrationSummaryModal({
                 Ref: {dossier.step6.referenceNumber || 'REF-MH-2026-091'}
               </span>
               <span className="text-[10px] text-slate-400 block">
-                Verified: {new Date(dossier.step6.submissionDate || Date.now()).toLocaleDateString()}
+                Verified: {new Date(dossier.step6.submissionDate || new Date().toISOString()).toLocaleDateString()}
               </span>
             </div>
           </div>

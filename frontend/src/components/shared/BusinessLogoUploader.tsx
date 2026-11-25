@@ -42,6 +42,7 @@ export function BusinessAvatar({
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setImgError(false);
   }, [logoUrl]);
 
@@ -165,6 +166,7 @@ export function BusinessLogoUploader({
   const [previewError, setPreviewError] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreviewError(false);
   }, [logoUrl]);
 

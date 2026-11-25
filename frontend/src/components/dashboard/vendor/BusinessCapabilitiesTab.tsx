@@ -5,16 +5,13 @@ import { Step3BusinessData } from '@/types/vendorRegistration';
 import {
   BUSINESS_TYPES,
   VENDOR_CATEGORIES,
-  BUSINESS_ACTIVITIES,
 } from '@/config/vendorMasterData';
 import { Card } from '@/components/ui/Card';
 import {
   Layers,
   Factory,
   Cpu,
-  Flame,
   CheckCircle2,
-  Briefcase,
   TrendingUp,
 } from 'lucide-react';
 

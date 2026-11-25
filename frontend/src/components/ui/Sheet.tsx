@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,8 +24,6 @@ export function Sheet({
   side = 'right',
   className,
 }: SheetProps) {
-  const [mounted, setMounted] = useState(true);
-
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -41,7 +39,7 @@ export function Sheet({
     };
   }, [open, onClose]);
 
-  if (!open || !mounted) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
     <div

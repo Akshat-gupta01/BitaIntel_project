@@ -1,50 +1,60 @@
+import { cache } from 'react';
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import {
-  MapPin,
-  ShieldCheck,
-  ArrowLeft,
-  LockKeyhole,
-  CheckCircle2,
-  Layers,
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { businesses } from '@/data';
 import { Container } from '@/components/layout/Container';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ScoreRing } from '@/components/business/ScoreRing';
 
 import { JsonLd } from '@/components/shared/JsonLd';
 import { createPageMetadata } from '@/lib/metadata';
 import { createBusinessJsonLd, createWebPageJsonLd } from '@/lib/schema';
 
-async function fetchBusinessData(slug: string) {
+const fetchBusinessData = cache(async (slug: string, cookieHeader: string) => {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3000/api/v1').replace(/\/api\/v1\/?$/, '');
   const candidateUrls = Array.from(
     new Set([
-      `${apiBase}/api/v1/master/business/${slug}`,
       `http://127.0.0.1:3000/api/v1/master/business/${slug}`,
+      `${apiBase}/api/v1/master/business/${slug}`,
       `http://localhost:3000/api/v1/master/business/${slug}`,
     ])
   );
 
-  for (const url of candidateUrls) {
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data?.business) {
-          return json.data.business;
+  try {
+    const result = await Promise.any(
+      candidateUrls.map(async (url) => {
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+          signal: AbortSignal.timeout(2500),
+        });
+        if (res.status === 404) {
+          return { notFoundOnServer: true as const, business: null };
         }
-      }
-    } catch {
-      // try next candidate
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json?.data?.business) throw new Error('Missing business payload');
+        return { notFoundOnServer: false as const, business: json.data.business };
+      })
+    );
+    if (result.notFoundOnServer) {
+      // Fall back to static demo catalog only if the slug belongs to a seed demo entry
+      return (
+        businesses.find(
+          (x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase()
+        ) || null
+      );
     }
+    return result.business;
+  } catch {
+    return (
+      businesses.find(
+        (x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase()
+      ) || null
+    );
   }
-  return businesses.find((x) => x.id === slug || x.slug === slug || x.id.toLowerCase() === slug.toLowerCase()) || null;
-}
+});
 
 export function generateStaticParams() {
   return businesses.map((b) => ({ slug: b.id }));
@@ -56,7 +66,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const b = await fetchBusinessData(slug);
+  const cookieStore = await cookies();
+  const b = await fetchBusinessData(slug, cookieStore.toString());
 
   if (!b) {
     return createPageMetadata({
@@ -68,9 +79,9 @@ export async function generateMetadata({
 
   return createPageMetadata({
     title: `${b.name} (${b.legalName}) — Audited Trust Dossier`,
-    description: `${b.name}: ${b.summary} GSTIN: ${b.gstin}, CIN: ${b.cin}. Verification Tier ${b.level} with composite score of ${b.score}/100.`,
+    description: `${b.name}: ${b.summary} Verification Tier ${b.level} with composite score of ${b.score}/100.`,
     pathname: `/business/${b.id}`,
-    keywords: [b.name, b.legalName, b.industry, b.location, 'Vendor Verification', b.gstin],
+    keywords: [b.name, b.legalName, b.industry, b.location, 'Vendor Verification'],
   });
 }
 
@@ -82,7 +93,8 @@ export default async function BusinessProfile({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const b = await fetchBusinessData(slug);
+  const cookieStore = await cookies();
+  const b = await fetchBusinessData(slug, cookieStore.toString());
 
   if (!b) notFound();
 

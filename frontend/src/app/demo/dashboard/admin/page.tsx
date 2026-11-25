@@ -13,7 +13,15 @@ import {
   getAdminEnquiries,
   updateAdminEnquiryStatus,
   replyAdminEnquiry,
+  getAdminAuditLogs,
+  type BackendAuditLogItem,
 } from '@services/admin.service';
+import {
+  getAdminComplaints,
+  updateAdminComplaint,
+  type ComplaintItem,
+  type ComplaintStatus,
+} from '@services/complaint.service';
 import { VendorAuditModal } from '@/components/dashboard/admin/VendorAuditModal';
 import { AccessControlWorkspace } from '@/components/dashboard/admin/AccessControlWorkspace';
 import { Logo } from '@/components/ui/Logo';
@@ -42,9 +50,6 @@ import {
   Send,
   ClipboardList,
   ExternalLink,
-  Mail,
-  Phone,
-  Filter as FilterIcon,
 } from 'lucide-react';
 
 export type AdminNavTab =
@@ -52,6 +57,7 @@ export type AdminNavTab =
   | 'queue'
   | 'enquiries'
   | 'enquiry_records'
+  | 'complaints'
   | 'vendors'
   | 'verified'
   | 'action_required'
@@ -66,12 +72,39 @@ export interface AuditLogEntry {
   id: string;
   companyName: string;
   gstin: string;
-  decision: 'APPROVED' | 'REJECTED' | 'ACTION_REQUIRED';
+  decision: 'APPROVED' | 'REJECTED' | 'ACTION_REQUIRED' | string;
   auditor: string;
   timestamp: string;
   notes: string;
   scoreAwarded?: number;
   badgeAwarded?: string;
+}
+
+function mapBackendAuditLog(item: BackendAuditLogItem): AuditLogEntry {
+  const meta = (item.metadata || {}) as Record<string, unknown>;
+  const decision =
+    typeof meta.decision === 'string'
+      ? meta.decision
+      : item.action;
+  return {
+    id: `LOG-${item.id}`,
+    companyName: item.companyName || `${item.targetType} #${item.targetId || item.id}`,
+    gstin: typeof meta.gstin === 'string' ? meta.gstin : item.targetType,
+    decision,
+    auditor: item.actorName || item.actorRole || 'System',
+    timestamp: item.createdAt
+      ? new Date(item.createdAt).toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Recent',
+    notes: item.summary,
+    scoreAwarded: typeof meta.score === 'number' ? meta.score : undefined,
+    badgeAwarded: typeof meta.badge === 'string' ? meta.badge : undefined,
+  };
 }
 
 export default function AdminDashboardPage() {
@@ -86,6 +119,11 @@ export default function AdminDashboardPage() {
   const [queue, setQueue] = useState<AdminQueueItem[]>([]);
   const [allVendors, setAllVendors] = useState<AdminQueueItem[]>([]);
   const [enquiries, setEnquiries] = useState<AdminEnquiryItem[]>([]);
+  const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
+  const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
+  const [complaintStatusInput, setComplaintStatusInput] = useState<ComplaintStatus>('UNDER_INVESTIGATION');
+  const [complaintAdminNotes, setComplaintAdminNotes] = useState('');
+  const [isUpdatingComplaint, setIsUpdatingComplaint] = useState(false);
   const [selectedEnquiry, setSelectedEnquiry] = useState<AdminEnquiryItem | null>(null);
   const [adminReplyText, setAdminReplyText] = useState('');
   const [adminReplySuccess, setAdminReplySuccess] = useState('');
@@ -111,31 +149,8 @@ export default function AdminDashboardPage() {
   const [selectedVendorInitial, setSelectedVendorInitial] = useState<AdminQueueItem | undefined>(undefined);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
-  // Local persistent audit log state
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
-    {
-      id: 'LOG-101',
-      companyName: 'Meridian Steel Works Ltd',
-      gstin: '27AABCM8291Q1Z4',
-      decision: 'APPROVED',
-      auditor: 'Admin Verification Officer',
-      timestamp: 'Today, 02:15 PM',
-      notes: 'GSTIN active, 240 subcategories cross-checked, banking cancelled cheque verified.',
-      scoreAwarded: 89,
-      badgeAwarded: 'Gold',
-    },
-    {
-      id: 'LOG-100',
-      companyName: 'Nexora Precision Systems Ltd',
-      gstin: '27AABCN9812M1ZF',
-      decision: 'APPROVED',
-      auditor: 'Super Administrator',
-      timestamp: 'Yesterday, 04:45 PM',
-      notes: 'Level 2 audit complete. ISO 9001 and plant CNC machinery inspected.',
-      scoreAwarded: 92,
-      badgeAwarded: 'Platinum',
-    },
-  ]);
+  // Live persistent audit log state from DB
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
   // Load Dashboard Data
   const loadData = async (showLoadingState = true) => {
@@ -143,10 +158,12 @@ export default function AdminDashboardPage() {
     else setIsRefreshing(true);
 
     try {
-      const [queueRes, vendorsRes, enquiriesRes] = await Promise.allSettled([
+      const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes] = await Promise.allSettled([
         getVerificationQueue(),
         getAllVendors(),
         getAdminEnquiries(),
+        getAdminComplaints(),
+        getAdminAuditLogs(),
       ]);
 
       if (queueRes.status === 'fulfilled') {
@@ -161,6 +178,12 @@ export default function AdminDashboardPage() {
         if (enqList.length > 0) {
           setSelectedEnquiry((prev) => prev || enqList[0]);
         }
+      }
+      if (complaintsRes.status === 'fulfilled') {
+        setComplaints(complaintsRes.value?.complaints || []);
+      }
+      if (logsRes.status === 'fulfilled') {
+        setAuditLogs((logsRes.value?.logs || []).map(mapBackendAuditLog));
       }
     } catch (err: unknown) {
       console.error('Error fetching admin data:', err);
@@ -178,10 +201,12 @@ export default function AdminDashboardPage() {
     let isMounted = true;
     const fetchInitialData = async () => {
       try {
-        const [queueRes, vendorsRes, enquiriesRes] = await Promise.allSettled([
+        const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes] = await Promise.allSettled([
           getVerificationQueue(),
           getAllVendors(),
           getAdminEnquiries(),
+          getAdminComplaints(),
+          getAdminAuditLogs(),
         ]);
         if (!isMounted) return;
         if (queueRes.status === 'fulfilled') {
@@ -196,6 +221,12 @@ export default function AdminDashboardPage() {
           if (enqList.length > 0) {
             setSelectedEnquiry(enqList[0]);
           }
+        }
+        if (complaintsRes.status === 'fulfilled') {
+          setComplaints(complaintsRes.value?.complaints || []);
+        }
+        if (logsRes.status === 'fulfilled') {
+          setAuditLogs((logsRes.value?.logs || []).map(mapBackendAuditLog));
         }
       } catch (err: unknown) {
         if (!isMounted) return;
@@ -604,6 +635,13 @@ export default function AdminDashboardPage() {
       icon: History,
       badge: auditLogs.length,
       badgeColor: 'bg-slate-100 text-slate-600',
+    },
+    {
+      id: 'complaints',
+      label: 'Complaints Desk',
+      icon: AlertTriangle,
+      badge: complaints.filter((c) => c.status === 'OPEN' || c.status === 'UNDER_INVESTIGATION').length || null,
+      badgeColor: 'bg-rose-100 text-rose-800',
     },
     {
       id: 'scoring',
@@ -2169,6 +2207,188 @@ export default function AdminDashboardPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* TAB: COMPLAINTS DESK */}
+            {activeTab === 'complaints' && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-4 p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Compliance &amp; Buyer Complaints Desk</h3>
+                    <p className="text-xs text-slate-500">
+                      Centralized compliance &amp; buyer complaints reviewed by authorized officers.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                      Open: {complaints.filter((c) => c.status === 'OPEN' || c.status === 'UNDER_INVESTIGATION').length}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                      Resolved: {complaints.filter((c) => c.status === 'RESOLVED' || c.status === 'DISMISSED').length}
+                    </span>
+                  </div>
+                </div>
+
+                {complaints.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-500">
+                    No compliance or buyer complaints filed yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                        <tr>
+                          <th className="py-2.5 px-3">Ref</th>
+                          <th className="py-2.5 px-3">Target Vendor</th>
+                          <th className="py-2.5 px-3">Complainant</th>
+                          <th className="py-2.5 px-3">Category / Severity</th>
+                          <th className="py-2.5 px-3">Subject</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {complaints.map((cmp) => (
+                          <tr key={cmp.id} className="hover:bg-slate-50/70">
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                              {cmp.complaintNumber}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900">{cmp.business?.legalName || cmp.business?.name || `Business #${cmp.businessId}`}</div>
+                              {cmp.business?.score !== undefined && (
+                                <span className="text-[11px] text-slate-500">Score: {cmp.business.score}/100</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-semibold text-slate-800">{cmp.complainantName}</div>
+                              <div className="text-[11px] text-slate-500">{cmp.complainantEmail}</div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="font-semibold text-slate-700 block">{cmp.category.replace(/_/g, ' ')}</span>
+                              <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                cmp.severity === 'CRITICAL' || cmp.severity === 'HIGH'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {cmp.severity}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 max-w-[220px]">
+                              <div className="font-semibold text-slate-800 truncate">{cmp.subject}</div>
+                              <div className="text-[11px] text-slate-500 truncate">{cmp.description}</div>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                cmp.status === 'OPEN'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : cmp.status === 'UNDER_INVESTIGATION'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : cmp.status === 'RESOLVED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {cmp.status.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedComplaint(cmp);
+                                  setComplaintStatusInput(cmp.status);
+                                  setComplaintAdminNotes(cmp.adminNotes || '');
+                                }}
+                              >
+                                Review
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {selectedComplaint && (
+                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 shadow-xl">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="text-[11px] font-mono font-bold text-rose-700">{selectedComplaint.complaintNumber}</span>
+                          <h4 className="text-base font-bold text-slate-900">{selectedComplaint.subject}</h4>
+                          <p className="text-xs text-slate-500">
+                            Against: {selectedComplaint.business?.legalName || selectedComplaint.business?.name} · By: {selectedComplaint.complainantName}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedComplaint(null)}
+                          className="text-xs text-slate-400 hover:text-slate-700 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        {selectedComplaint.description}
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Update Status</label>
+                          <select
+                            value={complaintStatusInput}
+                            onChange={(e) => setComplaintStatusInput(e.target.value as ComplaintStatus)}
+                            className="w-full h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-800"
+                          >
+                            <option value="OPEN">OPEN</option>
+                            <option value="UNDER_INVESTIGATION">UNDER INVESTIGATION</option>
+                            <option value="RESOLVED">RESOLVED</option>
+                            <option value="DISMISSED">DISMISSED</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Auditor / Resolution Notes</label>
+                          <textarea
+                            rows={3}
+                            value={complaintAdminNotes}
+                            onChange={(e) => setComplaintAdminNotes(e.target.value)}
+                            placeholder="Document investigation findings or resolution remarks..."
+                            className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedComplaint(null)} disabled={isUpdatingComplaint}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={isUpdatingComplaint}
+                          onClick={async () => {
+                            setIsUpdatingComplaint(true);
+                            try {
+                              const res = await updateAdminComplaint(selectedComplaint.id, {
+                                status: complaintStatusInput,
+                                adminNotes: complaintAdminNotes,
+                              });
+                              setComplaints((prev) =>
+                                prev.map((c) => (c.id === selectedComplaint.id && res.complaint ? { ...c, ...res.complaint } : c))
+                              );
+                              setSelectedComplaint(null);
+                              loadData(false);
+                            } finally {
+                              setIsUpdatingComplaint(false);
+                            }
+                          }}
+                        >
+                          {isUpdatingComplaint ? 'Saving...' : 'Save Decision'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

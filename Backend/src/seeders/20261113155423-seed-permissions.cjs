@@ -61,6 +61,14 @@ module.exports = {
       { code: 'enquiries.view', module: 'Buyer Enquiries', action: 'view', name: 'View Centralized Buyer Enquiries', description: 'Access RFQ leads and buyer communications across platform' },
       { code: 'enquiries.respond', module: 'Buyer Enquiries', action: 'edit', name: 'Respond to Buyer Enquiries', description: 'Transmit official corporate proposal or response to buyers' },
       { code: 'enquiries.status', module: 'Buyer Enquiries', action: 'approve', name: 'Update Enquiry Status', description: 'Transition lifecycle status of buyer inquiries' },
+
+      // 11. Compliance & Buyer Complaints
+      { code: 'complaints.view', module: 'Complaints', action: 'view', name: 'View Compliance & Buyer Complaints', description: 'View compliance and buyer complaints filed against vendor entities' },
+      { code: 'complaints.create', module: 'Complaints', action: 'create', name: 'File Compliance Complaint', description: 'Submit a compliance, quality, or delivery complaint against a supplier' },
+      { code: 'complaints.edit', module: 'Complaints', action: 'edit', name: 'Investigate & Resolve Complaints', description: 'Update complaint investigation status, resolution notes, and recalculate trust score' },
+
+      // 12. Audit Logs
+      { code: 'audit_logs.view', module: 'Audit Logs', action: 'view', name: 'View System Audit Logs', description: 'Inspect immutable admin & compliance action logs across the platform' },
     ];
 
     const ROLE_PERMISSIONS_MAP = {
@@ -72,6 +80,8 @@ module.exports = {
         'documents.view', 'documents.create', 'documents.edit', 'documents.approve',
         'products.view', 'products.create', 'products.edit', 'products.delete',
         'enquiries.view', 'enquiries.respond', 'enquiries.status',
+        'complaints.view', 'complaints.create', 'complaints.edit',
+        'audit_logs.view',
         'scoring.view', 'scoring.edit', 'scoring.approve',
         'reports.view', 'reports.export',
         'settings.view', 'settings.edit'
@@ -81,6 +91,8 @@ module.exports = {
         'vendors.view',
         'verification.view', 'verification.edit', 'verification.approve',
         'documents.view', 'documents.edit', 'documents.approve',
+        'complaints.view', 'complaints.edit',
+        'audit_logs.view',
         'scoring.view', 'scoring.approve',
         'reports.view'
       ],
@@ -89,11 +101,15 @@ module.exports = {
         'vendors.view',
         'verification.view', 'verification.edit',
         'documents.view', 'documents.edit',
+        'complaints.view', 'complaints.edit',
+        'audit_logs.view',
         'scoring.view'
       ],
       support_team: [
         'dashboard.view',
         'vendors.view',
+        'complaints.view', 'complaints.create',
+        'audit_logs.view',
         'reports.view'
       ],
       // Vendor role possesses self-service permissions. All routes additionally enforce ownerUserId isolation.
@@ -105,7 +121,8 @@ module.exports = {
         'products.view',
         'products.create',
         'products.edit',
-        'products.delete'
+        'products.delete',
+        'complaints.create'
       ]
     };
 
@@ -190,7 +207,9 @@ module.exports = {
       'reports.view', 'reports.export',
       'settings.view', 'settings.edit',
       'products.view', 'products.create', 'products.edit', 'products.delete',
-      'enquiries.view', 'enquiries.respond', 'enquiries.status'
+      'enquiries.view', 'enquiries.respond', 'enquiries.status',
+      'complaints.view', 'complaints.create', 'complaints.edit',
+      'audit_logs.view'
     ];
 
     // Delete mappings for these permissions

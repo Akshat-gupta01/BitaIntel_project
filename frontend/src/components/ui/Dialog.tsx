@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,8 +26,6 @@ export function Dialog({
   bodyClassName,
   size = 'md',
 }: DialogProps) {
-  const [mounted, setMounted] = useState(true);
-
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +41,7 @@ export function Dialog({
     };
   }, [open, onClose]);
 
-  if (!open || !mounted) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const sizeClasses = {
     sm: 'max-w-md',

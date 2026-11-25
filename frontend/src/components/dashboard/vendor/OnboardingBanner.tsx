@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useAuth, UserRole } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { FullVendorRegistrationDossier } from '@/types/vendorRegistration';
 import {
   isStep1Done,
@@ -14,18 +14,13 @@ import {
 } from '@/config/initialVendorDossier';
 import { Button } from '@/components/ui/Button';
 import {
-  ShieldAlert,
   CheckCircle2,
-  Clock,
-  ArrowRight,
   Sparkles,
   Building2,
   Layers,
   Package,
   DollarSign,
   FileCheck2,
-  AlertCircle,
-  Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -40,10 +35,10 @@ interface OnboardingBannerProps {
 export function OnboardingBanner({
   dossier,
   onOpenWizard,
-  onSimulateApprove,
-  onSimulatePremium,
+  // onSimulateApprove (unused simulation prop - kept for interface compatibility)
+  // onSimulatePremium (unused simulation prop)
 }: OnboardingBannerProps) {
-  const { user, role, setRole, updateRegistrationProgress } = useAuth();
+  const { user, role, updateRegistrationProgress } = useAuth();
 
   // If not unverified, the status is managed exclusively by VendorStatusBanner to eliminate duplicate banners
   if (role !== 'unverified') {
@@ -175,7 +170,6 @@ export function OnboardingBanner({
         {/* 6 Step Cards */}
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {stepsChecklist.map((step) => {
-            const Icon = step.icon;
             return (
               <button
                 key={step.num}

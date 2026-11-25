@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 import { useAuth } from '@/context/AuthContext';
@@ -190,6 +190,15 @@ interface BackendBusinessPayload {
   website?: string;
   employees?: string;
   turnover?: string;
+  scoreBreakdown?: {
+    key: string;
+    factor: string;
+    weight: string;
+    maxPoints: number;
+    score: number;
+    dimensionScore: number;
+    desc: string;
+  }[];
   statutory?: {
     gstin?: string;
     pan?: string;
@@ -382,19 +391,34 @@ const SRS_MODULES = [
 
 // SRS Section 5.4 Document Management (Required verification categories)
 export const DOCUMENT_CATEGORIES_SRS = [
-  { id: 'cat_gst', name: 'GST Certificate (Tax & GSTN)', module: 'Module F', required: true },
-  { id: 'cat_inc', name: 'Certificate of Incorporation / MCA Filing', module: 'Module A', required: true },
-  { id: 'cat_llp', name: 'Partnership Deed / LLP Agreement / MOA & AOA', module: 'Module A/B', required: true },
-  { id: 'cat_addr', name: 'Registered Address Proof (Premises Title / Electricity Deed)', module: 'Module C', required: true },
-  { id: 'cat_bank', name: 'Bank Confirmation Letter / Solvency Certificate', module: 'Module E', required: true },
-  { id: 'cat_mfg', name: 'Manufacturing / Regulatory Licenses (Factory License / SPCB CTO)', module: 'Module C/F', required: true },
-  { id: 'cat_iso', name: 'ISO & Quality Product Certifications (ISO 9001/27001)', module: 'Module C', required: false },
-  { id: 'cat_iec', name: 'Export-Import Code (IEC) & Customs Documentation', module: 'Module D', required: false },
+  { id: 'cat_gst', categoryKey: 'tax_registration_gst', name: 'GST Certificate (Tax & GSTN)', module: 'Module F', required: true },
+  { id: 'cat_inc', categoryKey: 'incorporation_cert', name: 'Certificate of Incorporation / MCA Filing', module: 'Module A', required: true },
+  { id: 'cat_llp', categoryKey: 'statutory_doc', name: 'Partnership Deed / LLP Agreement / MOA & AOA', module: 'Module A/B', required: true },
+  { id: 'cat_addr', categoryKey: 'address_proof', name: 'Registered Address Proof (Premises Title / Electricity Deed)', module: 'Module C', required: true },
+  { id: 'cat_bank', categoryKey: 'bank_solvency_letter', name: 'Bank Confirmation Letter / Solvency Certificate', module: 'Module E', required: true },
+  { id: 'cat_mfg', categoryKey: 'manufacturing_licence', name: 'Manufacturing / Regulatory Licenses (Factory License / SPCB CTO)', module: 'Module C/F', required: true },
+  { id: 'cat_iso', categoryKey: 'iso_quality_cert', name: 'ISO & Quality Product Certifications (ISO 9001/27001)', module: 'Module C', required: false },
+  { id: 'cat_iec', categoryKey: 'statutory_evidence', name: 'Export-Import Code (IEC) & Customs Documentation', module: 'Module D', required: false },
 ];
+
+interface VaultDocumentItem {
+  id: string;
+  name: string;
+  category: string;
+  uploadDate: string;
+  expiryDate: string;
+  status: string;
+  version: string;
+  verifier: string;
+  verificationDate: string;
+  rejectionReason: string | null;
+  size: string;
+  fileUrl?: string | null;
+}
 
 // Document Vault items per SRS Section 5.4
 // Tracked metadata: type, upload date, expiry date, status, verifier, verification date, rejection reason, version history
-const INITIAL_DOCUMENTS = [
+const INITIAL_DOCUMENTS: VaultDocumentItem[] = [
   {
     id: 'DOC-101',
     name: 'Certificate_of_Incorporation_MCA.pdf',
@@ -488,33 +512,16 @@ const INITIAL_DOCUMENTS = [
   },
 ];
 
-// In-app notifications per SRS Section 5.11
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: 'notif_1',
-    title: 'Verification Status Audited',
-    desc: 'Your statutory profile and catalog credentials have been verified by the Central Audit Team.',
-    date: 'Yesterday, 4:30 PM',
-    read: false,
-    type: 'verification',
-  },
-  {
-    id: 'notif_2',
-    title: 'Score Recalculation Complete',
-    desc: 'Your BITAINTEL Trust Score has been updated to 89/100 (Strong Tier).',
-    date: '20 Oct 2026',
-    read: true,
-    type: 'score',
-  },
-  {
-    id: 'notif_3',
-    title: 'Document Approved: ISO 9001:2015',
-    desc: 'Verification analyst approved Quality Certificate (Valid through Sep 2028).',
-    date: '15 Oct 2026',
-    read: true,
-    type: 'document',
-  },
-];
+interface NotificationUIItem {
+  id: string;
+  backendId?: number;
+  title: string;
+  desc: string;
+  date: string;
+  read: boolean;
+  type: string;
+  actionTab?: string | null;
+}
 
 export default function VendorDashboardPage() {
   const { user, role, setRole, logout } = useAuth();
@@ -544,37 +551,48 @@ export default function VendorDashboardPage() {
   });
   const [backendScore, setBackendScore] = useState<number | null>(null);
   const [backendBadge, setBackendBadge] = useState<string | null>(null);
-  const [businessSlug, setBusinessSlug] = useState<string>('meridian-steel-works');
+  const [scoreBreakdown, setScoreBreakdown] = useState<
+    { key: string; factor: string; weight: string; maxPoints: number; score: number; dimensionScore: number; desc: string }[]
+  >([]);
+  const [businessSlug, setBusinessSlug] = useState<string>('');
+  const effectiveBusinessSlug = businessSlug || user?.businessSlug || 'meridian-steel-works';
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
   const [onboardingInitialStep, setOnboardingInitialStep] = useState(2);
 
   // Mobile sidebar toggle
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   // Document Vault State
-  const [documents, setDocuments] = useState(INITIAL_DOCUMENTS);
+  const [documents, setDocuments] = useState<VaultDocumentItem[]>(INITIAL_DOCUMENTS);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedUploadCategory, setSelectedUploadCategory] = useState(DOCUMENT_CATEGORIES_SRS[0].name);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [uploadingVaultDoc, setUploadingVaultDoc] = useState(false);
+  const vaultFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Notifications State
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  // Notifications State (live from DB)
+  const [notifications, setNotifications] = useState<NotificationUIItem[]>([]);
 
   // Keep Step 1 & Step 2 synchronized with authenticated user whenever user context updates
   useEffect(() => {
     if (!user) return;
+    const isDemoPersona = user.id?.startsWith('usr_');
     const timer = setTimeout(() => {
       setDossier((prev) => ({
         ...prev,
-        step1: {
-          ...prev.step1,
-          authorizedName: user.name || prev.step1.authorizedName || '',
-          designation: user.designation || prev.step1.designation || 'Authorized Signatory',
-          email: user.email || prev.step1.email || '',
-          mobile: user.mobile || prev.step1.mobile || '',
-          emailVerified: true,
-          mobileVerified: true,
-        },
+        step1: isDemoPersona && prev.step1.email
+          ? prev.step1
+          : {
+              ...prev.step1,
+              authorizedName: user.name || prev.step1.authorizedName || '',
+              designation: user.designation || prev.step1.designation || 'Authorized Signatory',
+              email: user.email || prev.step1.email || '',
+              mobile: user.mobile || prev.step1.mobile || '',
+              emailVerified: true,
+              mobileVerified: true,
+            },
         step2: {
           ...prev.step2,
           legalName: prev.step2.legalName || user.businessName || '',
@@ -602,6 +620,33 @@ export default function VendorDashboardPage() {
       }
     }
 
+    // Live sync notifications from Backend MySQL
+    vendorService
+      .getVendorNotifications()
+      .then((nRes) => {
+        setNotifications(
+          (nRes.notifications || []).map((n) => ({
+            id: `notif_${n.id}`,
+            backendId: n.id,
+            title: n.title,
+            desc: n.message,
+            date: n.createdAt
+              ? new Date(n.createdAt).toLocaleString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : 'Recent',
+            read: Boolean(n.isRead),
+            type: n.type.toLowerCase(),
+            actionTab: n.actionTab,
+          }))
+        );
+      })
+      .catch(() => {});
+
     // Live sync with Backend MySQL BusinessEntity record
     vendorService
       .getVendorProfile()
@@ -610,6 +655,9 @@ export default function VendorDashboardPage() {
         if (b) {
           if (b.slug) {
             setBusinessSlug(b.slug);
+          }
+          if (Array.isArray(b.scoreBreakdown)) {
+            setScoreBreakdown(b.scoreBreakdown);
           }
           setDossier((prev) => {
             const updatedStep3 = b.capabilities
@@ -959,6 +1007,7 @@ export default function VendorDashboardPage() {
                 size: d.fileSizeBytes
                   ? `${(d.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
                   : '1.5 MB',
+                fileUrl: d.fileUrl || null,
               }))
             );
           }
@@ -966,6 +1015,9 @@ export default function VendorDashboardPage() {
       })
       .catch(() => {
         // Fallback gracefully if not logged in or offline
+      })
+      .finally(() => {
+        setProfileLoading(false);
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1010,6 +1062,38 @@ export default function VendorDashboardPage() {
 
   return (
     <RoleGuard allowedRoles={['unverified', 'pending_approval', 'approved_business', 'premium_subscriber', 'vendor', 'business', 'business_owner']}>
+      {profileLoading ? (
+        <div className="h-screen w-full bg-slate-50 flex flex-col md:flex-row overflow-hidden">
+          <aside className="hidden md:flex w-72 h-full bg-white border-r border-slate-200/80 flex-col p-5 gap-4 shrink-0">
+            <div className="h-8 w-32 rounded-lg bg-slate-200 animate-pulse" />
+            <div className="h-20 rounded-2xl bg-slate-100 animate-pulse" />
+            <div className="space-y-2 pt-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-xl bg-slate-100 animate-pulse" />
+              ))}
+            </div>
+          </aside>
+          <main className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="h-6 w-52 rounded-lg bg-slate-200 animate-pulse" />
+                <div className="h-3.5 w-72 rounded bg-slate-100 animate-pulse" />
+              </div>
+              <div className="h-9 w-36 rounded-full bg-slate-200 animate-pulse" />
+            </div>
+            <div className="h-28 rounded-3xl bg-white border border-slate-200/80 animate-pulse" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-28 rounded-2xl bg-white border border-slate-200/80 animate-pulse" />
+              ))}
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="h-64 rounded-3xl bg-white border border-slate-200/80 animate-pulse" />
+              <div className="h-64 rounded-3xl bg-white border border-slate-200/80 animate-pulse" />
+            </div>
+          </main>
+        </div>
+      ) : (
       <div className="h-screen w-full bg-slate-50 flex flex-col md:flex-row overflow-hidden">
         {/* ========================================================================= */}
         {/* 1. LEFT SIDEBAR NAVIGATION (Independent Scroll Plane)                     */}
@@ -1149,7 +1233,9 @@ export default function VendorDashboardPage() {
           {/* Bottom Profile & Actions */}
           <div className="p-4 border-t border-slate-200/80 space-y-2 bg-white">
             <Link
-              href={`/demo/business/${businessSlug}`}
+              href={`/demo/business/${effectiveBusinessSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/70 text-xs font-semibold transition-colors"
             >
               <span className="flex items-center gap-2">
@@ -1501,22 +1587,41 @@ export default function VendorDashboardPage() {
                     </div>
 
                     <div className="space-y-3 pt-1">
-                      {SRS_MODULES.slice(0, 4).map((mod) => (
-                        <div key={mod.code} className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-1.5">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-slate-900">{mod.code}: {mod.title}</span>
-                            <span className="font-mono font-bold text-primary-700">{mod.scoreContribution}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary-600 rounded-full" style={{ width: `${mod.completion}%` }} />
+                      {(scoreBreakdown.length > 0
+                        ? scoreBreakdown
+                        : SRS_MODULES.map((mod) => {
+                            const [ach, max] = mod.scoreContribution.split('/').map((v) => parseFloat(v));
+                            return {
+                              key: mod.code,
+                              factor: `${mod.code}: ${mod.title}`,
+                              weight: `${max}%`,
+                              maxPoints: max || 20,
+                              score: ach || 0,
+                              dimensionScore: mod.completion,
+                              desc: mod.desc,
+                            };
+                          })
+                      ).map((item) => {
+                        const pct = item.maxPoints > 0 ? Math.min(100, Math.round((item.score / item.maxPoints) * 100)) : 0;
+                        return (
+                          <div key={item.key} className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-900">{item.factor}</span>
+                              <span className="font-mono font-bold text-primary-700">
+                                {item.score.toFixed(1)} / {item.weight}
+                              </span>
                             </div>
-                            <span className="text-[11px] font-semibold text-slate-500 w-12 text-right">
-                              {mod.completion}%
-                            </span>
+                            <div className="flex items-center gap-3">
+                              <div className="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                                <div className="h-full bg-primary-600 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[11px] font-semibold text-slate-500 w-12 text-right">
+                                {pct}%
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </Card>
 
@@ -1531,39 +1636,70 @@ export default function VendorDashboardPage() {
                     </p>
 
                     <div className="space-y-3">
-                      <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 space-y-1">
-                        <p className="text-xs font-bold text-amber-900">+4.0 Points (Module C)</p>
-                        <p className="text-[11px] text-amber-800 leading-relaxed">
-                          Upload latest factory premises utility deed & EPFO monthly headcount return slip.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedUploadCategory('Registered Address Proof (Premises Title / Electricity Deed)');
-                            setUploadModalOpen(true);
-                          }}
-                          className="text-[11px] font-bold text-amber-900 underline mt-1 block"
-                        >
-                          Upload Proof to Module C →
-                        </button>
-                      </div>
+                      {trustScore >= 100 ? (
+                        <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-1.5">
+                          <p className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                            <CheckCircle2 className="size-4 text-emerald-600" />
+                            <span>Maximum Platinum Score Achieved (100 / 100)</span>
+                          </p>
+                          <p className="text-[11px] text-emerald-800 leading-relaxed">
+                            All 7 weighted trust dimensions are at 100%. Your business dossier ranks in the top verified tier for enterprise procurement buyers.
+                          </p>
+                        </div>
+                      ) : scoreBreakdown.some((item) => item.score < item.maxPoints) ? (
+                        scoreBreakdown
+                          .filter((item) => item.score < item.maxPoints)
+                          .slice(0, 3)
+                          .map((item) => {
+                            const missingPts = (item.maxPoints - item.score).toFixed(1);
+                            return (
+                              <div key={item.key} className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 space-y-1">
+                                <p className="text-xs font-bold text-amber-900">
+                                  +{missingPts} Points ({item.factor})
+                                </p>
+                                <p className="text-[11px] text-amber-800 leading-relaxed">
+                                  Complete {item.desc.toLowerCase()} to unlock full {item.weight} weight.
+                                </p>
+                              </div>
+                            );
+                          })
+                      ) : (
+                        <>
+                          <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 space-y-1">
+                            <p className="text-xs font-bold text-amber-900">+4.0 Points (Module C)</p>
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
+                              Upload latest factory premises utility deed &amp; EPFO monthly headcount return slip.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedUploadCategory('Registered Address Proof (Premises Title / Electricity Deed)');
+                                setUploadModalOpen(true);
+                              }}
+                              className="text-[11px] font-bold text-amber-900 underline mt-1 block"
+                            >
+                              Upload Proof to Module C →
+                            </button>
+                          </div>
 
-                      <div className="p-3.5 rounded-xl border border-primary-200 bg-primary-50/70 space-y-1">
-                        <p className="text-xs font-bold text-primary-900">+3.0 Points (Module E)</p>
-                        <p className="text-[11px] text-primary-800 leading-relaxed">
-                          Provide Bank Solvency Certificate or CA Net Worth statement with valid UDIN.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedUploadCategory('Bank Confirmation Letter / Solvency Certificate');
-                            setUploadModalOpen(true);
-                          }}
-                          className="text-[11px] font-bold text-primary-900 underline mt-1 block"
-                        >
-                          Upload Proof to Module E →
-                        </button>
-                      </div>
+                          <div className="p-3.5 rounded-xl border border-primary-200 bg-primary-50/70 space-y-1">
+                            <p className="text-xs font-bold text-primary-900">+3.0 Points (Module E)</p>
+                            <p className="text-[11px] text-primary-800 leading-relaxed">
+                              Provide Bank Solvency Certificate or CA Net Worth statement with valid UDIN.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedUploadCategory('Bank Confirmation Letter / Solvency Certificate');
+                                setUploadModalOpen(true);
+                              }}
+                              className="text-[11px] font-bold text-primary-900 underline mt-1 block"
+                            >
+                              Upload Proof to Module E →
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </Card>
                 </div>
@@ -1611,23 +1747,26 @@ export default function VendorDashboardPage() {
                       Weighted Scoring Distribution
                     </h3>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {[
-                        { factor: 'Corporate Identity', weight: '20%', score: '20.0', desc: 'MCA CIN, Director DIN, PAN' },
-                        { factor: 'Government Verification', weight: '20%', score: '18.5', desc: 'GSTN 24M returns, MSME Udyam' },
-                        { factor: 'Business Operations', weight: '15%', score: '12.0', desc: 'Premises utility deed, EPFO/ESIC' },
-                        { factor: 'Documents & Certs', weight: '15%', score: '13.5', desc: 'ISO 9001, Quality accreditations' },
-                        { factor: 'Financial Standing', weight: '15%', score: '11.0', desc: 'Audited statements, Bank solvency' },
-                        { factor: 'Statutory Compliance', weight: '10%', score: '9.0', desc: 'Non-debarment, Clean litigation' },
-                        { factor: 'Profile Completeness', weight: '5%', score: '5.0', desc: 'All modules populated & verified' },
-                      ].map((item, i) => (
-                        <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                      {(scoreBreakdown.length > 0
+                        ? scoreBreakdown
+                        : [
+                            { key: 'identity', factor: 'Corporate Identity', weight: '20%', maxPoints: 20, score: 0, dimensionScore: 0, desc: 'MCA CIN, PAN & Statutory Docs' },
+                            { key: 'tax', factor: 'Government Verification', weight: '20%', maxPoints: 20, score: 0, dimensionScore: 0, desc: 'GSTN Active Status & MSME Udyam / IEC' },
+                            { key: 'tenure', factor: 'Business Operations & Tenure', weight: '15%', maxPoints: 15, score: 0, dimensionScore: 0, desc: 'Incorporation tenure & operational history' },
+                            { key: 'certifications', factor: 'Documents & Certs', weight: '15%', maxPoints: 15, score: 0, dimensionScore: 0, desc: 'ISO 9001 & Quality accreditations' },
+                            { key: 'financial', factor: 'Financial Standing', weight: '15%', maxPoints: 15, score: 0, dimensionScore: 0, desc: 'Bank proof & annual turnover bracket' },
+                            { key: 'governance', factor: 'Statutory Compliance', weight: '10%', maxPoints: 10, score: 0, dimensionScore: 0, desc: 'Authorized signatory KYC & address proof' },
+                            { key: 'profile', factor: 'Profile Completeness', weight: '5%', maxPoints: 5, score: 0, dimensionScore: 0, desc: 'All core profile modules populated' },
+                          ]
+                      ).map((item) => (
+                        <div key={item.key} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-slate-900">{item.factor}</span>
-                            <span className="font-mono font-bold text-primary-700">{item.score} / {item.weight}</span>
+                            <span className="font-mono font-bold text-primary-700">{item.score.toFixed(1)} / {item.weight}</span>
                           </div>
                           <p className="text-[11px] text-slate-500">{item.desc}</p>
                           <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                            <div className="h-full bg-primary-600 rounded-full" style={{ width: `${(parseFloat(item.score) / parseFloat(item.weight)) * 100}%` }} />
+                            <div className="h-full bg-primary-600 rounded-full" style={{ width: `${Math.min(100, (item.score / item.maxPoints) * 100)}%` }} />
                           </div>
                         </div>
                       ))}
@@ -1771,7 +1910,34 @@ export default function VendorDashboardPage() {
                           <td className="p-3.5 text-right space-x-2">
                             <button
                               type="button"
-                              onClick={() => toast.success(`Downloading verified copy: ${doc.name}`)}
+                              onClick={() => {
+                                if (!doc.fileUrl) {
+                                  toast.info('No file attached yet', {
+                                    description: 'Upload a document file in the vault to download it.',
+                                  });
+                                  return;
+                                }
+                                let resolvedUrl = doc.fileUrl;
+                                if (!/^https?:\/\//i.test(resolvedUrl)) {
+                                  const apiBase =
+                                    typeof window !== 'undefined' &&
+                                    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+                                    (process.env.NEXT_PUBLIC_API_URL || '').includes('192.168.')
+                                      ? 'http://localhost:3000/api/v1'
+                                      : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+                                  const origin = apiBase.replace(/\/api\/v1\/?$/, '');
+                                  resolvedUrl = `${origin}${resolvedUrl.startsWith('/') ? '' : '/'}${resolvedUrl}`;
+                                }
+                                const a = document.createElement('a');
+                                a.href = resolvedUrl;
+                                a.target = '_blank';
+                                a.rel = 'noopener noreferrer';
+                                a.download = doc.name;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                toast.success(`Downloading: ${doc.name}`);
+                              }}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                               title="Download document"
                             >
@@ -1802,7 +1968,10 @@ export default function VendorDashboardPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                    onClick={() => {
+                      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                      vendorService.markAllNotificationsRead().catch(() => {});
+                    }}
                     className="text-xs font-bold text-primary-700 hover:underline"
                   >
                     Mark All as Read
@@ -1810,23 +1979,44 @@ export default function VendorDashboardPage() {
                 </div>
 
                 <div className="space-y-2.5">
-                  {notifications.map((notif) => (
-                    <Card key={notif.id} variant="bento" className="p-4 bg-white flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <div className="size-8 rounded-full bg-primary-50 text-primary-700 grid place-items-center shrink-0 mt-0.5">
-                          <Bell className="size-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900">{notif.title}</p>
-                          <p className="text-xs text-slate-600 mt-0.5">{notif.desc}</p>
-                          <span className="text-[10px] text-slate-400 font-mono mt-1 block">{notif.date}</span>
-                        </div>
-                      </div>
-                      {!notif.read && (
-                        <span className="size-2 rounded-full bg-primary-600 shrink-0" />
-                      )}
+                  {notifications.length === 0 ? (
+                    <Card variant="bento" className="p-8 bg-white text-center text-xs text-slate-500">
+                      No notifications yet. Verification updates and document review alerts will appear here.
                     </Card>
-                  ))}
+                  ) : (
+                    notifications.map((notif) => (
+                      <Card
+                        key={notif.id}
+                        variant="bento"
+                        onClick={() => {
+                          if (!notif.read && notif.backendId) {
+                            setNotifications((prev) =>
+                              prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+                            );
+                            vendorService.markNotificationRead(notif.backendId).catch(() => {});
+                          }
+                          if (notif.actionTab === 'overview' || notif.actionTab === 'profile' || notif.actionTab === 'documents' || notif.actionTab === 'score') {
+                            setActiveTab(notif.actionTab);
+                          }
+                        }}
+                        className="p-4 bg-white flex items-start justify-between gap-3 cursor-pointer hover:border-primary-200 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="size-8 rounded-full bg-primary-50 text-primary-700 grid place-items-center shrink-0 mt-0.5">
+                            <Bell className="size-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">{notif.title}</p>
+                            <p className="text-xs text-slate-600 mt-0.5">{notif.desc}</p>
+                            <span className="text-[10px] text-slate-400 font-mono mt-1 block">{notif.date}</span>
+                          </div>
+                        </div>
+                        {!notif.read && (
+                          <span className="size-2 rounded-full bg-primary-600 shrink-0" />
+                        )}
+                      </Card>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -1942,6 +2132,7 @@ export default function VendorDashboardPage() {
                 dossier={dossier}
                 user={user}
                 role={role}
+                businessSlug={effectiveBusinessSlug}
                 onUpdateDossier={(updated) => {
                   setDossier(updated);
                 }}
@@ -1990,43 +2181,150 @@ export default function VendorDashboardPage() {
                 />
               </div>
 
-              <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center space-y-2 bg-slate-50/70 hover:bg-slate-50 transition-colors cursor-pointer">
+              <input
+                ref={vaultFileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 15 * 1024 * 1024) {
+                    toast.error('File too large', { description: 'Maximum allowed file size is 15MB.' });
+                    return;
+                  }
+                  setSelectedUploadFile(file);
+                }}
+              />
+
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => vaultFileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    vaultFileInputRef.current?.click();
+                  }
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (!file) return;
+                  if (file.size > 15 * 1024 * 1024) {
+                    toast.error('File too large', { description: 'Maximum allowed file size is 15MB.' });
+                    return;
+                  }
+                  setSelectedUploadFile(file);
+                }}
+                className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center space-y-2 bg-slate-50/70 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
                 <UploadCloud className="size-10 text-primary-600 mx-auto" />
-                <p className="text-xs font-bold text-slate-700">Drag & drop your PDF or click to browse</p>
-                <p className="text-[11px] text-slate-400">Accepted formats: PDF, JPG, PNG (Max 15MB) · Encrypted at Rest (AES-256)</p>
+                {selectedUploadFile ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-primary-700 break-all">{selectedUploadFile.name}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {(selectedUploadFile.size / (1024 * 1024)).toFixed(2)} MB · Click to change file
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs font-bold text-slate-700">Drag &amp; drop your PDF or click to browse</p>
+                    <p className="text-[11px] text-slate-400">Accepted formats: PDF, JPG, PNG (Max 15MB) · Encrypted at Rest (AES-256)</p>
+                  </>
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-                <Button variant="secondary" onClick={() => setUploadModalOpen(false)}>
+                <Button
+                  variant="secondary"
+                  disabled={uploadingVaultDoc}
+                  onClick={() => {
+                    setSelectedUploadFile(null);
+                    setUploadModalOpen(false);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
-                  onClick={() => {
-                    const matchedCat = DOCUMENT_CATEGORIES_SRS.find(c => c.name === selectedUploadCategory);
-                    const cleanName = selectedUploadCategory.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 24);
-                    const newDoc = {
-                      id: `DOC-${Math.floor(100 + Math.random() * 900)}`,
-                      name: `${cleanName}_Proof_2026.pdf`,
-                      category: matchedCat?.name || selectedUploadCategory,
-                      uploadDate: 'Just now',
-                      expiryDate: 'Continuous Active',
-                      status: 'In Review',
-                      version: 'v1.0',
-                      verifier: 'Pending Analyst Review',
-                      verificationDate: '—',
-                      rejectionReason: null,
-                      size: '2.8 MB',
-                    };
-                    setDocuments((prev) => [newDoc, ...prev]);
-                    setUploadModalOpen(false);
-                    toast.success(`Document deposited: "${selectedUploadCategory}"`, {
-                      description: 'Encrypted into the statutory vault. Status marked as "In Review".',
-                    });
+                  disabled={uploadingVaultDoc}
+                  onClick={async () => {
+                    if (!selectedUploadFile) {
+                      toast.error('File Required', {
+                        description: 'Please select a PDF, JPG, or PNG file to upload.',
+                      });
+                      return;
+                    }
+                    const matchedCat =
+                      DOCUMENT_CATEGORIES_SRS.find((c) => c.name === selectedUploadCategory) ||
+                      DOCUMENT_CATEGORIES_SRS[0];
+
+                    setUploadingVaultDoc(true);
+                    try {
+                      const res = await vendorService.uploadStatutoryDocument(
+                        selectedUploadFile,
+                        matchedCat.categoryKey,
+                        matchedCat.name
+                      );
+                      const uploadedDoc =
+                        (res?.data && typeof res.data === 'object' && 'document' in res.data
+                          ? (res.data as { document?: BackendDocRecord & { fullUrl?: string } }).document
+                          : undefined) ||
+                        (res as unknown as { document?: BackendDocRecord & { fullUrl?: string } })?.document;
+
+                      const newId = uploadedDoc?.id ? `DOC-${uploadedDoc.id}` : `DOC-${Date.now()}`;
+                      const rawFileUrl = uploadedDoc?.fileUrl || uploadedDoc?.fullUrl || res?.documentUrl;
+                      const newDoc: VaultDocumentItem = {
+                        id: newId,
+                        name: uploadedDoc?.fileName || selectedUploadFile.name,
+                        category: uploadedDoc?.categoryName || matchedCat.name,
+                        uploadDate: uploadedDoc?.createdAt
+                          ? new Date(uploadedDoc.createdAt).toISOString().split('T')[0]
+                          : new Date().toISOString().split('T')[0],
+                        expiryDate: uploadedDoc?.expiryDate || 'N/A (Perpetual)',
+                        status: uploadedDoc?.status === 'VERIFIED' ? 'Verified' : 'In Review',
+                        version: 'v1.0',
+                        verifier: uploadedDoc?.verifierName || 'Pending Analyst Review',
+                        verificationDate: 'Pending',
+                        rejectionReason: null,
+                        size: `${(selectedUploadFile.size / (1024 * 1024)).toFixed(2)} MB`,
+                        fileUrl: typeof rawFileUrl === 'string' ? rawFileUrl : null,
+                      };
+
+                      setDocuments((prev) => {
+                        const filtered = prev.filter(
+                          (item) => item.id !== newId && item.category !== newDoc.category
+                        );
+                        return [newDoc, ...filtered];
+                      });
+                      setSelectedUploadFile(null);
+                      if (vaultFileInputRef.current) {
+                        vaultFileInputRef.current.value = '';
+                      }
+                      setUploadModalOpen(false);
+                      toast.success(`Document deposited: "${matchedCat.name}"`, {
+                        description: 'Uploaded to the statutory vault and queued for analyst verification.',
+                      });
+                    } catch (err: unknown) {
+                      const errorMessage =
+                        err && typeof err === 'object' && 'response' in err
+                          ? (err as { response?: { data?: { error?: { message?: string }; message?: string } } }).response?.data?.error?.message ||
+                            (err as { response?: { data?: { message?: string } } }).response?.data?.message
+                          : err instanceof Error
+                            ? err.message
+                            : 'Failed to upload document.';
+                      toast.error('Upload Failed', {
+                        description: String(errorMessage),
+                      });
+                    } finally {
+                      setUploadingVaultDoc(false);
+                    }
                   }}
                   icon={<CheckCircle2 className="size-4" />}
                 >
-                  Deposit & Trigger Verification
+                  {uploadingVaultDoc ? 'Uploading...' : 'Deposit & Trigger Verification'}
                 </Button>
               </div>
             </Card>
@@ -2049,6 +2347,7 @@ export default function VendorDashboardPage() {
           onDossierChange={(updated) => setDossier(updated)}
         />
       </div>
+      )}
     </RoleGuard>
   );
 }

@@ -74,12 +74,13 @@ export function ForgotPasswordForm() {
         res.message ||
         `A 4-digit verification code has been dispatched to ${contactValue}.`;
       toast.success('Security Token Dispatched', { description: msg });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsLoading(false);
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string };
       const msg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
+        e.response?.data?.error?.message ||
+        e.response?.data?.message ||
+        e.message ||
         'No registered account found with this contact detail.';
       setErrorMsg(msg);
       toast.error('Dispatch Failed', { description: msg });
@@ -112,12 +113,13 @@ export function ForgotPasswordForm() {
       toast.success('Token Verified Successfully', {
         description: 'Identity confirmed. Please choose a strong new password.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsLoading(false);
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string };
       const msg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
+        e.response?.data?.error?.message ||
+        e.response?.data?.message ||
+        e.message ||
         'Invalid or expired verification code.';
       setErrorMsg(msg);
       toast.error('Verification Failed', { description: msg });
@@ -155,12 +157,13 @@ export function ForgotPasswordForm() {
           res.message ||
           'Your enterprise credentials have been updated securely.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsLoading(false);
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string };
       const msg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
+        e.response?.data?.error?.message ||
+        e.response?.data?.message ||
+        e.message ||
         'Failed to reset password. Please verify your OTP.';
       setErrorMsg(msg);
       toast.error('Password Reset Failed', { description: msg });

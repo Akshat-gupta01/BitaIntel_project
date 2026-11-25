@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -16,7 +17,6 @@ import {
   DollarSign,
   Globe2,
   Landmark,
-  ShieldCheck,
   Lock,
   PhoneCall,
   CheckCircle2,
@@ -45,6 +45,7 @@ export function CommercialTradeTab({ data, onUpdateCommercial }: CommercialTrade
   const bankProofInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormData(data);
   }, [data]);
 

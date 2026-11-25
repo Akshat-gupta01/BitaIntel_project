@@ -50,6 +50,7 @@ export function ProductThumbnail({
   // When primaryRaw changes, compute full image URL
   useEffect(() => {
     if (!primaryRaw) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentSrc('');
       setHasError(false);
       setIsLoading(false);
