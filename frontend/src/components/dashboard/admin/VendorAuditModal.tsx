@@ -1133,32 +1133,43 @@ export function VendorAuditModal({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. TAB NAVIGATION (Sleek Pills, Scrollbar Hidden as requested)            */}
+      {/* 3. TAB NAVIGATION (Wrap cleanly so all steps & Vault are always visible)  */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-1.5 px-4 sm:px-8 py-2.5 border-b border-slate-200 bg-white overflow-x-auto text-xs shrink-0 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 px-4 sm:px-8 py-3 border-b border-slate-200 bg-white text-xs shrink-0">
         {[
-          { id: 'overview', label: 'AI Scorecard & Anomaly Scanner', icon: Sparkles },
-          { id: 'step1', label: `Step 1: Signatory & Account (${step1Docs.length})`, icon: UserCheck },
-          { id: 'step2', label: `Step 2: Statutory & Facilities (${step2Docs.length})`, icon: Building2 },
-          { id: 'step3', label: `Step 3: Manufacturing (${step3Docs.length})`, icon: Factory },
-          { id: 'step4', label: `Step 4: Products & Quality (${step4Docs.length})`, icon: Package },
-          { id: 'step5', label: `Step 5: Banking & Commercial (${step5Docs.length})`, icon: CreditCard },
-          { id: 'documents', label: `Documents Vault (${allStepDocuments.length})`, icon: FileText },
+          { id: 'overview', label: 'AI Scorecard', count: null, title: 'AI Scorecard & Anomaly Scanner', icon: Sparkles },
+          { id: 'step1', label: '1. Signatory', count: step1Docs.length, title: 'Step 1: Signatory & Account', icon: UserCheck },
+          { id: 'step2', label: '2. Statutory', count: step2Docs.length, title: 'Step 2: Statutory & Facilities', icon: Building2 },
+          { id: 'step3', label: '3. Manufacturing', count: step3Docs.length, title: 'Step 3: Manufacturing', icon: Factory },
+          { id: 'step4', label: '4. Products & ISO', count: step4Docs.length, title: 'Step 4: Products & Quality', icon: Package },
+          { id: 'step5', label: '5. Banking', count: step5Docs.length, title: 'Step 5: Banking & Commercial', icon: CreditCard },
+          { id: 'documents', label: 'Document Vault', count: allStepDocuments.length, title: 'Complete Document Vault', icon: FileText },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              type="button"
+              title={tab.title}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`flex items-center gap-1.5 py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 py-2 px-3.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
                 isActive
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
               }`}
             >
-              <Icon className={`size-3.5 ${isActive ? 'text-primary-300' : 'text-slate-500'}`} />
+              <Icon className={`size-3.5 shrink-0 ${isActive ? 'text-primary-300' : 'text-slate-500'}`} />
               <span>{tab.label}</span>
+              {tab.count !== null && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-700 border border-slate-200/80'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
           );
         })}
