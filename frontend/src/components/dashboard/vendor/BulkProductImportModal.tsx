@@ -149,34 +149,43 @@ export function BulkProductImportModal({
     }
   }
 
-  function exportCurrentExcel() {
-    try {
-      const exportRows = currentProducts.map((p) => ({
-        'Product ID': p.id,
-        'Product Name': p.name,
-        'Type': p.type || 'Product',
-        'Brand': p.brand || '',
-        'Category ID': p.categoryId || 'CAT001',
-        'Subcategory ID': p.subcategoryId || '',
-        'HSN Code': p.hsnCode || '',
-        'Grade': p.grade || '',
-        'Standards': p.standards || '',
-        'MOQ': p.moq || '',
-        'Standard Order Qty': p.standardOrderQty || '',
-        'Lead Time': p.leadTimeDays || '',
-        'Indicative Price': p.indicativePrice || '',
-        'Currency': p.currency || 'INR',
-        'Price Validity': p.priceValidity || '60 Days',
-        'Monthly Capacity': p.monthlyCapacity || '',
-        'Available Stock': p.availableStock || '',
-        'Sample Availability': p.sampleAvailability || 'Available Free',
-        'Specifications': p.specifications || p.description || '',
-        'Country Of Origin': p.countryOfOrigin || 'India',
-        'Target Markets': p.targetMarkets || 'India, Global',
-        'Technical Data Sheet Doc': p.technicalDataSheetDoc || '',
-        'COA Doc': p.coaDoc || '',
-      }));
+  function buildCurrentCatalogExportRows() {
+    return currentProducts.map((p) => ({
+      'Product ID': p.id !== undefined && p.id !== null ? String(p.id) : '',
+      'Product Name': p.name,
+      'Type': p.type || 'Product',
+      'Brand': p.brand || '',
+      'Category ID': p.categoryId || 'CAT001',
+      'Subcategory ID': p.subcategoryId || '',
+      'HSN Code': p.hsnCode || '',
+      'Grade': p.grade || '',
+      'Standards': p.standards || '',
+      'MOQ': p.moq || '',
+      'Standard Order Qty': p.standardOrderQty || '',
+      'Lead Time': p.leadTimeDays || '',
+      'Indicative Price': p.indicativePrice || '',
+      'Currency': p.currency || 'INR',
+      'Price Validity': p.priceValidity || '60 Days',
+      'Monthly Capacity': p.monthlyCapacity || '',
+      'Available Stock': p.availableStock || '',
+      'Sample Availability': p.sampleAvailability || 'Available Free',
+      'Specifications': p.specifications || p.description || '',
+      'Country Of Origin': p.countryOfOrigin || 'India',
+      'Target Markets': p.targetMarkets || 'India, Global',
+      'Technical Data Sheet Doc': p.technicalDataSheetDoc || '',
+      'COA Doc': p.coaDoc || '',
+    }));
+  }
 
+  function exportCurrentExcel() {
+    if (currentProducts.length === 0) {
+      toast.info('No active products to export', {
+        description: 'Add a product first or download the Standard Blank Template.',
+      });
+      return;
+    }
+    try {
+      const exportRows = buildCurrentCatalogExportRows();
       const ws = XLSX.utils.json_to_sheet(exportRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Current_Catalog');
@@ -190,33 +199,14 @@ export function BulkProductImportModal({
   }
 
   function exportCurrentCSV() {
+    if (currentProducts.length === 0) {
+      toast.info('No active products to export', {
+        description: 'Add a product first or download the Standard Blank Template.',
+      });
+      return;
+    }
     try {
-      const exportRows = currentProducts.map((p) => ({
-        'Product ID': p.id,
-        'Product Name': p.name,
-        'Type': p.type || 'Product',
-        'Brand': p.brand || '',
-        'Category ID': p.categoryId || 'CAT001',
-        'Subcategory ID': p.subcategoryId || '',
-        'HSN Code': p.hsnCode || '',
-        'Grade': p.grade || '',
-        'Standards': p.standards || '',
-        'MOQ': p.moq || '',
-        'Standard Order Qty': p.standardOrderQty || '',
-        'Lead Time': p.leadTimeDays || '',
-        'Indicative Price': p.indicativePrice || '',
-        'Currency': p.currency || 'INR',
-        'Price Validity': p.priceValidity || '60 Days',
-        'Monthly Capacity': p.monthlyCapacity || '',
-        'Available Stock': p.availableStock || '',
-        'Sample Availability': p.sampleAvailability || 'Available Free',
-        'Specifications': p.specifications || p.description || '',
-        'Country Of Origin': p.countryOfOrigin || 'India',
-        'Target Markets': p.targetMarkets || 'India, Global',
-        'Technical Data Sheet Doc': p.technicalDataSheetDoc || '',
-        'COA Doc': p.coaDoc || '',
-      }));
-
+      const exportRows = buildCurrentCatalogExportRows();
       const ws = XLSX.utils.json_to_sheet(exportRows);
       const csvContent = XLSX.utils.sheet_to_csv(ws);
       downloadBlob(csvContent, buildCatalogExportFilename('csv'), 'text/csv;charset=utf-8;');
@@ -301,10 +291,13 @@ export function BulkProductImportModal({
           }
 
           // Check if product ID matches an existing product in the catalog
-          const existing = currentProducts.find((p) => p.id === productId);
+          const existing = productId
+            ? currentProducts.find((p) => String(p.id) === productId)
+            : undefined;
 
           const item: ProductCatalogItem = {
-            id: existing ? existing.id : productId ? productId : `PRD-${Date.now()}-${idx}`,
+            ...(existing ? existing : {}),
+            id: existing ? String(existing.id) : productId ? productId : `PRD-${Date.now()}-${idx}`,
             name: productName,
             type: (getField(row, 'Type', 'type') as 'Product' | 'Service') || (existing ? existing.type : 'Product'),
             brand: getField(row, 'Brand', 'brand') || (existing ? existing.brand : 'Proprietary'),
@@ -382,13 +375,14 @@ export function BulkProductImportModal({
     // Build map of updated items
     const updateMap = new Map<string, ProductCatalogItem>();
     updates.forEach((u) => {
-      updateMap.set(u.item.id, u.item);
+      updateMap.set(String(u.item.id), u.item);
     });
 
     // 1. Update existing products in place
     const updatedExistingList = currentProducts.map((p) => {
-      if (updateMap.has(p.id)) {
-        return updateMap.get(p.id)!;
+      const key = String(p.id);
+      if (updateMap.has(key)) {
+        return updateMap.get(key)!;
       }
       return p;
     });
@@ -515,12 +509,20 @@ export function BulkProductImportModal({
                 </p>
 
                 <div className="mt-5 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Need a starter template?</span>
+                  <span className="font-semibold text-slate-700">
+                    {currentProducts.length > 0
+                      ? `Download your catalog (${currentProducts.length} live ${currentProducts.length === 1 ? 'product' : 'products'}):`
+                      : 'Need a starter template?'}
+                  </span>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      downloadSampleExcel();
+                      if (currentProducts.length > 0) {
+                        exportCurrentExcel();
+                      } else {
+                        downloadSampleExcel();
+                      }
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 transition-colors shadow-2xs"
                   >
@@ -531,7 +533,11 @@ export function BulkProductImportModal({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      downloadSampleCSV();
+                      if (currentProducts.length > 0) {
+                        exportCurrentCSV();
+                      } else {
+                        downloadSampleCSV();
+                      }
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-slate-300 font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
                   >

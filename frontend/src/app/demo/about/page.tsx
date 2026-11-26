@@ -11,7 +11,7 @@ export const metadata = createPageMetadata({
   title: 'About BITAINTEL — Corporate Identity & Mission',
   description:
     'The BITAINTEL mission to bring verifiable transparency, statutory synthesis, and confidence to B2B commercial relationships.',
-  pathname: '/about',
+  pathname: '/demo/about',
   keywords: ['About BITAINTEL', 'B2B Trust Intelligence', 'Statutory Synthesis', 'Vendor Due Diligence Platform'],
 });
 
@@ -20,10 +20,10 @@ export default function AboutPage() {
     title: 'About BITAINTEL — Corporate Identity & Mission',
     description:
       'The BITAINTEL mission to bring verifiable transparency, statutory synthesis, and confidence to B2B commercial relationships.',
-    pathname: '/about',
+    pathname: '/demo/about',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'About', url: '/about' },
+      { name: 'Home', url: '/demo' },
+      { name: 'About', url: '/demo/about' },
     ],
   });
 

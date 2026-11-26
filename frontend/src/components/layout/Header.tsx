@@ -20,8 +20,6 @@ import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
-import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
-
 const navLinks = [
   { label: 'Home', href: '/demo' },
   { label: 'Directory', href: '/demo/directory' },
@@ -86,11 +84,6 @@ export function Header() {
             <span className="whitespace-nowrap">MCA, GSTN, ISO 9001, & MSME verified enterprise database</span>
           </div>
           <div className="flex items-center gap-4 text-xs font-medium">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Access Tier Demo:</span>
-              <PersonaSwitcher />
-            </div>
-            <span className="text-slate-300">|</span>
             <Link
               href="/demo/directory"
               className="text-primary-700 font-semibold hover:text-primary-900 transition-colors whitespace-nowrap"
@@ -144,11 +137,6 @@ export function Header() {
 
           {/* Action CTAs */}
           <div className="hidden items-center gap-3 md:flex">
-            {/* Persona Switcher visible on medium screens */}
-            <div className="lg:hidden">
-              <PersonaSwitcher />
-            </div>
-
             <Link
               href="/demo/directory"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1.5 transition-colors whitespace-nowrap"
@@ -294,11 +282,6 @@ export function Header() {
         {mobileOpen && (
           <div className="border-t border-slate-200/80 bg-white/95 backdrop-blur-2xl px-4 py-6 md:hidden animate-in slide-in-from-top-2 duration-200">
             <Container className="flex flex-col gap-2">
-              <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-600">Simulate Access Tier:</span>
-                <PersonaSwitcher />
-              </div>
-
               {isAuthenticated && user && (
                 <div className="p-4 rounded-2xl bg-primary-50/70 border border-primary-200 mb-2 space-y-2">
                   <div className="flex items-center gap-3">

@@ -263,7 +263,6 @@ export function VendorAuditModal({
 
     const compName = (vendor.legalName || vendor.name || 'Vendor').replace(/[^a-zA-Z0-9]/g, '_');
     const gstin = vendor.statutory?.gstin || '27AABCM8291Q1Z4';
-    const pan = vendor.statutory?.pan || 'AABCM8291Q';
     const signatoryName = (vendor.owner?.fullName || 'Vikramaditya_Shinde').replace(/[^a-zA-Z0-9]/g, '_');
     const bankName = (vendor.bankingDetails?.bankName || 'HDFC_Bank').replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -327,20 +326,6 @@ export function VendorAuditModal({
         sha256Checksum: '9f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
         step: 'step2',
         issueDate: '2018-07-01',
-      },
-      {
-        id: 'doc-s2-03',
-        categoryKey: 'tax_registration_pan',
-        categoryName: 'Legal & Tax',
-        title: 'Permanent Account Number (PAN) Card Verification Proof',
-        fileName: `Company_PAN_${pan}.pdf`,
-        fileUrl: '',
-        formattedSize: '640 KB',
-        status: 'VERIFIED',
-        moduleCode: 'Module A',
-        sha256Checksum: '1b83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9070',
-        step: 'step2',
-        issueDate: '2018-04-15',
       },
       {
         id: 'doc-s2-04',
@@ -433,20 +418,6 @@ export function VendorAuditModal({
         step: 'step4',
         issueDate: '2026-01-20',
       },
-      {
-        id: 'doc-s4-03',
-        categoryKey: 'nabl_lab_test_report',
-        categoryName: 'Quality & Standards',
-        title: 'NABL Accredited In-House Metrology & Chemical Analysis Test Report',
-        fileName: `NABL_Lab_Inspection_Test_Report_${compName}.pdf`,
-        fileUrl: '',
-        formattedSize: '1.9 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module C',
-        sha256Checksum: '8c83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9077',
-        step: 'step4',
-        issueDate: '2026-06-14',
-      },
 
       // STEP 5: Banking & Commercial
       {
@@ -462,34 +433,6 @@ export function VendorAuditModal({
         sha256Checksum: '9d83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9078',
         step: 'step5',
         issueDate: '2026-09-01',
-      },
-      {
-        id: 'doc-s5-02',
-        categoryKey: 'bank_solvency_letter',
-        categoryName: 'Commercial & Financial',
-        title: 'Bank Solvency Certificate & Corporate Credit Standing Letter',
-        fileName: `Bank_Solvency_Certificate_${bankName}.pdf`,
-        fileUrl: '',
-        formattedSize: '1.1 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module E',
-        sha256Checksum: '0e83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9079',
-        step: 'step5',
-        issueDate: '2026-08-15',
-      },
-      {
-        id: 'doc-s5-03',
-        categoryKey: 'trade_terms_declaration',
-        categoryName: 'Commercial & Financial',
-        title: 'Commercial Terms & Trade Compliance Declaration',
-        fileName: `Trade_Operations_And_Credit_Declaration_${compName}.pdf`,
-        fileUrl: '',
-        formattedSize: '950 KB',
-        status: 'VERIFIED',
-        moduleCode: 'Module E',
-        sha256Checksum: '1f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9080',
-        step: 'step5',
-        issueDate: '2026-09-10',
       },
     ];
 

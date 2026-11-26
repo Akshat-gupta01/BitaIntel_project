@@ -28,7 +28,6 @@ import { VendorStatusBanner } from '@/components/dashboard/vendor/VendorStatusBa
 import { OnboardingBanner } from '@/components/dashboard/vendor/OnboardingBanner';
 import { OnboardingWizardModal } from '@/components/dashboard/vendor/OnboardingWizardModal';
 import { showProfileCompletedToast } from '@/lib/profileCompletedToast';
-import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
 import { RegistrationSummaryModal } from '@/components/dashboard/vendor/RegistrationSummaryModal';
 import { CompanyProfileTab } from '@/components/dashboard/vendor/CompanyProfileTab';
 import { BusinessCapabilitiesTab } from '@/components/dashboard/vendor/BusinessCapabilitiesTab';
@@ -1306,8 +1305,6 @@ export default function VendorDashboardPage() {
             </div>
 
             <div className="flex items-center gap-2.5">
-              <PersonaSwitcher />
-
               {(user?.role === 'admin' ||
                 user?.role === 'super_admin' ||
                 user?.systemRole === 'admin' ||

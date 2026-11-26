@@ -14,12 +14,13 @@ import {
   Newspaper,
 } from 'lucide-react';
 import {
-  feedPosts,
+  feedPosts as fallbackFeedPosts,
   FEED_CATEGORIES,
   type FeedCategory,
   type FeedMediaType,
   type FeedPost,
 } from '@/config/feedData';
+import { getPublicFeed } from '@services/vendor.service';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { FeedCard } from './FeedCard';
 import { FeedReaderModal } from './FeedReaderModal';
@@ -45,18 +46,34 @@ export function FeedExplorer() {
   const [pageSize, setPageSize] = useState<number>(6);
   const [currentPage, setCurrentPage] = useState<number>(initialPage);
 
+  const [posts, setPosts] = useState<FeedPost[]>(fallbackFeedPosts);
   const [activePost, setActivePost] = useState<FeedPost | null>(null);
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
+
+  // Load live feed posts from backend API
+  useEffect(() => {
+    let cancelled = false;
+    getPublicFeed()
+      .then((res) => {
+        if (!cancelled && Array.isArray(res?.posts) && res.posts.length > 0) {
+          setPosts(res.posts);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync ?post=<slug> deep link to open reader automatically when landing on a shared link
   useEffect(() => {
     if (!sharedSlug) return;
-    const match = feedPosts.find((p) => p.slug === sharedSlug);
+    const match = posts.find((p) => p.slug === sharedSlug);
     if (match) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActivePost(match);
     }
-  }, [sharedSlug]);
+  }, [sharedSlug, posts]);
 
   // Keep page state synchronized with browser navigation (?page=N)
   useEffect(() => {
@@ -67,17 +84,17 @@ export function FeedExplorer() {
 
   const countsByFormat = useMemo(() => {
     return {
-      all: feedPosts.length,
-      text: feedPosts.filter((p) => p.mediaType === 'text').length,
-      image: feedPosts.filter((p) => p.mediaType === 'image').length,
-      video: feedPosts.filter((p) => p.mediaType === 'video').length,
+      all: posts.length,
+      text: posts.filter((p) => p.mediaType === 'text').length,
+      image: posts.filter((p) => p.mediaType === 'image').length,
+      video: posts.filter((p) => p.mediaType === 'video').length,
     };
-  }, []);
+  }, [posts]);
 
   const filteredPosts = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    const matched = feedPosts.filter((post) => {
+    const matched = posts.filter((post) => {
       if (formatFilter !== 'all' && post.mediaType !== formatFilter) return false;
       if (categoryFilter !== 'all' && post.category !== categoryFilter) return false;
 
@@ -101,7 +118,7 @@ export function FeedExplorer() {
       }
       return new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime();
     });
-  }, [query, formatFilter, categoryFilter, sortOrder]);
+  }, [posts, query, formatFilter, categoryFilter, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPosts.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);

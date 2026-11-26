@@ -13,7 +13,6 @@ import { BitaintelVerifiedBadge } from '@/components/business/BitaintelVerifiedB
 import { BusinessAvatar } from '@/components/shared/BusinessLogoUploader';
 import { EnquiryModal } from '@/components/business/EnquiryModal';
 import { ComplaintModal } from '@/components/business/ComplaintModal';
-import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
 import * as vendorService from '@services/vendor.service';
 import { ProductCatalogItem } from '@/types/vendorRegistration';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
@@ -504,7 +503,6 @@ export function BusinessProfileClient({ business: b }: BusinessProfileClientProp
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <PersonaSwitcher />
           {isUnverified && (
             <Button
               href="/demo/dashboard/vendor"

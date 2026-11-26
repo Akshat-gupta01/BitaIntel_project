@@ -323,6 +323,40 @@ export const replyAdminEnquiry = async (
   return response.data?.data || response.data;
 };
 
+export type ContactInquiryStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+
+export interface AdminContactInquiryItem {
+  id: number;
+  ticketId: string;
+  name: string;
+  email: string;
+  company?: string | null;
+  category: string;
+  message: string;
+  status: ContactInquiryStatus;
+  createdAt: string;
+}
+
+export const getAdminContactInquiries = async (): Promise<{
+  total: number;
+  inquiries: AdminContactInquiryItem[];
+}> => {
+  const response = await api.get("/contact");
+  const data = response.data?.data || response.data;
+  return {
+    total: data?.total ?? (Array.isArray(data?.inquiries) ? data.inquiries.length : 0),
+    inquiries: Array.isArray(data?.inquiries) ? data.inquiries : [],
+  };
+};
+
+export const updateAdminContactStatus = async (
+  id: number,
+  status: ContactInquiryStatus
+): Promise<{ inquiry: AdminContactInquiryItem }> => {
+  const response = await api.patch(`/contact/${id}/status`, { status });
+  return response.data?.data || response.data;
+};
+
 export interface BackendAuditLogItem {
   id: number;
   actorUserId?: number | null;

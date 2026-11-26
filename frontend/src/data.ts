@@ -508,26 +508,26 @@ export const trustMetrics = [
 export const faqs = [
   {
     q: 'What does a BITAINTEL Trust Score mean?',
-    a: 'The BITAINTEL Score is an objective 0–100 composite index calculated from verified statutory registrations (MCA/GSTN), documented quality certifications (ISO/GMP), operational tenure, and verified business premises. It is designed to establish baseline commercial legitimacy and is not a speculative credit rating or financial guarantee.',
+    a: 'The BITAINTEL Score is a 0–100 composite index calculated across 7 weighted dimensions (Corporate Identity 20%, Government Tax Registry 20%, Business Operations 15%, Documents & Certifications 15%, Financial Standing 15%, Statutory Compliance 10%, and Profile Completeness 5%). It establishes documented commercial legitimacy and is not a speculative credit rating or financial guarantee.',
   },
   {
     q: 'How does BITAINTEL prevent fraudulent or shell entities?',
-    a: 'Our multi-layer verification framework combines automated statutory API cross-validation with active director identity verification, physical premise geo-tagging, and documentary validation. Inactive or shell entities lacking verifiable operational footprint fail the Level 2 checkpoint.',
+    a: 'Our 11-step verification workflow combines statutory GSTIN/CIN/PAN format and registry validation with authorized signatory OTP checks, physical premise proof, SHA-256 document vaulting, and human compliance auditor sign-off.',
   },
   {
-    q: 'What information is visible publicly on a business profile?',
-    a: 'Public discovery profiles display foundational corporate identifiers, verified verification badges, industry sector, operational tenure, public certifications, and high-level capability tags. Confidential data—such as financial statements, customer lists, and proprietary contracts—requires explicit consent and reciprocal NDA authorization.',
+    q: 'What information is visible publicly vs. gated for verified B2B accounts?',
+    a: 'Public discovery profiles display company overview, verification status badges, industry sector, certifications, and catalog capabilities. Sensitive statutory identifiers (full CIN/GSTIN), annual turnover/headcount bands, indicative unit pricing, and downloadable TDS/COA documents are gated and unlock only for approved, GST-verified B2B accounts.',
   },
   {
     q: 'Can a verified business update expired certificates or details?',
-    a: 'Yes. BITAINTEL features active document lifecycle management. When an ISO certificate or statutory license approaches expiry, automated alerts trigger re-verification. Profiles reflect updated audit dates to ensure partner evaluation remains accurate.',
+    a: 'Yes. BITAINTEL tracks certificate issue and expiry dates across quality and statutory records. Vendors can upload renewed certificates and updated product specifications from the Vendor Dashboard, triggering fresh compliance review and score recalculation.',
   },
   {
     q: 'How can our procurement team integrate BITAINTEL into our ERP?',
-    a: 'The platform architecture is API-first. Enterprise teams can utilize our webhook and REST API endpoints to embed real-time vendor verification checks, scoring thresholds, and automated compliance updates directly inside SAP, Oracle, or custom procurement software.',
+    a: 'The platform is built around RESTful `/api/v1` endpoints for directory lookup, side-by-side comparison, enquiry workflows, and structured business dossiers so procurement teams can connect enterprise systems cleanly.',
   },
   {
-    q: 'Is this website a live production platform or a frontend demonstration?',
-    a: 'This website is a fully interactive frontend demonstration and reference implementation designed with realistic mock data and accessible client-side state. Live statutory APIs, OTP verification, and server-side document storage can be connected seamlessly to these component interfaces.',
+    q: 'How do vendors submit their company for verification?',
+    a: 'Vendors register an authorized representative account, complete Modules A–F across the 6-step onboarding workspace (company profile, classification, product catalog, certifications, commercial & banking proofs), and submit their dossier to the BITAINTEL verification queue.',
   },
 ];

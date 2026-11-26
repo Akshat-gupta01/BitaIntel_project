@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ScoreRing } from '@/components/business/ScoreRing';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { PersonaSwitcher } from '@/components/shared/PersonaSwitcher';
+import { formatBusinessLocation } from '@/lib/verificationBadge';
 import {
   ExternalLink,
   Lock,
@@ -146,7 +146,7 @@ export function CompareTableClient({ selected, availableBusinesses = [] }: Compa
       false,
     ],
     ['Industry Sector', (b) => <span className="font-medium text-slate-700">{b.industry}</span>, false],
-    ['Registered Location', (b) => <span className="text-slate-600">{b.location}</span>, false],
+    ['Registered Location', (b) => <span className="text-slate-600">{formatBusinessLocation(b)}</span>, false],
     [
       'Verification Tier',
       (b) => <Badge kind="level">Tier {b.level} Audited</Badge>,
@@ -354,7 +354,6 @@ export function CompareTableClient({ selected, availableBusinesses = [] }: Compa
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <PersonaSwitcher />
           {isPremium && (
             <Button
               size="sm"
@@ -432,7 +431,7 @@ export function CompareTableClient({ selected, availableBusinesses = [] }: Compa
                         {b.name}
                       </Link>
                       <span className="text-[11px] text-slate-500 font-normal">
-                        {b.city}, {b.state}
+                        {formatBusinessLocation(b)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">

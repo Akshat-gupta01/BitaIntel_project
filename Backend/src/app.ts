@@ -12,6 +12,8 @@ import adminRoutes from "./routes/admin.routes.js";
 import rbacRoutes from "./routes/rbac.routes.js";
 import enquiryRoutes from "./routes/enquiry.routes.js";
 import complaintRoutes from "./routes/complaint.routes.js";
+import contactRoutes from "./routes/contact.routes.js";
+import feedRoutes from "./routes/feed.routes.js";
 
 const app = express();
 
@@ -146,6 +148,8 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/vendor", vendorRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/complaints", complaintRoutes);
+app.use("/api/v1/contact", contactRoutes);
+app.use("/api/v1/feed", feedRoutes);
 app.use("/api/v1/master", masterRoutes); 
 app.use("/api/v1/admin", adminRoutes);   
 app.use("/api/v1/rbac", rbacRoutes);   

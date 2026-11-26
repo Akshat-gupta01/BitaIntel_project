@@ -14,6 +14,10 @@ import {
   updateAdminEnquiryStatus,
   replyAdminEnquiry,
   getAdminAuditLogs,
+  getAdminContactInquiries,
+  updateAdminContactStatus,
+  type AdminContactInquiryItem,
+  type ContactInquiryStatus,
   type BackendAuditLogItem,
 } from '@services/admin.service';
 import {
@@ -34,8 +38,8 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  RefreshCw,
   Sparkles,
+  Mail,
   ArrowUpRight,
   XCircle,
   Eye,
@@ -65,6 +69,7 @@ export type AdminNavTab =
   | 'expiring'
   | 'scoring'
   | 'logs'
+  | 'contact_tickets'
   | 'settings'
   | 'access_control';
 
@@ -119,6 +124,8 @@ export default function AdminDashboardPage() {
   const [queue, setQueue] = useState<AdminQueueItem[]>([]);
   const [allVendors, setAllVendors] = useState<AdminQueueItem[]>([]);
   const [enquiries, setEnquiries] = useState<AdminEnquiryItem[]>([]);
+  const [contactInquiries, setContactInquiries] = useState<AdminContactInquiryItem[]>([]);
+  const [updatingContactId, setUpdatingContactId] = useState<number | null>(null);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
   const [complaintStatusInput, setComplaintStatusInput] = useState<ComplaintStatus>('UNDER_INVESTIGATION');
@@ -128,7 +135,6 @@ export default function AdminDashboardPage() {
   const [adminReplyText, setAdminReplyText] = useState('');
   const [adminReplySuccess, setAdminReplySuccess] = useState('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Search & filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,15 +161,15 @@ export default function AdminDashboardPage() {
   // Load Dashboard Data
   const loadData = async (showLoadingState = true) => {
     if (showLoadingState) setIsLoading(true);
-    else setIsRefreshing(true);
 
     try {
-      const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes] = await Promise.allSettled([
+      const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes, contactsRes] = await Promise.allSettled([
         getVerificationQueue(),
         getAllVendors(),
         getAdminEnquiries(),
         getAdminComplaints(),
         getAdminAuditLogs(),
+        getAdminContactInquiries(),
       ]);
 
       if (queueRes.status === 'fulfilled') {
@@ -185,6 +191,9 @@ export default function AdminDashboardPage() {
       if (logsRes.status === 'fulfilled') {
         setAuditLogs((logsRes.value?.logs || []).map(mapBackendAuditLog));
       }
+      if (contactsRes.status === 'fulfilled') {
+        setContactInquiries(contactsRes.value?.inquiries || []);
+      }
     } catch (err: unknown) {
       console.error('Error fetching admin data:', err);
       const msg = err instanceof Error ? err.message : 'Please check your backend connection.';
@@ -193,7 +202,6 @@ export default function AdminDashboardPage() {
       });
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   };
 
@@ -201,12 +209,13 @@ export default function AdminDashboardPage() {
     let isMounted = true;
     const fetchInitialData = async () => {
       try {
-        const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes] = await Promise.allSettled([
+        const [queueRes, vendorsRes, enquiriesRes, complaintsRes, logsRes, contactsRes] = await Promise.allSettled([
           getVerificationQueue(),
           getAllVendors(),
           getAdminEnquiries(),
           getAdminComplaints(),
           getAdminAuditLogs(),
+          getAdminContactInquiries(),
         ]);
         if (!isMounted) return;
         if (queueRes.status === 'fulfilled') {
@@ -227,6 +236,9 @@ export default function AdminDashboardPage() {
         }
         if (logsRes.status === 'fulfilled') {
           setAuditLogs((logsRes.value?.logs || []).map(mapBackendAuditLog));
+        }
+        if (contactsRes.status === 'fulfilled') {
+          setContactInquiries(contactsRes.value?.inquiries || []);
         }
       } catch (err: unknown) {
         if (!isMounted) return;
@@ -644,6 +656,13 @@ export default function AdminDashboardPage() {
       badgeColor: 'bg-rose-100 text-rose-800',
     },
     {
+      id: 'contact_tickets',
+      label: 'Contact Tickets',
+      icon: Mail,
+      badge: contactInquiries.filter((c) => c.status === 'OPEN').length || null,
+      badgeColor: 'bg-primary-600 text-white font-bold',
+    },
+    {
       id: 'scoring',
       label: 'Trust Scoring Matrix',
       icon: Scale,
@@ -840,6 +859,7 @@ export default function AdminDashboardPage() {
                         {activeTab === 'expiring' && 'Certificate Expiry & Renewal Radar'}
                         {activeTab === 'scoring' && '7-Dimension Trust Score Engine Matrix'}
                         {activeTab === 'logs' && 'Auditor Activity Trail & Compliance Log'}
+                        {activeTab === 'contact_tickets' && 'Contact & Support Tickets'}
                         {activeTab === 'settings' && 'Auditor Access & Verification Settings'}
                       </span>
                     </h1>
@@ -847,19 +867,6 @@ export default function AdminDashboardPage() {
                       BITAINTEL Enterprise Governance • Real-time Statutory Due Diligence Engine
                     </p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadData(false)}
-                    disabled={isRefreshing || isLoading}
-                    className="text-xs flex items-center gap-1.5"
-                  >
-                    <RefreshCw className={`size-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    <span>{isRefreshing ? 'Refreshing...' : 'Refresh Data'}</span>
-                  </Button>
                 </div>
               </header>
 
@@ -2387,6 +2394,118 @@ export default function AdminDashboardPage() {
                         </Button>
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: CONTACT TICKETS */}
+            {activeTab === 'contact_tickets' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Contact &amp; Support Tickets ({contactInquiries.length})
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Inquiries submitted from the public Contact page (/demo/contact).
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-primary-700 bg-primary-50 px-3 py-1 rounded-full border border-primary-200 self-start sm:self-auto">
+                    {contactInquiries.filter((c) => c.status === 'OPEN').length} Open
+                  </span>
+                </div>
+
+                {contactInquiries.length === 0 ? (
+                  <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500">
+                    No contact inquiries submitted yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3">Ticket ID</th>
+                          <th className="py-2.5 px-3">Sender</th>
+                          <th className="py-2.5 px-3">Category</th>
+                          <th className="py-2.5 px-3">Message</th>
+                          <th className="py-2.5 px-3">Submitted</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3 text-right">Update</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {contactInquiries.map((tkt) => (
+                          <tr key={tkt.id} className="hover:bg-slate-50/70">
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                              {tkt.ticketId}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900">{tkt.name}</div>
+                              <div className="text-[11px] text-slate-500">{tkt.email}</div>
+                              {tkt.company && (
+                                <div className="text-[11px] text-primary-700 font-semibold">{tkt.company}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700">
+                              {tkt.category}
+                            </td>
+                            <td className="py-2.5 px-3 max-w-[260px]">
+                              <p className="text-slate-700 line-clamp-2">{tkt.message}</p>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">
+                              {new Date(tkt.createdAt).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                  tkt.status === 'OPEN'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : tkt.status === 'IN_PROGRESS'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {tkt.status.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <select
+                                aria-label={`Status for ${tkt.ticketId}`}
+                                value={tkt.status}
+                                disabled={updatingContactId === tkt.id}
+                                onChange={async (e) => {
+                                  const nextStatus = e.target.value as ContactInquiryStatus;
+                                  setUpdatingContactId(tkt.id);
+                                  try {
+                                    const res = await updateAdminContactStatus(tkt.id, nextStatus);
+                                    setContactInquiries((prev) =>
+                                      prev.map((item) =>
+                                        item.id === tkt.id ? res.inquiry || { ...item, status: nextStatus } : item
+                                      )
+                                    );
+                                    toast.success(`Ticket ${tkt.ticketId} marked ${nextStatus.replace(/_/g, ' ')}`);
+                                  } catch {
+                                    toast.error('Failed to update ticket status');
+                                  } finally {
+                                    setUpdatingContactId(null);
+                                  }
+                                }}
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                              >
+                                <option value="OPEN">OPEN</option>
+                                <option value="IN_PROGRESS">IN PROGRESS</option>
+                                <option value="RESOLVED">RESOLVED</option>
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

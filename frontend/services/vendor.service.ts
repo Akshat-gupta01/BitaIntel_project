@@ -1159,3 +1159,19 @@ export const markAllNotificationsRead = async (): Promise<void> => {
   await api.patch("/vendor/notifications/read-all");
 };
 
+export const submitContactQuery = async (payload: {
+  name: string;
+  email: string;
+  company?: string;
+  category?: string;
+  message: string;
+}): Promise<{ ticketId: string; status?: string; message?: string }> => {
+  const res = await api.post("/contact", payload);
+  return res.data?.data || res.data;
+};
+
+export const getPublicFeed = async () => {
+  const res = await api.get("/feed");
+  return res.data?.data || res.data;
+};
+

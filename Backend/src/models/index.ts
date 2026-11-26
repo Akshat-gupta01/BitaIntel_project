@@ -33,6 +33,8 @@ import BusinessEnquiry from "./BusinessEnquiry.model.js";
 import Complaint from "./Complaint.model.js";
 import AuditLog from "./AuditLog.model.js";
 import Notification from "./Notification.model.js";
+import ContactInquiry from "./ContactInquiry.model.js";
+import FeedPost from "./FeedPost.model.js";
 
 // ─── Model Associations ──────────────────────────────────────────────────────
 
@@ -363,6 +365,8 @@ export {
   Complaint,
   AuditLog,
   Notification,
+  ContactInquiry,
+  FeedPost,
 };
 export default {
   sequelize,
@@ -401,4 +405,6 @@ export default {
   Complaint,
   AuditLog,
   Notification,
+  ContactInquiry,
+  FeedPost,
 };

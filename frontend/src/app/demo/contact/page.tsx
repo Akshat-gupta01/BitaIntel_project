@@ -10,7 +10,7 @@ export const metadata = createPageMetadata({
   title: 'Contact BITAINTEL Trust Team',
   description:
     'Contact the BITAINTEL regulatory analysts and procurement integration specialists for verification inquiries and enterprise onboarding.',
-  pathname: '/contact',
+  pathname: '/demo/contact',
   keywords: ['Contact BITAINTEL', 'Verification Support', 'Procurement Advisory', 'Vendor Audit Inquiries'],
 });
 
@@ -20,10 +20,10 @@ export default function ContactPage() {
     title: 'Contact BITAINTEL Trust Team',
     description:
       'Contact the BITAINTEL regulatory analysts and procurement integration specialists for verification inquiries and enterprise onboarding.',
-    pathname: '/contact',
+    pathname: '/demo/contact',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Contact', url: '/contact' },
+      { name: 'Home', url: '/demo' },
+      { name: 'Contact', url: '/demo/contact' },
     ],
   });
 
@@ -50,19 +50,19 @@ export default function ContactPage() {
                   icon: Mail,
                   title: 'Enterprise Onboarding',
                   text: 'Connect with an enterprise integration analyst for custom supply chain screening.',
-                  sub: 'enterprise@bitaintel.example',
+                  sub: 'enterprise@bitaintel.com',
                 },
                 {
                   icon: ShieldCheck,
                   title: 'Methodology & Auditing',
                   text: 'Questions about MCA filings, GSTN reconciliation, or re-verification procedures.',
-                  sub: 'audit@bitaintel.example',
+                  sub: 'audit@bitaintel.com',
                 },
                 {
                   icon: MessageSquareText,
                   title: 'Technical API Support',
                   text: 'ERP webhook connectivity and programmatic scoring verification documentation.',
-                  sub: 'api-support@bitaintel.example',
+                  sub: 'api-support@bitaintel.com',
                 },
               ].map((item) => (
                 <Card key={item.title} variant="bento" className="p-6">
@@ -91,13 +91,13 @@ export default function ContactPage() {
             {/* Main Form Card */}
             <Card variant="bento" className="p-8 sm:p-10">
               <span className="text-xs font-bold uppercase tracking-wider text-primary-700 block">
-                Interactive Form Preview
+                Direct Trust &amp; Compliance Desk
               </span>
               <h2 className="mt-2 text-xl font-bold text-slate-900 mb-2">
                 Send Us a Message
               </h2>
               <p className="text-xs text-slate-500 mb-6">
-                Fill in the form details below to test our client-side validation and feedback engine.
+                Submit your enquiry below to receive a tracked ticket ID and response within 1 business day.
               </p>
               <ContactForm />
             </Card>

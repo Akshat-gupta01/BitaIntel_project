@@ -11,7 +11,7 @@ export const metadata = createPageMetadata({
   title: 'Frequently Asked Questions & Knowledge Base',
   description:
     'Answers about BITAINTEL verification methodology, scoring index, corporate data privacy, and procurement integration.',
-  pathname: '/faq',
+  pathname: '/demo/faq',
   keywords: ['BITAINTEL FAQ', 'Verification FAQ', 'Vendor Scoring Criteria', 'Enterprise Auditing Help'],
 });
 
@@ -21,10 +21,10 @@ export default function FAQPage() {
     title: 'Frequently Asked Questions & Knowledge Base | BITAINTEL',
     description:
       'Answers about BITAINTEL verification methodology, scoring index, corporate data privacy, and procurement integration.',
-    pathname: '/faq',
+    pathname: '/demo/faq',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'FAQ', url: '/faq' },
+      { name: 'Home', url: '/demo' },
+      { name: 'FAQ', url: '/demo/faq' },
     ],
   });
 

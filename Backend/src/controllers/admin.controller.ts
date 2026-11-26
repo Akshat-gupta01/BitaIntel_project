@@ -258,22 +258,22 @@ export async function verifyStatutory(req: Request, res: Response) {
       return sendError(res, `Business with ID ${businessId} not found.`, 404, "ERR_NOT_FOUND");
     }
 
-    // ── 2. Us company ke Statutory IDs dhoondo ──────────────────────────────
+    // ── 2. Us company ke Statutory IDs dhoondo (optional for ACTION_REQUIRED / REJECTED) ──
     const statutory = await StatutoryIdentifier.findOne({
       where: { businessId: business.id },
     });
 
-    if (!statutory || !statutory.gstin) {
-      return sendError(
-        res,
-        "No GSTIN found for this business. The vendor must submit a GSTIN before it can be verified.",
-        400,
-        "ERR_NO_GSTIN_FOUND"
-      );
-    }
-
     // ── 3. Agar Admin ne APPROVE kiya ───────────────────────────────────────
     if (normalizedDecision === "APPROVED") {
+      if (!statutory || !statutory.gstin) {
+        return sendError(
+          res,
+          "No GSTIN found for this business. The vendor must submit a GSTIN before it can be verified.",
+          400,
+          "ERR_NO_GSTIN_FOUND"
+        );
+      }
+
       // A. Statutory status ACTIVE mark karo
       statutory.gstnStatus = "ACTIVE";
       statutory.lastSyncedAt = new Date();
@@ -337,6 +337,7 @@ export async function verifyStatutory(req: Request, res: Response) {
 
     // ── 4. Agar Admin ne Clarification / Action Required maanga ──────────────
     if (normalizedDecision === "ACTION_REQUIRED") {
+      const gstinValue = statutory?.gstin || null;
       business.verificationStatus = "action_required";
       await business.save();
 
@@ -346,8 +347,12 @@ export async function verifyStatutory(req: Request, res: Response) {
         targetType: "BUSINESS",
         targetId: business.id,
         companyName: business.legalName || business.name,
-        summary: notes || `Clarification requested for GSTIN ${statutory.gstin}.`,
-        metadata: { decision: "ACTION_REQUIRED", gstin: statutory.gstin },
+        summary:
+          notes ||
+          (gstinValue
+            ? `Clarification requested for GSTIN ${gstinValue}.`
+            : "Clarification requested for pending GSTIN and Step 2 documents."),
+        metadata: { decision: "ACTION_REQUIRED", gstin: gstinValue },
       });
 
       await createNotification({
@@ -355,7 +360,11 @@ export async function verifyStatutory(req: Request, res: Response) {
         businessId: business.id,
         type: "VERIFICATION",
         title: "Clarification Required on Verification",
-        message: notes || `Auditor requested additional clarification or documents for GSTIN ${statutory.gstin}.`,
+        message:
+          notes ||
+          (gstinValue
+            ? `Auditor requested additional clarification or documents for GSTIN ${gstinValue}.`
+            : "Please submit your GSTIN and Step 2 verification documents."),
         actionTab: "documents",
       });
 
@@ -363,16 +372,20 @@ export async function verifyStatutory(req: Request, res: Response) {
         message: "Clarification requested. Vendor alerted with action required instructions.",
         businessId: business.id,
         companyName: business.name,
-        gstin: statutory.gstin,
+        gstin: gstinValue,
         verificationStatus: "action_required",
         notes: notes || "Auditor requested additional documentation or clarification.",
       });
     }
 
     // ── 5. Agar Admin ne REJECT kiya ────────────────────────────────────────
-    statutory.gstnStatus = "INVALID";
-    await statutory.save();
+    const rejectedGstin = statutory?.gstin || null;
+    if (statutory) {
+      statutory.gstnStatus = "INVALID";
+      await statutory.save();
+    }
 
+    business.verified = false;
     business.verificationStatus = "Rejected";
     await business.save();
 
@@ -382,8 +395,12 @@ export async function verifyStatutory(req: Request, res: Response) {
       targetType: "BUSINESS",
       targetId: business.id,
       companyName: business.legalName || business.name,
-      summary: notes || `GSTIN ${statutory.gstin} rejected.`,
-      metadata: { decision: "REJECTED", gstin: statutory.gstin },
+      summary:
+        notes ||
+        (rejectedGstin
+          ? `GSTIN ${rejectedGstin} rejected.`
+          : "Vendor verification rejected."),
+      metadata: { decision: "REJECTED", gstin: rejectedGstin },
     });
 
     await createNotification({
@@ -391,17 +408,21 @@ export async function verifyStatutory(req: Request, res: Response) {
       businessId: business.id,
       type: "VERIFICATION",
       title: "Statutory Verification Rejected",
-      message: notes || `Verification for GSTIN ${statutory.gstin} was rejected. Please review and resubmit.`,
+      message:
+        notes ||
+        (rejectedGstin
+          ? `Verification for GSTIN ${rejectedGstin} was rejected. Please review and resubmit.`
+          : "Your vendor verification was rejected. Please review your profile and resubmit."),
       actionTab: "profile",
     });
 
     return sendSuccess(res, {
-      message: "GSTIN verification rejected by Admin.",
+      message: "Vendor verification rejected by Admin.",
       businessId: business.id,
       companyName: business.name,
-      gstin: statutory.gstin,
-      gstnStatus: "INVALID",
-      notes: notes || "Rejected due to mismatch with official records.",
+      gstin: rejectedGstin,
+      gstnStatus: statutory ? "INVALID" : null,
+      notes: notes || "Rejected due to incomplete or non-compliant statutory records.",
     });
   } catch (error) {
     console.error("Verify Statutory Error:", error);
