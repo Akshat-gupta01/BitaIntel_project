@@ -109,10 +109,11 @@ export interface Step3BusinessData {
   hasQcLab?: boolean;
   offersCustomDevelopment?: boolean;
 
-  // Service Capabilities (Conditional)
+  // Service Capabilities
   serviceTypes?: string;
   serviceExpertise?: string;
   geographicCoverage?: string;
+  serviceEquipment?: string;
   deliveryCapacity?: string;
 
   // Operating Profile
@@ -121,10 +122,11 @@ export interface Step3BusinessData {
   annualTurnoverRange: string;
   totalWorkforce: string;
 
-  // Facility Info
-  manufacturingLicenceDoc?: string;
+  // Facility & Optional Regulatory Filings Info
   facilityPhotos?: string[];
   technicalAuditDoc?: string;
+  regulatoryApprovalDoc?: string;
+  regulatoryFilingDetails?: string;
 }
 
 // Product/Service Item in Step 4

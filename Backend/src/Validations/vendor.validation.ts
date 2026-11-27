@@ -144,6 +144,7 @@ export const capabilitiesSchema = z.object({
   serviceTypes: z.string().optional().nullable(),
   serviceExpertise: z.string().optional().nullable(),
   geographicCoverage: z.string().optional().nullable(),
+  serviceEquipment: z.string().optional().nullable(),
   deliveryCapacity: z.string().optional().nullable(),
   yearsInBusiness: z.union([z.string(), z.number()]).optional().nullable(),
   numberOfFacilities: z.union([z.string(), z.number()]).optional().nullable(),
@@ -154,9 +155,10 @@ export const capabilitiesSchema = z.object({
   exportTurnoverPercentage: z.string().optional().nullable(),
   testingCapabilities: z.string().optional().nullable(),
   qualityAssuranceProcedures: z.string().optional().nullable(),
-  manufacturingLicenceDoc: z.string().optional().nullable(),
   facilityPhotos: z.array(z.string()).optional().nullable(),
   technicalAuditDoc: z.string().optional().nullable(),
+  regulatoryApprovalDoc: z.string().optional().nullable(),
+  regulatoryFilingDetails: z.string().optional().nullable(),
 }).passthrough();
 
 // ══════════════════════════════════════════════════════════════════════════════

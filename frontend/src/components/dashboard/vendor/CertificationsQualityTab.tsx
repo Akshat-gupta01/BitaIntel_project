@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { QualityCertificateRecord } from '@/types/vendorRegistration';
 import * as vendorService from '../../../../services/vendor.service';
 import { STANDARD_CERTIFICATIONS } from '@/config/vendorMasterData';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import {
   Award,
   AlertTriangle,
@@ -22,6 +24,7 @@ import {
   Loader2,
   ExternalLink,
   FileCheck,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,7 +42,25 @@ export function CertificationsQualityTab({
   qualityAssuranceProcedures,
 }: CertificationsQualityTabProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [certSearchQuery, setCertSearchQuery] = useState('');
+  const [certStatusFilter, setCertStatusFilter] = useState<'all' | 'Active' | 'Expiring Soon'>('all');
   const [editingCert, setEditingCert] = useState<QualityCertificateRecord | null>(null);
+
+  const filteredCerts = useMemo(() => {
+    const q = certSearchQuery.trim().toLowerCase();
+    return certifications.filter((c) => {
+      const matchesQuery =
+        !q ||
+        (c.certificateType || '').toLowerCase().includes(q) ||
+        (c.certificateNumber || '').toLowerCase().includes(q) ||
+        (c.issuingAuthority || '').toLowerCase().includes(q) ||
+        (c.scope || '').toLowerCase().includes(q);
+      const matchesStatus = certStatusFilter === 'all' || (c.status || 'Active') === certStatusFilter;
+      return matchesQuery && matchesStatus;
+    });
+  }, [certifications, certSearchQuery, certStatusFilter]);
+
+  const certsPagination = usePagination(filteredCerts, 6);
   const [uploadingCertDoc, setUploadingCertDoc] = useState(false);
   const certDocInputRef = useRef<HTMLInputElement | null>(null);
   const [certDocFileName, setCertDocFileName] = useState<string | null>(null);
@@ -241,20 +262,55 @@ export function CertificationsQualityTab({
               </p>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={() => setShowAddModal(true)}
-            className="text-xs font-bold"
-          >
-            <Plus className="size-3.5 mr-1" /> Add Certificate
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-48">
+              <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={certSearchQuery}
+                onChange={(e) => {
+                  setCertSearchQuery(e.target.value);
+                  certsPagination.resetPage();
+                }}
+                placeholder="Search certificates..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 bg-white"
+              />
+            </div>
+
+            <select
+              value={certStatusFilter}
+              onChange={(e) => {
+                setCertStatusFilter(e.target.value as 'all' | 'Active' | 'Expiring Soon');
+                certsPagination.resetPage();
+              }}
+              aria-label="Filter certificates by status"
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="all">All Status</option>
+              <option value="Active">Active</option>
+              <option value="Expiring Soon">Expiring Soon</option>
+            </select>
+
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => setShowAddModal(true)}
+              className="text-xs font-bold"
+            >
+              <Plus className="size-3.5 mr-1" /> Add Certificate
+            </Button>
+          </div>
         </div>
 
         {/* Certificate Cards Grid */}
+        {certsPagination.paginatedItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500">
+            No matching certifications found.
+          </div>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {certifications.map((c) => {
+          {certsPagination.paginatedItems.map((c) => {
             const isExpiringSoon = c.status === 'Expiring Soon';
 
             return (
@@ -330,6 +386,18 @@ export function CertificationsQualityTab({
             );
           })}
         </div>
+        )}
+
+        <Pagination
+          page={certsPagination.page}
+          totalPages={certsPagination.totalPages}
+          totalItems={certsPagination.totalItems}
+          pageSize={certsPagination.pageSize}
+          onPageChange={certsPagination.setPage}
+          onPageSizeChange={certsPagination.setPageSize}
+          pageSizeOptions={[6, 12, 24]}
+          itemLabel="certifications"
+        />
       </Card>
 
       {/* QA, Metrology & Testing Infrastructure */}

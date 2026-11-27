@@ -130,16 +130,20 @@ module.exports = {
       },
 
       // ─── Facility Proofs & Docs ───
-      manufacturingLicenceDoc: {
-        type: Sequelize.STRING(500),
-        allowNull: true,
-      },
       facilityPhotos: {
         type: Sequelize.JSON,
         allowNull: true,
       },
       technicalAuditDoc: {
         type: Sequelize.STRING(500),
+        allowNull: true,
+      },
+      regulatoryApprovalDoc: {
+        type: Sequelize.STRING(500),
+        allowNull: true,
+      },
+      regulatoryFilingDetails: {
+        type: Sequelize.TEXT,
         allowNull: true,
       },
 

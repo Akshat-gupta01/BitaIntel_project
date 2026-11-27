@@ -17,6 +17,7 @@ import {
 } from "../Validations/auth.validation.js";
 import { generateSlug, getInitials } from "../utils/slug.js";
 import { createNotification } from "../services/notification.service.js";
+import { RbacService } from "../services/rbac.service.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,37 @@ const generate4DigitOtp = () => randomInt(1000, 10000).toString();
 
 // Suspended / deactivated accounts must not receive sessions or OTPs.
 const isAccountActive = (user: User) => user.status === "ACTIVE";
+
+async function buildAuthUserPayload(user: User, business: BusinessEntity | null) {
+  let permissions: string[] = [];
+  try {
+    permissions = await RbacService.getUserEffectivePermissions(user.role);
+  } catch (err) {
+    console.warn("Could not resolve effective RBAC permissions for auth user:", err);
+  }
+
+  return {
+    id: user.id,
+    companyName: user.companyName,
+    fullName: user.fullName,
+    email: user.email,
+    mobile: user.mobile,
+    role: user.role,
+    designation: user.designation,
+    permissions,
+    business: business
+      ? {
+          id: business.id,
+          name: business.name,
+          legalName: business.legalName,
+          slug: business.slug,
+          score: business.score,
+          badge: business.badge,
+          verificationStatus: business.verificationStatus,
+        }
+      : null,
+  };
+}
 
 export async function sendOtp(req: Request, res: Response) {
   const result = sendOtpSchema.safeParse(req.body);
@@ -517,26 +549,7 @@ export async function login(req: Request, res: Response) {
   return sendSuccess(res, {
     message: "Login successful",
     token,
-    user: {
-      id: user.id,
-      companyName: user.companyName,
-      fullName: user.fullName,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-      designation: user.designation,
-      business: business
-        ? {
-            id: business.id,
-            name: business.name,
-            legalName: business.legalName,
-            slug: business.slug,
-            score: business.score,
-            badge: business.badge,
-            verificationStatus: business.verificationStatus,
-          }
-        : null,
-    },
+    user: await buildAuthUserPayload(user, business),
   });
 }
 
@@ -631,26 +644,7 @@ async function handleOtpLogin(rawIdentifier: string, otpCode: string, res: Respo
   return sendSuccess(res, {
     message: "Login successful via OTP",
     token,
-    user: {
-      id: user.id,
-      companyName: user.companyName,
-      fullName: user.fullName,
-      email: user.email,
-      mobile: user.mobile,
-      role: user.role,
-      designation: user.designation,
-      business: business
-        ? {
-            id: business.id,
-            name: business.name,
-            legalName: business.legalName,
-            slug: business.slug,
-            score: business.score,
-            badge: business.badge,
-            verificationStatus: business.verificationStatus,
-          }
-        : null,
-    },
+    user: await buildAuthUserPayload(user, business),
   });
 }
 
@@ -853,26 +847,7 @@ export async function getMe(req: Request, res: Response) {
     return sendSuccess(res, {
       isAuthenticated: true,
       token,
-      user: {
-        id: user.id,
-        companyName: user.companyName,
-        fullName: user.fullName,
-        email: user.email,
-        mobile: user.mobile,
-        designation: user.designation,
-        role: user.role,
-        business: business
-          ? {
-              id: business.id,
-              name: business.name,
-              legalName: business.legalName,
-              slug: business.slug,
-              score: business.score,
-              badge: business.badge,
-              verificationStatus: business.verificationStatus
-            }
-          : null
-      }
+      user: await buildAuthUserPayload(user, business),
     });
   } catch (error) {
     console.error("Get me Error:", error);

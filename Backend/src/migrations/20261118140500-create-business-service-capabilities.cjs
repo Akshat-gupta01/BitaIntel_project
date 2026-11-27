@@ -35,6 +35,10 @@ module.exports = {
           type: Sequelize.STRING(255),
           allowNull: true,
         },
+        serviceEquipment: {
+          type: Sequelize.TEXT,
+          allowNull: true,
+        },
         deliveryCapacity: {
           type: Sequelize.STRING(100),
           allowNull: true,

@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { BusinessEntity, BusinessProduct } from "../models/index.js";
 import BusinessEnquiry from "../models/BusinessEnquiry.model.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import { parsePagination, buildPaginationMeta } from "../utils/pagination.js";
 import { recordAuditLog } from "../services/audit.service.js";
 
 /**
@@ -143,13 +144,66 @@ export async function submitEnquiry(req: Request, res: Response) {
   }
 }
 
+function formatEnquiryRecord(enq: any) {
+  const createdDate = new Date(enq.createdAt);
+  const dateFormatted = createdDate.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return {
+    id: String(enq.id),
+    enquiryId: enq.enquiryNumber,
+    enquiryNumber: enq.enquiryNumber,
+    businessId: enq.businessId,
+    targetBusinessName: enq.business?.name || "Target Vendor",
+    targetBusinessLegalName: enq.business?.legalName || enq.business?.name,
+    targetBusinessSlug: enq.business?.slug || "",
+    targetBusinessLogo: enq.business?.logoUrl || null,
+    buyerName: enq.buyerName,
+    name: enq.buyerName,
+    sender_name: enq.buyerName,
+    buyerCompany: enq.buyerCompany || "Enterprise Buyer",
+    company: enq.buyerCompany || "Enterprise Buyer",
+    sender_company: enq.buyerCompany || "Enterprise Buyer",
+    buyerEmail: enq.buyerEmail,
+    email: enq.buyerEmail,
+    sender_email: enq.buyerEmail,
+    buyerPhone: enq.buyerPhone || "N/A",
+    phone: enq.buyerPhone || "N/A",
+    sender_phone: enq.buyerPhone || "N/A",
+    subject: enq.subject,
+    details: enq.details,
+    message: enq.details,
+    date: dateFormatted,
+    status: enq.status,
+    budget: enq.budget || "Commercial RFQ",
+    productId: enq.productId || null,
+    productName: enq.productName || enq.product?.name || null,
+    product: enq.product || null,
+    replyMessage: enq.replyMessage || null,
+    vendor_notes: enq.replyMessage || null,
+    repliedAt: enq.repliedAt || null,
+    createdAt: enq.createdAt,
+  };
+}
+
 /**
  * 2. GET /api/v1/admin/enquiries
  * Authenticated Super Admin endpoint: List all buyer enquiries received across the platform
  */
 export async function getAdminEnquiries(req: Request, res: Response) {
   try {
-    const enquiries = await BusinessEnquiry.findAll({
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
+      limit: 10,
+      maxLimit: 200,
+    });
+
+    const queryOptions = {
       include: [
         {
           model: BusinessEntity,
@@ -163,60 +217,33 @@ export async function getAdminEnquiries(req: Request, res: Response) {
           required: false,
         },
       ],
-      order: [["createdAt", "DESC"]],
-    });
+      order: [["createdAt", "DESC"]] as [string, string][],
+    };
 
-    const formatted = enquiries.map((enq: any) => {
-      const createdDate = new Date(enq.createdAt);
-      const dateFormatted = createdDate.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
+    const result = hasExplicitPagination
+      ? await BusinessEnquiry.findAndCountAll({
+          ...queryOptions,
+          distinct: true,
+          col: "id",
+          limit,
+          offset,
+        })
+      : {
+          rows: await BusinessEnquiry.findAll(queryOptions),
+          count: 0,
+        };
 
-      return {
-        id: String(enq.id),
-        enquiryId: enq.enquiryNumber,
-        enquiryNumber: enq.enquiryNumber,
-        businessId: enq.businessId,
-        targetBusinessName: enq.business?.name || "Target Vendor",
-        targetBusinessLegalName: enq.business?.legalName || enq.business?.name,
-        targetBusinessSlug: enq.business?.slug || "",
-        targetBusinessLogo: enq.business?.logoUrl || null,
-        buyerName: enq.buyerName,
-        name: enq.buyerName,
-        sender_name: enq.buyerName,
-        buyerCompany: enq.buyerCompany || "Enterprise Buyer",
-        company: enq.buyerCompany || "Enterprise Buyer",
-        sender_company: enq.buyerCompany || "Enterprise Buyer",
-        buyerEmail: enq.buyerEmail,
-        email: enq.buyerEmail,
-        sender_email: enq.buyerEmail,
-        buyerPhone: enq.buyerPhone || "N/A",
-        phone: enq.buyerPhone || "N/A",
-        sender_phone: enq.buyerPhone || "N/A",
-        subject: enq.subject,
-        details: enq.details,
-        message: enq.details,
-        date: dateFormatted,
-        status: enq.status,
-        budget: enq.budget || "Commercial RFQ",
-        productId: enq.productId || null,
-        productName: enq.productName || enq.product?.name || null,
-        product: enq.product || null,
-        replyMessage: enq.replyMessage || null,
-        vendor_notes: enq.replyMessage || null,
-        repliedAt: enq.repliedAt || null,
-        createdAt: enq.createdAt,
-      };
-    });
+    const enquiries = result.rows;
+    const totalCount = hasExplicitPagination ? result.count : enquiries.length;
+
+    const formatted = enquiries.map(formatEnquiryRecord);
 
     return sendSuccess(res, {
       enquiries: formatted,
-      totalCount: formatted.length,
+      totalCount,
+      pagination: hasExplicitPagination
+        ? buildPaginationMeta(totalCount, page, limit)
+        : buildPaginationMeta(totalCount, 1, totalCount || limit),
     });
   } catch (error: any) {
     console.error("Error fetching admin enquiries:", error);
@@ -333,40 +360,108 @@ export async function replyAdminEnquiry(req: Request, res: Response) {
 }
 
 /**
- * 5. GET /api/v1/vendor/enquiries
- * Restricted endpoint: Buyer enquiries are managed exclusively by platform administrators.
- * Vendors are prohibited from retrieving or managing buyer inquiries directly.
+ * 5. GET /api/v1/enquiries/vendor (and /api/v1/vendor/enquiries)
+ * Read-only endpoint: Allows the authenticated vendor to view buyer enquiries received for their business.
+ * Vendors cannot update status or reply to enquiries (Admin exclusive).
  */
 export async function getVendorEnquiries(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, "Authentication required", 401, "ERR_UNAUTHORIZED");
+    }
+
+    const business = await BusinessEntity.findOne({ where: { ownerUserId: userId } });
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
+      limit: 10,
+      maxLimit: 100,
+    });
+
+    if (!business) {
+      return sendSuccess(res, {
+        enquiries: [],
+        totalCount: 0,
+        pagination: buildPaginationMeta(0, 1, limit),
+      });
+    }
+
+    const statusFilter =
+      typeof req.query.status === "string" && req.query.status.trim()
+        ? req.query.status.trim()
+        : null;
+
+    const queryOptions = {
+      where: {
+        businessId: business.id,
+        ...(statusFilter ? { status: statusFilter } : {}),
+      },
+      include: [
+        {
+          model: BusinessEntity,
+          as: "business",
+          attributes: ["id", "name", "legalName", "slug", "registrationNo", "logoUrl"],
+        },
+        {
+          model: BusinessProduct,
+          as: "product",
+          attributes: ["id", "name", "hsnCode", "indicativePrice", "currency", "images"],
+          required: false,
+        },
+      ],
+      order: [["createdAt", "DESC"]] as [string, string][],
+    };
+
+    const result = hasExplicitPagination
+      ? await BusinessEnquiry.findAndCountAll({
+          ...queryOptions,
+          distinct: true,
+          col: "id",
+          limit,
+          offset,
+        })
+      : {
+          rows: await BusinessEnquiry.findAll(queryOptions),
+          count: 0,
+        };
+
+    const enquiries = result.rows;
+    const totalCount = hasExplicitPagination ? result.count : enquiries.length;
+    const formatted = enquiries.map(formatEnquiryRecord);
+
+    return sendSuccess(res, {
+      enquiries: formatted,
+      totalCount,
+      pagination: hasExplicitPagination
+        ? buildPaginationMeta(totalCount, page, limit)
+        : buildPaginationMeta(totalCount, 1, totalCount || limit),
+    });
+  } catch (error: any) {
+    console.error("Error fetching vendor enquiries:", error);
+    return sendError(res, error.message || "Failed to fetch enquiries", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+/**
+ * 6. PATCH /api/v1/enquiries/vendor/:id/status
+ * Restricted endpoint: Vendors have read-only access; enquiry status updates are Admin exclusive.
+ */
+export async function updateEnquiryStatus(_req: Request, res: Response) {
   return sendError(
     res,
-    "Access Restricted: Buyer enquiries are managed exclusively by platform administrators.",
+    "Read-Only Access: Vendors can view buyer enquiries, but cannot update enquiry status.",
     403,
     "ERR_FORBIDDEN"
   );
 }
 
 /**
- * 6. PATCH /api/v1/vendor/enquiries/:id/status
- * Restricted endpoint: Lifecycle status of buyer enquiries is managed exclusively by Super Admin.
+ * 7. POST /api/v1/enquiries/vendor/:id/reply
+ * Restricted endpoint: Vendors have read-only access; buyer enquiry replies are Admin exclusive.
  */
-export async function updateEnquiryStatus(req: Request, res: Response) {
+export async function replyEnquiry(_req: Request, res: Response) {
   return sendError(
     res,
-    "Access Restricted: Buyer enquiries are managed exclusively by platform administrators.",
-    403,
-    "ERR_FORBIDDEN"
-  );
-}
-
-/**
- * 7. POST /api/v1/vendor/enquiries/:id/reply
- * Restricted endpoint: Direct buyer enquiry responses are managed exclusively by Super Admin.
- */
-export async function replyEnquiry(req: Request, res: Response) {
-  return sendError(
-    res,
-    "Access Restricted: Buyer enquiries are managed exclusively by platform administrators.",
+    "Read-Only Access: Vendors can view buyer enquiries, but cannot update or respond to enquiries.",
     403,
     "ERR_FORBIDDEN"
   );

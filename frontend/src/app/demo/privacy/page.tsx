@@ -6,10 +6,10 @@ import { createWebPageJsonLd } from '@/lib/schema';
 import { Lock } from 'lucide-react';
 
 export const metadata = createPageMetadata({
-  title: 'Privacy Framework & Data governmen',
+  title: 'Privacy Framework & Data Governance',
   description:
     'BITAINTEL privacy principles, role-based visibility controls, and statutory data protection protocols.',
-  pathname: '/privacy',
+  pathname: '/demo/privacy',
   keywords: ['Data Privacy', 'NDA Security', 'Enterprise Compliance Privacy', 'Corporate Data Governance'],
 });
 
@@ -18,10 +18,10 @@ export default function PrivacyPage() {
     title: 'Privacy Framework & Data Governance | BITAINTEL',
     description:
       'BITAINTEL privacy principles, role-based visibility controls, and statutory data protection protocols.',
-    pathname: '/privacy',
+    pathname: '/demo/privacy',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Privacy Framework', url: '/privacy' },
+      { name: 'Home', url: '/demo' },
+      { name: 'Privacy Framework', url: '/demo/privacy' },
     ],
   });
 

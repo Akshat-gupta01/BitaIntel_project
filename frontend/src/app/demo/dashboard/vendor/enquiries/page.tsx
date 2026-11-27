@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function VendorEnquiriesRedirect() {
-  redirect('/demo/dashboard/vendor');
+  redirect('/demo/dashboard/vendor?tab=enquiries');
 }

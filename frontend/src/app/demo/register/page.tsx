@@ -15,7 +15,7 @@ export const metadata = createPageMetadata({
   title: 'Register Your Business — Verified Network',
   description:
     'Join the BITAINTEL verified enterprise network. Build corporate credibility with statutory cross-checks and a transparent trust index.',
-  pathname: '/register',
+  pathname: '/demo/register',
   keywords: ['Vendor Registration', 'Business Signup', 'Verified Profile Registration', 'B2B Empanelment'],
 });
 
@@ -24,10 +24,10 @@ export default function RegisterPage() {
     title: 'Register Your Business — Verified Network | BITAINTEL',
     description:
       'Join the BITAINTEL verified enterprise network. Build corporate credibility with statutory cross-checks and a transparent trust index.',
-    pathname: '/register',
+    pathname: '/demo/register',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Register', url: '/register' },
+      { name: 'Home', url: '/demo' },
+      { name: 'Register', url: '/demo/register' },
     ],
   });
 

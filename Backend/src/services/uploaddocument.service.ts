@@ -4,6 +4,7 @@ import { createNotification } from "./notification.service.js";
 import {
   BusinessBankingDetails,
   BusinessEntity,
+  BusinessManufacturingCapability,
   BusinessProduct,
   Certification,
   DocumentVault,
@@ -33,6 +34,7 @@ const FRIENDLY_CATEGORY_NAMES: Record<string, string> = {
   tax_registration: "Applicable Tax Registrations (GST & PAN Copies)",
   board_resolution: "Authorized Signatory Board Resolution / Letter",
   manufacturing_licence: "Factory / Manufacturing Operating Licence",
+  regulatory_approval_dmf: "Regulatory Approvals (DMF / USDMF, CEP & Filings)",
   technical_audit: "Technical Audit & Inspection Report",
   statutory_doc: "Statutory Evidence Document",
   bank_proof: "Cancelled Cheque / Bank Statement",
@@ -239,6 +241,37 @@ export async function uploadStatutoryDocument(req: Request, res: Response) {
       checksum,
       metadata
     );
+
+    if (
+      metadata.categoryKey === "manufacturing_licence" ||
+      metadata.categoryKey === "regulatory_approval_dmf"
+    ) {
+      const [mfgCap] = await BusinessManufacturingCapability.findOrCreate({
+        where: { businessId: business.id },
+        defaults: {
+          businessId: business.id,
+          regulatoryApprovalDoc: info.path,
+        },
+      });
+      if (mfgCap && mfgCap.regulatoryApprovalDoc !== info.path) {
+        mfgCap.regulatoryApprovalDoc = info.path;
+        await mfgCap.save();
+      }
+    }
+
+    if (metadata.categoryKey === "technical_audit") {
+      const [mfgCap] = await BusinessManufacturingCapability.findOrCreate({
+        where: { businessId: business.id },
+        defaults: {
+          businessId: business.id,
+          technicalAuditDoc: info.path,
+        },
+      });
+      if (mfgCap && mfgCap.technicalAuditDoc !== info.path) {
+        mfgCap.technicalAuditDoc = info.path;
+        await mfgCap.save();
+      }
+    }
 
     await createNotification({
       userId: req.user?.id,

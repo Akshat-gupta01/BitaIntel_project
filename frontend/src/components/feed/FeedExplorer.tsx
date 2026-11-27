@@ -5,14 +5,13 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Search,
   X,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Image as ImageIcon,
   Film,
   Layers,
   Newspaper,
 } from 'lucide-react';
+import { Pagination } from '@/components/ui/Pagination';
 import {
   feedPosts as fallbackFeedPosts,
   FEED_CATEGORIES,
@@ -176,21 +175,6 @@ export function FeedExplorer() {
   function handleOpenReader(post: FeedPost) {
     setActivePost(post);
   }
-
-  // Generate compact page number list (with ellipsis for larger counts)
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-    const pages: Array<number | 'ellipsis'> = [1];
-    if (safePage > 3) pages.push('ellipsis');
-    const start = Math.max(2, safePage - 1);
-    const end = Math.min(totalPages - 1, safePage + 1);
-    for (let i = start; i <= end; i++) pages.push(i);
-    if (safePage < totalPages - 2) pages.push('ellipsis');
-    pages.push(totalPages);
-    return pages;
-  }, [totalPages, safePage]);
 
   const startItem = filteredPosts.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(filteredPosts.length, safePage * pageSize);
@@ -364,69 +348,16 @@ export function FeedExplorer() {
       )}
 
       {/* Pagination Bar */}
-      {filteredPosts.length > 0 && (
-        <nav
-          aria-label="Feed pagination"
-          className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-3xl border border-slate-200/80 bg-white/85 px-5 py-4 backdrop-blur-xl shadow-2xs"
-        >
-          <p className="text-xs font-medium text-slate-500">
-            Page <strong className="font-bold text-slate-900">{safePage}</strong> of{' '}
-            <strong className="font-bold text-slate-900">{totalPages}</strong>{' '}
-            <span className="text-slate-400">·</span>{' '}
-            <span>{filteredPosts.length} published announcements</span>
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => updatePage(safePage - 1)}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-45 disabled:pointer-events-none transition-colors"
-            >
-              <ChevronLeft className="size-3.5" />
-              <span>Previous</span>
-            </button>
-
-            <div className="flex items-center gap-1 px-1">
-              {pageNumbers.map((item, idx) =>
-                item === 'ellipsis' ? (
-                  <span
-                    key={`ellipsis-${idx}`}
-                    className="px-2 text-xs font-bold text-slate-400 select-none"
-                  >
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => updatePage(item)}
-                    aria-current={item === safePage ? 'page' : undefined}
-                    className={cn(
-                      'grid size-9 place-items-center rounded-full text-xs font-bold transition-all',
-                      item === safePage
-                        ? 'bg-slate-900 !text-white shadow-sm'
-                        : 'border border-slate-200/80 bg-white text-slate-700 hover:bg-slate-100'
-                    )}
-                  >
-                    {item}
-                  </button>
-                )
-              )}
-            </div>
-
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => updatePage(safePage + 1)}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-45 disabled:pointer-events-none transition-colors"
-            >
-              <span>Next</span>
-              <ChevronRight className="size-3.5" />
-            </button>
-          </div>
-        </nav>
-      )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        totalItems={filteredPosts.length}
+        pageSize={pageSize}
+        onPageChange={updatePage}
+        onPageSizeChange={(nextSize) => handleFilterChange(() => setPageSize(nextSize))}
+        pageSizeOptions={[6, 9, 12]}
+        itemLabel="published announcements"
+      />
 
       {/* Full Post Reader Modal */}
       <FeedReaderModal

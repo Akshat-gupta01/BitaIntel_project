@@ -29,7 +29,7 @@ enquiryRouter.get("/admin", authenticate, authorize("enquiries.view"), getAdminE
 enquiryRouter.patch("/admin/:id/status", authenticate, authorize("enquiries.status"), validateEnquiry(updateEnquiryStatusSchema), updateAdminEnquiryStatus);
 enquiryRouter.post("/admin/:id/reply", authenticate, authorize("enquiries.respond"), validateEnquiry(replyEnquirySchema), replyAdminEnquiry);
 
-// ─── 3. Vendor Routes (Access Blocked with 403 Forbidden) ───────────────────
+// ─── 3. Vendor Routes (Read-Only View Allowed; Updates Blocked with 403) ──────
 enquiryRouter.get("/vendor", authenticate, getVendorEnquiries);
 enquiryRouter.patch("/vendor/:id/status", authenticate, validateEnquiry(updateEnquiryStatusSchema), updateEnquiryStatus);
 enquiryRouter.post("/vendor/:id/reply", authenticate, validateEnquiry(replyEnquirySchema), replyEnquiry);

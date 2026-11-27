@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { ContactInquiry } from "../models/ContactInquiry.model.js";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
+import { parsePagination, buildPaginationMeta } from "../utils/pagination.js";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2, "Full name is required"),
@@ -53,11 +54,21 @@ export async function submitContact(req: Request, res: Response) {
 
 export async function getContactInquiries(req: Request, res: Response) {
   try {
-    const inquiries = await ContactInquiry.findAll({
-      order: [["createdAt", "DESC"]],
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
       limit: 100,
+      maxLimit: 200,
     });
-    return sendSuccess(res, { total: inquiries.length, inquiries });
+    const effectiveLimit = hasExplicitPagination ? limit : 100;
+    const { count, rows } = await ContactInquiry.findAndCountAll({
+      order: [["createdAt", "DESC"]],
+      limit: effectiveLimit,
+      offset: hasExplicitPagination ? offset : 0,
+    });
+    return sendSuccess(res, {
+      total: count,
+      inquiries: rows,
+      pagination: buildPaginationMeta(count, page, effectiveLimit),
+    });
   } catch (error) {
     console.error("Get Contact Inquiries Error:", error);
     return sendError(res, "Failed to fetch contact inquiries", 500, "ERR_INTERNAL_SERVER");

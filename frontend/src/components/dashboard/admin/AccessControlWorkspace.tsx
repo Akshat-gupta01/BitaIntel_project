@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  ShieldCheck,
   Plus,
   Save,
   RotateCcw,
@@ -13,10 +12,6 @@ import {
   X,
   Search,
   Filter,
-  Users,
-  Key,
-  CheckCircle2,
-  RefreshCw,
   ShieldAlert,
   Edit2,
   Trash2,
@@ -112,7 +107,7 @@ const DEFAULT_MODULE_CONFIGS: ModuleSlotConfig[] = [
   {
     id: 'Buyer Enquiries',
     name: 'Buyer Enquiries',
-    sub: 'Centralized RFQ leads & buyer proposals (Admin Exclusive)',
+    sub: 'Buyer RFQ leads (Read-Only for Vendors; Admin Exclusive Updates)',
     slots: { view: true, edit: true, approve: true, respond: true },
     customActionLabels: {
       respond: 'Respond to RFQ',
@@ -277,7 +272,6 @@ export function AccessControlWorkspace() {
   const [totalPermissionsCount, setTotalPermissionsCount] = useState<number>(0);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Active permissions for currently selected role
@@ -320,7 +314,6 @@ export function AccessControlWorkspace() {
   // Fetch all RBAC data from backend
   const fetchData = useCallback(async (isInitial = false) => {
     if (isInitial) setIsLoading(true);
-    else setIsRefreshing(true);
 
     try {
       const [fetchedRoles, fetchedCatalog] = await Promise.all([
@@ -423,7 +416,6 @@ export function AccessControlWorkspace() {
       }
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   }, []);
 
@@ -541,8 +533,8 @@ export function AccessControlWorkspace() {
       const next = new Set(prev);
       ACTION_VERBS.forEach((act) => {
         if (mod.slots[act]) {
-          // If Vendor role and Buyer Enquiries, enforce restriction rule
-          if (isVendorRole && mod.vendorRestricted) return;
+          // If Vendor role and Buyer Enquiries, allow view-only and lock mutation verbs
+          if (isVendorRole && mod.vendorRestricted && act !== 'view') return;
           const code = getPermissionCode(mod.id, act);
           if (shouldEnable) {
             next.add(code);
@@ -563,7 +555,7 @@ export function AccessControlWorkspace() {
       filteredModuleConfigs.forEach((mod) => {
         ACTION_VERBS.forEach((act) => {
           if (mod.slots[act]) {
-            if (isVendorRole && mod.vendorRestricted) return;
+            if (isVendorRole && mod.vendorRestricted && act !== 'view') return;
             const code = getPermissionCode(mod.id, act);
             next.add(code);
           }
@@ -788,184 +780,81 @@ export function AccessControlWorkspace() {
   }
 
   return (
-    <div className="space-y-2.5">
-      {/* ===================================================================== */}
-      {/* SECTION A: COMPACT PAGE HEADER                                        */}
-      {/* ===================================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-xl px-4 py-3 sm:px-5 shadow-2xs">
+    <div className="space-y-5">
+      {/* Clean Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl px-6 py-4 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-primary-50 text-primary-700 border border-primary-200">
-              <ShieldCheck className="w-2.5 h-2.5 mr-1 text-primary-600" />
-              Enterprise IAM & Access Control
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+              Access Control &amp; Permissions
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
+              {roles.length} Roles · {totalPermissionsCount || rawCatalog.length} Permissions
             </span>
-            <span className="text-[11px] text-slate-400 font-mono">BITAINTEL v2.4</span>
             {isDirty && !isSuperAdmin && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
-                <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                <AlertCircle className="w-3 h-3 text-amber-600" />
                 Unsaved Changes
               </span>
             )}
           </div>
-          <h1 className="text-base sm:text-lg font-black text-slate-900 mt-0.5 tracking-tight">
-            Access Control & Permissions
-          </h1>
-          <p className="text-[11px] text-slate-500 leading-tight">
-            Manage roles, permissions and access policies across the BitaIntel platform.
+          <p className="text-xs text-slate-500 mt-1">
+            Select a role on the left to review or update its module access permissions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsRoleModalOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold rounded-lg shadow-2xs transition hover:bg-slate-50"
-          >
-            <Plus className="w-3.5 h-3.5 text-primary-600" />
-            <span>Add New Role</span>
-          </button>
-
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => setIsPermModalOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold rounded-lg shadow-2xs transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition hover:bg-slate-50 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-blue-600" />
-            <span>Add New Permission</span>
+            <Plus className="w-3.5 h-3.5 text-slate-500" />
+            <span>Add Permission</span>
           </button>
 
           <button
             type="button"
-            onClick={() => fetchData()}
-            disabled={isRefreshing}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 transition"
+            onClick={() => setIsRoleModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary-600' : 'text-slate-500'}`} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh Data'}</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Role</span>
           </button>
         </div>
       </div>
 
-      {/* ===================================================================== */}
-      {/* SECTION B: COMPACT OVERVIEW STATISTICS (4 METRICS)                   */}
-      {/* ===================================================================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {/* Metric 1: Total Roles */}
-        <div className="py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Total Roles
-            </span>
-            <p className="text-lg font-black text-slate-900 font-mono leading-tight mt-0.5">
-              {roles.length}
-            </p>
-            <p className="text-[10px] text-slate-400 leading-none mt-0.5">Configured in registry</p>
-          </div>
-          <div className="size-8 rounded-lg bg-slate-100 text-slate-700 grid place-items-center shrink-0">
-            <Users className="size-4" />
-          </div>
-        </div>
-
-        {/* Metric 2: Total Permissions */}
-        <div className="py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Total Permissions
-            </span>
-            <p className="text-lg font-black text-slate-900 font-mono leading-tight mt-0.5">
-              {totalPermissionsCount || rawCatalog.length || 33}
-            </p>
-            <p className="text-[10px] text-slate-400 leading-none mt-0.5">Catalogued capabilities</p>
-          </div>
-          <div className="size-8 rounded-lg bg-blue-50 text-blue-700 grid place-items-center shrink-0">
-            <Key className="size-4" />
-          </div>
-        </div>
-
-        {/* Metric 3: Active Role Scope */}
-        <div className="py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0 pr-1.5">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Active Role
-            </span>
-            <p className="text-xs sm:text-sm font-extrabold text-slate-900 truncate leading-tight mt-0.5">
-              {currentRole?.name || 'Super Admin'}
-            </p>
-            <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
-              isSuperAdmin
-                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                : currentRole?.isSystem
-                ? 'bg-slate-100 text-slate-700 border border-slate-200'
-                : 'bg-primary-50 text-primary-700 border border-primary-200'
-            }`}>
-              {isSuperAdmin ? 'Wildcard Protected' : currentRole?.isSystem ? 'System' : 'Custom'}
-            </span>
-          </div>
-          <div className="size-8 rounded-lg bg-slate-900 text-white grid place-items-center shrink-0">
-            <ShieldCheck className="size-4 text-primary-400" />
-          </div>
-        </div>
-
-        {/* Metric 4: Total Permission Assignments */}
-        <div className="py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Assignments
-            </span>
-            <p className="text-lg font-black text-primary-700 font-mono leading-tight mt-0.5">
-              {isSuperAdmin ? 'Full Access (*)' : selectedPermissions.size}
-            </p>
-            <p className="text-[10px] text-slate-400 leading-none mt-0.5">Granted to active role</p>
-          </div>
-          <div className="size-8 rounded-lg bg-primary-50 text-primary-700 grid place-items-center shrink-0">
-            <CheckCircle2 className="size-4" />
-          </div>
-        </div>
-      </div>
-
-      {/* ===================================================================== */}
-      {/* SECTION C & D: ENTERPRISE DUAL-PANE WORKSPACE                         */}
-      {/* ===================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
-        {/* =================================================================== */}
-        {/* LEFT PANEL: ROLE SELECTOR & DIRECTORY (lg:col-span-3, approx 270px) */}
-        {/* =================================================================== */}
-        <div className="lg:col-span-3 bg-white border border-slate-200/80 rounded-xl p-3 shadow-2xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Configured Roles
-              </h2>
-              <p className="text-[10px] text-slate-400">Select role to view policy</p>
-            </div>
-            <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
-              {roles.length}
-            </span>
+      {/* Clean Dual-Pane Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Panel: Roles Directory */}
+        <div className="lg:col-span-4 xl:col-span-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between px-0.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Roles ({roles.length})
+            </h2>
           </div>
 
-          {/* Search Roles Input */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search roles..."
               value={roleSearchQuery}
               onChange={(e) => setRoleSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 transition"
+              className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-400 transition"
             />
             {roleSearchQuery && (
               <button
                 type="button"
                 onClick={() => setRoleSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
-                <X className="size-3" />
+                <X className="size-3.5" />
               </button>
             )}
           </div>
 
-          {/* Role Cards List with Slider */}
-          <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-2 max-h-[540px] overflow-y-auto pr-0.5 custom-scrollbar">
             {filteredRoles.map((role) => {
               const isSelected = role.id === activeRoleId;
               const isRoleSuper = role.code === 'super_admin';
@@ -976,184 +865,172 @@ export function AccessControlWorkspace() {
                 : `${role.permissionsCount || (role.permissionCodes || []).length} perms`;
 
               return (
-                <div
+                <button
                   key={role.id}
+                  type="button"
                   onClick={() => handleSelectRole(role)}
-                  className={`cursor-pointer p-2.5 rounded-lg border transition-all text-left ${
+                  className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-800'
+                      ? 'bg-primary-50/80 border-primary-400 ring-1 ring-primary-200'
+                      : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/70'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-1.5">
-                    <div className="min-w-0">
-                      <p className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                        {role.name}
-                      </p>
-                      <p className={`text-[10px] font-mono truncate ${isSelected ? 'text-slate-300' : 'text-slate-400'}`}>
-                        {role.code}
-                      </p>
-                    </div>
-
-                    <div className="shrink-0 flex items-center gap-1">
-                      {isRoleSuper ? (
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                          isSelected ? 'bg-amber-400/20 text-amber-300' : 'bg-amber-50 text-amber-800 border border-amber-200'
-                        }`}>
-                          <Lock className="w-2.5 h-2.5" /> Locked
-                        </span>
-                      ) : !role.isSystem ? (
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                          isSelected ? 'bg-primary-500/20 text-primary-200' : 'bg-blue-50 text-blue-700'
-                        }`}>
-                          Custom
-                        </span>
-                      ) : null}
-                    </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-sm font-bold truncate ${isSelected ? 'text-primary-950' : 'text-slate-900'}`}>
+                      {role.name}
+                    </span>
+                    {isRoleSuper ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    ) : !role.isSystem ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 shrink-0">
+                        Custom
+                      </span>
+                    ) : null}
                   </div>
 
-                  {role.description && (
-                    <p className={`text-[10px] mt-1 line-clamp-1 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
-                      {role.description}
-                    </p>
-                  )}
+                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+                    {role.description || role.code}
+                  </p>
 
-                  <div className={`flex items-center justify-between text-[9px] mt-1.5 pt-1.5 border-t font-mono ${
-                    isSelected ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'
-                  }`}>
-                    <span>{permCount}</span>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
+                    <span className="font-medium text-slate-700">{permCount}</span>
                     <span>{role.userCount || 0} users</span>
                   </div>
-                </div>
+                </button>
               );
             })}
 
             {filteredRoles.length === 0 && (
-              <div className="text-center py-6 text-slate-400 text-xs">
+              <div className="text-center py-8 text-slate-400 text-xs">
                 No roles match &quot;{roleSearchQuery}&quot;
               </div>
             )}
           </div>
 
-          {/* Role Actions: Edit, Delete for custom roles */}
           {currentRole && !currentRole.isSystem && !isSuperAdmin && (
-            <div className="space-y-1 pt-1 border-t border-slate-100">
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditRoleName(currentRole.name);
-                    setEditRoleDesc(currentRole.description || '');
-                    setIsEditRoleModalOpen(true);
-                  }}
-                  className="py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition"
-                >
-                  <Edit2 className="size-3 text-slate-500" />
-                  <span>Edit Role</span>
-                </button>
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditRoleName(currentRole.name);
+                  setEditRoleDesc(currentRole.description || '');
+                  setIsEditRoleModalOpen(true);
+                }}
+                className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Edit2 className="size-3.5 text-slate-500" />
+                <span>Edit</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteRoleModalOpen(true)}
-                  className="py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition"
-                >
-                  <Trash2 className="size-3 text-rose-500" />
-                  <span>Delete Role</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeleteRoleModalOpen(true)}
+                className="py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Trash2 className="size-3.5 text-rose-500" />
+                <span>Delete</span>
+              </button>
             </div>
           )}
         </div>
 
-        {/* =================================================================== */}
-        {/* RIGHT PANEL: MAIN PERMISSION MATRIX WORKSPACE (lg:col-span-9)        */}
-        {/* =================================================================== */}
-        <div className="lg:col-span-9 bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden flex flex-col">
-          {/* Active Role Policy Header */}
-          <div className="py-2.5 px-4 sm:px-5 border-b border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-slate-900 tracking-tight">
+        {/* Right Panel: Permissions Matrix */}
+        <div className="lg:col-span-8 xl:col-span-9 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
+          {/* Active Role Summary + Primary Save Action */}
+          <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-bold text-slate-900">
                   {currentRole?.name}
                 </h2>
                 {isSuperAdmin && (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                    <Lock className="w-2.5 h-2.5 text-amber-700" />
-                    WILDCARD SUPERADMIN
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-900">
+                    <Lock className="w-3 h-3" /> Full System Access
                   </span>
                 )}
                 {isVendorRole && (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-100 text-blue-900 border border-blue-200">
-                    SELF-SERVICE VENDOR
-                  </span>
-                )}
-                {isDirty && !isSuperAdmin && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
-                    <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
-                    Unsaved Edits
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">
+                    Vendor Self-Service
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1 max-w-2xl">
-                {currentRole?.description || 'Grant or revoke granular API and UI privileges for accounts under this role.'}
+              <p className="text-xs text-slate-500 mt-1">
+                {currentRole?.description || 'Configure module permissions for this role.'}
+                <span className="text-slate-400 mx-1.5">·</span>
+                <span className="font-medium text-slate-700">
+                  {currentRole?.userCount || 0} assigned users
+                </span>
+                <span className="text-slate-400 mx-1.5">·</span>
+                <span className="font-medium text-primary-700">
+                  {isSuperAdmin ? 'All permissions active' : `${selectedPermissions.size} permissions active`}
+                </span>
               </p>
             </div>
 
-            {/* Quick stats on the right of role header */}
-            <div className="flex items-center gap-3.5 shrink-0">
-              <div className="text-right">
-                <span className="block text-base font-black text-slate-900 font-mono leading-none">
-                  {currentRole?.userCount || 0}
-                </span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                  Assigned Users
-                </span>
+            {!isSuperAdmin && (
+              <div className="flex items-center gap-2 shrink-0">
+                {isDirty && (
+                  <button
+                    type="button"
+                    onClick={handleResetChanges}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Discard</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveChanges}
+                  disabled={!isDirty || isSaving}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl transition ${
+                    isDirty
+                      ? 'bg-primary-600 hover:bg-primary-700 text-white shadow-xs cursor-pointer'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>Save Changes</span>
+                </button>
               </div>
-              <div className="text-right border-l border-slate-200 pl-3.5">
-                <span className="block text-base font-black text-primary-700 font-mono leading-none">
-                  {isSuperAdmin ? 'All' : selectedPermissions.size}
-                </span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                  Active Permissions
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* ================================================================= */}
-          {/* SECTION E: STICKY PERMISSION MANAGEMENT TOOLBAR                   */}
-          {/* ================================================================= */}
-          <div className="bg-white border-b border-slate-200/80 px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5 shadow-2xs">
-            {/* Left Controls: Search and Filter */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              {/* Search Permissions */}
+          {/* Clean Search & Filter Bar */}
+          <div className="bg-slate-50/70 border-b border-slate-200/80 px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
               <div className="relative flex-1 max-w-xs">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Filter permissions, codes..."
+                  placeholder="Search module or permission..."
                   value={permSearchQuery}
                   onChange={(e) => setPermSearchQuery(e.target.value)}
-                  className="w-full pl-7 pr-6 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 transition"
+                  className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-400 transition"
                 />
                 {permSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setPermSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
-                    <X className="size-3" />
+                    <X className="size-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* Module Filter Dropdown */}
-              <div className="flex items-center gap-1 shrink-0">
-                <Filter className="w-3 h-3 text-slate-400 hidden sm:block" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Filter className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
                 <select
                   value={moduleFilter}
                   onChange={(e) => setModuleFilter(e.target.value)}
-                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-400"
                 >
                   <option value="all">All Modules ({moduleConfigs.length})</option>
                   {moduleConfigs.map((m) => (
@@ -1165,76 +1042,41 @@ export function AccessControlWorkspace() {
               </div>
             </div>
 
-            {/* Right Controls: Bulk actions, Reset & Save */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {!isSuperAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleSelectAllVisible}
-                    className="px-2 py-1 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition"
-                    title="Enable all visible permission slots"
-                  >
-                    Select All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearAllVisible}
-                    className="px-2 py-1 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition"
-                    title="Clear all visible permission slots"
-                  >
-                    Clear All
-                  </button>
-                </>
-              )}
-
-              {isDirty && !isSuperAdmin && (
+            {!isSuperAdmin && (
+              <div className="flex items-center gap-2 shrink-0 text-xs">
                 <button
                   type="button"
-                  onClick={handleResetChanges}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition"
+                  onClick={handleSelectAllVisible}
+                  className="px-2.5 py-1 font-semibold text-primary-700 hover:bg-primary-50 rounded-lg transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3 text-slate-500" />
-                  <span>Discard</span>
+                  Enable all
                 </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSaveChanges}
-                disabled={!isDirty || isSaving || isSuperAdmin}
-                className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg shadow-2xs transition ${
-                  isDirty && !isSuperAdmin
-                    ? 'bg-primary-600 hover:bg-primary-700 text-white cursor-pointer ring-2 ring-primary-500/30'
-                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
-                }`}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Save className="w-3 h-3" />
-                )}
-                <span>Save Changes</span>
-              </button>
-            </div>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={handleClearAllVisible}
+                  className="px-2.5 py-1 font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* ================================================================= */}
-          {/* MAIN PERMISSION MATRIX TABLE WITH INTERNAL SLIDER                 */}
-          {/* ================================================================= */}
-          <div className="max-h-[460px] overflow-y-auto overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[760px]">
-              <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200/90 shadow-2xs">
-                <tr className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                  <th className="py-2.5 px-4 w-2/6">Module / Resource</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">View</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Create</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Edit</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Delete</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Approve</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Respond</th>
-                  <th className="py-2.5 px-1.5 text-center w-11">Export</th>
-                  <th className="py-2.5 px-4 text-right w-24">Row Policy</th>
+          {/* Permissions Table */}
+          <div className="max-h-[540px] overflow-y-auto overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[740px]">
+              <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
+                <tr className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-6 w-2/6">Module</th>
+                  <th className="py-3 px-2 text-center">View</th>
+                  <th className="py-3 px-2 text-center">Create</th>
+                  <th className="py-3 px-2 text-center">Edit</th>
+                  <th className="py-3 px-2 text-center">Delete</th>
+                  <th className="py-3 px-2 text-center">Approve</th>
+                  <th className="py-3 px-2 text-center">Respond</th>
+                  <th className="py-3 px-2 text-center">Export</th>
+                  {!isSuperAdmin && <th className="py-3 px-6 text-right">Row</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -1249,7 +1091,6 @@ export function AccessControlWorkspace() {
                       (code) => isSuperAdmin || selectedPermissions.has(code)
                     );
 
-                  // Special Business Rule Indicator for Vendor & Buyer Enquiries
                   const isVendorEnquiryBlocked = isVendorRole && mod.vendorRestricted;
 
                   return (
@@ -1257,57 +1098,56 @@ export function AccessControlWorkspace() {
                       key={mod.id}
                       className={`transition-colors ${
                         isVendorEnquiryBlocked
-                          ? 'bg-amber-50/30 hover:bg-amber-50/50'
-                          : 'hover:bg-slate-50/70'
+                          ? 'bg-amber-50/30'
+                          : 'hover:bg-slate-50/80'
                       }`}
                     >
-                      {/* Module Title & Subtitle */}
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-slate-900 text-xs">
+                      <td className="py-3.5 px-6">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 text-[13px]">
                             {mod.name}
                           </span>
                           {isVendorEnquiryBlocked && (
                             <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shrink-0"
-                              title="Buyer enquiries follow the BitaIntel corporate rule: submitted to platform, reviewed & responded by Super Admin only."
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 inline-flex items-center gap-1 shrink-0"
+                              title="Vendors can view enquiries; updates and replies are managed by Admin only."
                             >
-                              <ShieldAlert className="size-2.5 text-amber-700" />
-                              Super Admin Only
+                              <ShieldAlert className="size-3" />
+                              View Only (Admin Updates)
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                           {mod.sub}
                         </p>
                       </td>
 
-                      {/* 7 Action Slot Checkboxes */}
                       {ACTION_VERBS.map((act) => {
                         const isSlotApplicable = mod.slots[act];
                         if (!isSlotApplicable) {
                           return (
                             <td
                               key={act}
-                              className="py-2.5 px-1.5 text-center text-slate-300 font-mono select-none text-xs"
+                              className="py-3.5 px-2 text-center text-slate-300 select-none"
                             >
-                              –
+                              —
                             </td>
                           );
                         }
 
                         const code = getPermissionCode(mod.id, act);
                         const isChecked = isSuperAdmin || selectedPermissions.has(code);
-                        const isBlocked = isSuperAdmin || isVendorEnquiryBlocked;
+                        const isBlocked =
+                          isSuperAdmin || (isVendorEnquiryBlocked && act !== 'view');
                         const customLabel = mod.customActionLabels?.[act];
                         const permDetail = permissionDetailMap[code];
 
                         return (
-                          <td key={act} className="py-2.5 px-1.5 text-center">
-                            <div className="inline-flex flex-col items-center group relative">
+                          <td key={act} className="py-3.5 px-2 text-center">
+                            <div className="inline-flex flex-col items-center">
                               <label
                                 className={`relative inline-flex items-center ${
-                                  isBlocked ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
+                                  isBlocked ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
                                 }`}
                                 title={`${permDetail?.name || code} (${code})`}
                               >
@@ -1321,22 +1161,20 @@ export function AccessControlWorkspace() {
                                   className="sr-only peer"
                                 />
                                 <div
-                                  className={`w-8 h-4.5 rounded-full peer peer-focus:outline-none transition-colors duration-200 ease-in-out ${
-                                    isChecked
-                                      ? 'bg-primary-600'
-                                      : 'bg-slate-200'
+                                  className={`w-9 h-5 rounded-full transition-colors duration-200 ${
+                                    isChecked ? 'bg-primary-600' : 'bg-slate-200'
                                   }`}
                                 >
                                   <div
-                                    className={`w-3.5 h-3.5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out mt-0.5 ml-0.5 ${
-                                      isChecked ? 'translate-x-3.5' : 'translate-x-0'
+                                    className={`w-4 h-4 bg-white rounded-full shadow-xs transform transition-transform duration-200 mt-0.5 ml-0.5 ${
+                                      isChecked ? 'translate-x-4' : 'translate-x-0'
                                     }`}
                                   />
                                 </div>
                               </label>
 
                               {customLabel && (
-                                <span className="text-[8px] font-bold text-slate-400 mt-0.5 block tracking-tight">
+                                <span className="text-[9px] font-medium text-slate-400 mt-0.5 block">
                                   {customLabel}
                                 </span>
                               )}
@@ -1345,34 +1183,30 @@ export function AccessControlWorkspace() {
                         );
                       })}
 
-                      {/* Row Action: Select All / Clear All */}
-                      <td className="py-2.5 px-4 text-right">
-                        {isSuperAdmin ? (
-                          <span className="text-[10px] font-mono text-slate-400 flex items-center justify-end gap-1">
-                            <Lock className="size-2.5 text-slate-400" />
-                            <span>Locked</span>
-                          </span>
-                        ) : isVendorEnquiryBlocked ? (
-                          <span className="text-[9px] font-mono font-bold text-amber-700">
-                            Restricted
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleRow(mod, !isRowAllOn)}
-                            className="text-[10px] font-bold text-primary-700 hover:text-primary-800 transition hover:underline cursor-pointer"
-                          >
-                            {isRowAllOn ? 'Clear row' : 'Select row'}
-                          </button>
-                        )}
-                      </td>
+                      {!isSuperAdmin && (
+                        <td className="py-3.5 px-6 text-right">
+                          {isVendorEnquiryBlocked ? (
+                            <span className="text-[11px] font-medium text-amber-700">
+                              Restricted
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRow(mod, !isRowAllOn)}
+                              className="text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline cursor-pointer"
+                            >
+                              {isRowAllOn ? 'Clear' : 'Allow all'}
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
 
                 {filteredModuleConfigs.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400 text-xs">
+                    <td colSpan={isSuperAdmin ? 8 : 9} className="py-12 text-center text-slate-400 text-xs">
                       No modules or permissions match your filter.
                     </td>
                   </tr>

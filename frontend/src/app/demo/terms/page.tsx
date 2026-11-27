@@ -8,8 +8,8 @@ import { Scale } from 'lucide-react';
 export const metadata = createPageMetadata({
   title: 'Terms of Use & Legal Overview',
   description:
-    'Terms of use, demonstration disclaimer, and commercial limitations of the BITAINTEL platform.',
-  pathname: '/terms',
+    'Terms of use, verification scope, and commercial limitations of the BITAINTEL platform.',
+  pathname: '/demo/terms',
   keywords: ['Terms of Use', 'Legal Disclaimer', 'Regulatory Scope', 'Due Diligence Terms'],
 });
 
@@ -17,11 +17,11 @@ export default function TermsPage() {
   const termsSchema = createWebPageJsonLd({
     title: 'Terms of Use & Legal Overview | BITAINTEL',
     description:
-      'Terms of use, demonstration disclaimer, and commercial limitations of the BITAINTEL platform.',
-    pathname: '/terms',
+      'Terms of use, verification scope, and commercial limitations of the BITAINTEL platform.',
+    pathname: '/demo/terms',
     breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Terms of Use', url: '/terms' },
+      { name: 'Home', url: '/demo' },
+      { name: 'Terms of Use', url: '/demo/terms' },
     ],
   });
 

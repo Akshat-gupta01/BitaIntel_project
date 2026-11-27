@@ -206,14 +206,16 @@ export async function getProfile(req: Request, res: Response) {
       serviceTypes: svc?.serviceTypes || null,
       serviceExpertise: svc?.serviceExpertise || null,
       geographicCoverage: svc?.geographicCoverage || null,
+      serviceEquipment: svc?.serviceEquipment || null,
       deliveryCapacity: svc?.deliveryCapacity || null,
       yearsInBusiness: profile?.yearsInBusiness || null,
       numberOfFacilities: profile?.numberOfFacilities || null,
       annualTurnoverRange: profile?.annualTurnoverRange || null,
       totalWorkforce: profile?.totalWorkforce || null,
-      manufacturingLicenceDoc: mfg?.manufacturingLicenceDoc || null,
       facilityPhotos: mfg?.facilityPhotos || null,
       technicalAuditDoc: mfg?.technicalAuditDoc || null,
+      regulatoryApprovalDoc: mfg?.regulatoryApprovalDoc || null,
+      regulatoryFilingDetails: mfg?.regulatoryFilingDetails || null,
     };
 
     // Step 5: Commercial, Logistics, Banking & Settlement unified packaging
@@ -1571,11 +1573,20 @@ export async function uploadDocument(req: Request, res: Response) {
       address_proof: "Corporate Address Proof / Electricity Bill",
       tax_registration: "Applicable Tax Registrations (GST & PAN Copies)",
       board_resolution: "Authorized Signatory Board Resolution / Letter",
+      manufacturing_licence: "Relevant Manufacturing Licence / Operating Permit",
+      regulatory_approval_dmf: "Regulatory Approvals (DMF / USDMF, CEP & Filings)",
+      technical_audit: "Technical Audit & Plant Inspection Report",
     };
 
+    const isStep3Category =
+      categoryKey.includes("manufactur") ||
+      categoryKey.includes("regulat") ||
+      categoryKey.includes("dmf") ||
+      categoryKey.includes("cep") ||
+      categoryKey === "technical_audit";
     const categoryName =
       req.body.categoryName?.trim() || friendlyMap[categoryKey] || categoryKey;
-    const moduleCode = req.body.moduleCode?.trim() || "Module A";
+    const moduleCode = req.body.moduleCode?.trim() || (isStep3Category ? "Module C" : "Module A");
     const issueDate = req.body.issueDate ? req.body.issueDate.trim() : null;
     const expiryDate = req.body.expiryDate ? req.body.expiryDate.trim() : null;
     const version = req.body.version ? req.body.version.trim() : "v1.0";
@@ -1794,14 +1805,16 @@ export async function saveCapabilities(req: Request, res: Response) {
       serviceTypes,
       serviceExpertise,
       geographicCoverage,
+      serviceEquipment,
       deliveryCapacity,
       yearsInBusiness,
       numberOfFacilities,
       annualTurnoverRange,
       totalWorkforce,
-      manufacturingLicenceDoc,
       facilityPhotos,
       technicalAuditDoc,
+      regulatoryApprovalDoc,
+      regulatoryFilingDetails,
     } = req.body;
 
     const bId = business.id;
@@ -1888,9 +1901,10 @@ export async function saveCapabilities(req: Request, res: Response) {
         hasRdLab: Boolean(hasRdLab),
         hasQcLab: Boolean(hasQcLab),
         offersCustomDevelopment: Boolean(offersCustomDevelopment),
-        manufacturingLicenceDoc: manufacturingLicenceDoc?.trim() || null,
         facilityPhotos: Array.isArray(facilityPhotos) ? facilityPhotos : null,
         technicalAuditDoc: technicalAuditDoc?.trim() || null,
+        regulatoryApprovalDoc: regulatoryApprovalDoc?.trim() || null,
+        regulatoryFilingDetails: regulatoryFilingDetails?.trim() || null,
       },
       transaction,
     });
@@ -1904,9 +1918,10 @@ export async function saveCapabilities(req: Request, res: Response) {
           hasRdLab: Boolean(hasRdLab),
           hasQcLab: Boolean(hasQcLab),
           offersCustomDevelopment: Boolean(offersCustomDevelopment),
-          manufacturingLicenceDoc: manufacturingLicenceDoc?.trim() || null,
-          facilityPhotos: Array.isArray(facilityPhotos) ? facilityPhotos : null,
+          ...(Array.isArray(facilityPhotos) ? { facilityPhotos } : {}),
           technicalAuditDoc: technicalAuditDoc?.trim() || null,
+          regulatoryApprovalDoc: regulatoryApprovalDoc?.trim() || null,
+          regulatoryFilingDetails: regulatoryFilingDetails?.trim() || null,
         },
         { transaction }
       );
@@ -1920,6 +1935,7 @@ export async function saveCapabilities(req: Request, res: Response) {
         serviceTypes: serviceTypes?.trim() || null,
         serviceExpertise: serviceExpertise?.trim() || null,
         geographicCoverage: geographicCoverage?.trim() || null,
+        serviceEquipment: serviceEquipment?.trim() || null,
         deliveryCapacity: deliveryCapacity?.trim() || null,
       },
       transaction,
@@ -1930,6 +1946,7 @@ export async function saveCapabilities(req: Request, res: Response) {
           serviceTypes: serviceTypes?.trim() || null,
           serviceExpertise: serviceExpertise?.trim() || null,
           geographicCoverage: geographicCoverage?.trim() || null,
+          serviceEquipment: serviceEquipment?.trim() || null,
           deliveryCapacity: deliveryCapacity?.trim() || null,
         },
         { transaction }
@@ -1979,9 +1996,14 @@ export async function saveCapabilities(req: Request, res: Response) {
           hasRdLab: Boolean(mfgRecord?.hasRdLab),
           hasQcLab: Boolean(mfgRecord?.hasQcLab),
           offersCustomDevelopment: Boolean(mfgRecord?.offersCustomDevelopment),
+          facilityPhotos: mfgRecord?.facilityPhotos || null,
+          technicalAuditDoc: mfgRecord?.technicalAuditDoc || null,
+          regulatoryApprovalDoc: mfgRecord?.regulatoryApprovalDoc || null,
+          regulatoryFilingDetails: mfgRecord?.regulatoryFilingDetails || null,
           serviceTypes: svcRecord?.serviceTypes || null,
           serviceExpertise: svcRecord?.serviceExpertise || null,
           geographicCoverage: svcRecord?.geographicCoverage || null,
+          serviceEquipment: svcRecord?.serviceEquipment || null,
           deliveryCapacity: svcRecord?.deliveryCapacity || null,
           yearsInBusiness: profileRecord?.yearsInBusiness || null,
           numberOfFacilities: profileRecord?.numberOfFacilities || null,
@@ -2064,12 +2086,14 @@ export async function getCapabilities(req: Request, res: Response) {
       hasRdLab: Boolean(mfg?.hasRdLab),
       hasQcLab: Boolean(mfg?.hasQcLab),
       offersCustomDevelopment: Boolean(mfg?.offersCustomDevelopment),
-      manufacturingLicenceDoc: mfg?.manufacturingLicenceDoc || null,
       facilityPhotos: mfg?.facilityPhotos || null,
       technicalAuditDoc: mfg?.technicalAuditDoc || null,
+      regulatoryApprovalDoc: mfg?.regulatoryApprovalDoc || null,
+      regulatoryFilingDetails: mfg?.regulatoryFilingDetails || null,
       serviceTypes: svc?.serviceTypes || null,
       serviceExpertise: svc?.serviceExpertise || null,
       geographicCoverage: svc?.geographicCoverage || null,
+      serviceEquipment: svc?.serviceEquipment || null,
       deliveryCapacity: svc?.deliveryCapacity || null,
       yearsInBusiness: profile?.yearsInBusiness || null,
       numberOfFacilities: profile?.numberOfFacilities || null,
@@ -2566,6 +2590,7 @@ export async function addCertification(req: Request, res: Response) {
           ? `${createdCerts.length} Certificates added successfully`
           : "Certificate added successfully",
         count: createdCerts.length,
+        ...(!isArrayInput && createdCerts[0] ? { certification: createdCerts[0] } : {}),
         certifications: isArrayInput ? createdCerts : createdCerts[0],
       },
       201

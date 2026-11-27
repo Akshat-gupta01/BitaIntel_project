@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
-import { BusinessEntity, BusinessPersonnel, BusinessProduct } from "../models/index.js";
+import {
+  BusinessEntity,
+  BusinessManufacturingCapability,
+  BusinessPersonnel,
+  BusinessProduct,
+} from "../models/index.js";
 import {
   deleteRequestFiles,
   deleteStoredFile,
@@ -381,4 +386,147 @@ export async function uploadMultipleImagesController(req: Request, res: Response
 
 export async function uploadProductImagesController(req: Request, res: Response) {
   return handleMultipleImages(req, res, "products");
+}
+
+const MAX_FACILITY_IMAGES = 20;
+
+export async function uploadFacilityImagesController(req: Request, res: Response) {
+  const kind: UploadKind = "images";
+  const files = getUploadedFiles(req);
+  if (files.length === 0) {
+    return sendMissingImage(res, "images");
+  }
+
+  const { error: signatureError } = validateFiles(files, kind);
+  if (signatureError) {
+    return sendError(res, signatureError, 400, "ERR_INVALID_FILE");
+  }
+
+  const body = req.body ?? {};
+  const rawMode = String(body.mode ?? "append").toLowerCase();
+  if (rawMode !== "append" && rawMode !== "replace") {
+    deleteRequestFiles(files, kind);
+    return sendError(
+      res,
+      'Invalid mode. Use "append" or "replace".',
+      400,
+      "ERR_INVALID_MODE"
+    );
+  }
+  const mode = rawMode as ProductImageMode;
+
+  const details = files.map((file) => describeUploadedFile(req, file, kind));
+  const paths = details.map((file) => file.path);
+
+  try {
+    const business = await findBusinessForRequest(req);
+    if (!business) {
+      deleteRequestFiles(files, kind);
+      return sendError(res, "Business profile not found", 404, "ERR_BUSINESS_NOT_FOUND");
+    }
+
+    const [mfg] = await BusinessManufacturingCapability.findOrCreate({
+      where: { businessId: business.id },
+      defaults: {
+        businessId: business.id,
+        hasRdLab: false,
+        hasQcLab: false,
+        offersCustomDevelopment: false,
+        facilityPhotos: [],
+      },
+    });
+
+    const previousPhotos = Array.isArray(mfg.facilityPhotos) ? mfg.facilityPhotos : [];
+    const nextPhotos =
+      mode === "replace" ? uniqueStrings(paths) : uniqueStrings([...previousPhotos, ...paths]);
+
+    if (nextPhotos.length > MAX_FACILITY_IMAGES) {
+      deleteRequestFiles(files, kind);
+      return sendError(
+        res,
+        `A business can have at most ${MAX_FACILITY_IMAGES} facility photos.`,
+        400,
+        "ERR_IMAGE_LIMIT"
+      );
+    }
+
+    mfg.facilityPhotos = nextPhotos;
+    await mfg.save();
+
+    if (mode === "replace") {
+      deleteReplacedFiles(previousPhotos, nextPhotos);
+    }
+
+    return sendSuccess(
+      res,
+      {
+        message: `${files.length} facility image(s) uploaded and saved successfully`,
+        count: files.length,
+        paths,
+        urls: details.map((file) => file.url),
+        files: details,
+        facilityPhotos: nextPhotos,
+        manufacturingCapability: mfg,
+      },
+      201
+    );
+  } catch (error) {
+    deleteRequestFiles(files, kind);
+    console.error("Upload Facility Images Error:", error);
+    return sendError(res, "Failed to upload facility images", 500, "ERR_INTERNAL_SERVER");
+  }
+}
+
+export async function updateFacilityPhotosController(req: Request, res: Response) {
+  try {
+    const business = await findBusinessForRequest(req);
+    if (!business) {
+      return sendError(res, "Business profile not found", 404, "ERR_BUSINESS_NOT_FOUND");
+    }
+
+    const incoming = req.body?.facilityPhotos;
+    if (!Array.isArray(incoming) || !incoming.every((p) => typeof p === "string")) {
+      return sendError(
+        res,
+        "facilityPhotos must be an array of image paths",
+        400,
+        "ERR_VALIDATION"
+      );
+    }
+
+    const nextPhotos = uniqueStrings(incoming.map((p) => p.trim()).filter(Boolean));
+    if (nextPhotos.length > MAX_FACILITY_IMAGES) {
+      return sendError(
+        res,
+        `A business can have at most ${MAX_FACILITY_IMAGES} facility photos.`,
+        400,
+        "ERR_IMAGE_LIMIT"
+      );
+    }
+
+    const [mfg] = await BusinessManufacturingCapability.findOrCreate({
+      where: { businessId: business.id },
+      defaults: {
+        businessId: business.id,
+        hasRdLab: false,
+        hasQcLab: false,
+        offersCustomDevelopment: false,
+        facilityPhotos: nextPhotos,
+      },
+    });
+
+    const previousPhotos = Array.isArray(mfg.facilityPhotos) ? mfg.facilityPhotos : [];
+    mfg.facilityPhotos = nextPhotos;
+    await mfg.save();
+
+    deleteReplacedFiles(previousPhotos, nextPhotos);
+
+    return sendSuccess(res, {
+      message: "Facility photos updated successfully",
+      facilityPhotos: nextPhotos,
+    });
+  } catch (error) {
+    console.error("Update Facility Photos Error:", error);
+    return sendError(res, "Failed to update facility photos", 500, "ERR_INTERNAL_SERVER");
+  }
 }

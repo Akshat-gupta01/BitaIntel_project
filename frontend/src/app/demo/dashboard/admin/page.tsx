@@ -30,6 +30,8 @@ import { VendorAuditModal } from '@/components/dashboard/admin/VendorAuditModal'
 import { AccessControlWorkspace } from '@/components/dashboard/admin/AccessControlWorkspace';
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
+import { Pagination } from '@/components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import { toast } from 'sonner';
 import {
   ShieldCheck,
@@ -114,7 +116,7 @@ function mapBackendAuditLog(item: BackendAuditLogItem): AuditLogEntry {
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
 
   // Sidebar navigation state
   const [activeTab, setActiveTab] = useState<AdminNavTab>('overview');
@@ -521,6 +523,28 @@ export default function AdminDashboardPage() {
     });
   }, [allVendors, searchQuery, statusFilter, badgeFilter]);
 
+  const vendorDisplayList = useMemo(() => {
+    if (activeTab === 'verified') return verifiedVendorsList;
+    if (activeTab === 'action_required') return actionRequiredVendorsList;
+    if (activeTab === 'rejected') return rejectedVendorsList;
+    if (activeTab === 'expiring') return expiringVendorsList;
+    return filteredVendors;
+  }, [
+    activeTab,
+    verifiedVendorsList,
+    actionRequiredVendorsList,
+    rejectedVendorsList,
+    expiringVendorsList,
+    filteredVendors,
+  ]);
+
+  const queuePagination = usePagination(filteredQueue, 10);
+  const vendorDirectoryPagination = usePagination(vendorDisplayList, 10);
+  const enquiryLedgerPagination = usePagination(filteredTableEnquiries, 10);
+  const auditLogsPagination = usePagination(auditLogs, 10);
+  const complaintsPagination = usePagination(complaints, 10);
+  const contactTicketsPagination = usePagination(contactInquiries, 10);
+
   // Open audit modal for a vendor
   const handleOpenAudit = (vendor: AdminQueueItem) => {
     setSelectedVendorId(vendor.id);
@@ -685,17 +709,37 @@ export default function AdminDashboardPage() {
    
   ];
 
-  // Access Control mutates roles/permissions and requires `users.edit` on the
-  // backend. Verification officers are allowed into this desk, but not into RBAC.
-  const canManageAccessControl = ['admin', 'super_admin'].includes(
-    (user?.systemRole || '').toLowerCase()
-  );
-  const visibleNavItems = sidebarNavItems.filter(
-    (item) => canManageAccessControl || item.id !== 'access_control'
-  );
+  const TAB_REQUIRED_PERMISSION: Partial<Record<AdminNavTab, string>> = {
+    vendors: 'vendors.view',
+    queue: 'verification.view',
+    verified: 'verification.view',
+    action_required: 'verification.view',
+    rejected: 'verification.view',
+    expiring: 'verification.view',
+    enquiries: 'enquiries.view',
+    enquiry_records: 'enquiries.view',
+    contact_tickets: 'enquiries.view',
+    logs: 'audit_logs.view',
+    complaints: 'complaints.view',
+    scoring: 'scoring.view',
+    access_control: 'users.edit',
+  };
+
+  const visibleNavItems = sidebarNavItems.filter((item) => {
+    const reqPerm = TAB_REQUIRED_PERMISSION[item.id];
+    return reqPerm ? hasPermission(reqPerm) : true;
+  });
 
   return (
-    <RoleGuard allowedRoles={['admin', 'super_admin', 'verification_officer']}>
+    <RoleGuard
+      allowedRoles={[
+        'admin',
+        'super_admin',
+        'verification_officer',
+        'quality_auditor',
+        'support_team',
+      ]}
+    >
       <div className="h-screen w-full bg-slate-50 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900">
         {/* ========================================================================= */}
         {/* 1. LEFT SIDEBAR NAVIGATION (Synchronized with Admin Workflows)            */}
@@ -1146,7 +1190,7 @@ export default function AdminDashboardPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredQueue.map((vendor) => (
+                        {queuePagination.paginatedItems.map((vendor) => (
                           <tr key={vendor.id} className="hover:bg-slate-50/70 transition-colors">
                             <td className="py-4 px-6">
                               <p className="font-bold text-slate-900 text-sm">{vendor.legalName || vendor.name}</p>
@@ -1224,6 +1268,20 @@ export default function AdminDashboardPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {!isLoading && filteredQueue.length > 0 && (
+                  <div className="p-4 border-t border-slate-100 bg-slate-50/40">
+                    <Pagination
+                      page={queuePagination.page}
+                      totalPages={queuePagination.totalPages}
+                      totalItems={queuePagination.totalItems}
+                      pageSize={queuePagination.pageSize}
+                      onPageChange={queuePagination.setPage}
+                      onPageSizeChange={queuePagination.setPageSize}
+                      itemLabel="pending vendors"
+                    />
                   </div>
                 )}
               </div>
@@ -1599,7 +1657,7 @@ export default function AdminDashboardPage() {
                             </td>
                           </tr>
                         ) : (
-                          filteredTableEnquiries.map((enq) => {
+                          enquiryLedgerPagination.paginatedItems.map((enq) => {
                             const isResponded = enq.status === 'Responded' || !!enq.replyMessage;
                             return (
                               <tr key={enq.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1749,6 +1807,20 @@ export default function AdminDashboardPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {filteredTableEnquiries.length > 0 && (
+                    <div className="p-4 border-t border-slate-100 bg-slate-50/40">
+                      <Pagination
+                        page={enquiryLedgerPagination.page}
+                        totalPages={enquiryLedgerPagination.totalPages}
+                        totalItems={enquiryLedgerPagination.totalItems}
+                        pageSize={enquiryLedgerPagination.pageSize}
+                        onPageChange={enquiryLedgerPagination.setPage}
+                        onPageSizeChange={enquiryLedgerPagination.setPageSize}
+                        itemLabel="enquiries"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. Detail & Response Modal */}
@@ -1960,38 +2032,19 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                {(() => {
-                  const displayList =
-                    activeTab === 'verified'
-                      ? verifiedVendorsList
-                      : activeTab === 'action_required'
-                      ? actionRequiredVendorsList
-                      : activeTab === 'rejected'
-                      ? rejectedVendorsList
-                      : activeTab === 'expiring'
-                      ? expiringVendorsList
-                      : filteredVendors;
-
-                  if (isLoading) {
-                    return (
-                      <div className="py-20 text-center">
-                        <div className="size-8 border-3 border-primary-200 border-t-primary-800 rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-xs font-bold text-slate-600">Loading vendor records...</p>
-                      </div>
-                    );
-                  }
-
-                  if (displayList.length === 0) {
-                    return (
-                      <div className="py-16 text-center text-slate-500">
-                        <Building2 className="size-10 text-slate-300 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-800">No Vendors Found</p>
-                        <p className="text-xs text-slate-500 mt-1">No supplier records match the selected category.</p>
-                      </div>
-                    );
-                  }
-
-                  return (
+                {isLoading ? (
+                  <div className="py-20 text-center">
+                    <div className="size-8 border-3 border-primary-200 border-t-primary-800 rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-xs font-bold text-slate-600">Loading vendor records...</p>
+                  </div>
+                ) : vendorDisplayList.length === 0 ? (
+                  <div className="py-16 text-center text-slate-500">
+                    <Building2 className="size-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-800">No Vendors Found</p>
+                    <p className="text-xs text-slate-500 mt-1">No supplier records match the selected category.</p>
+                  </div>
+                ) : (
+                  <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
@@ -2005,7 +2058,7 @@ export default function AdminDashboardPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {displayList.map((vendor) => {
+                          {vendorDirectoryPagination.paginatedItems.map((vendor) => {
                             const isVerified =
                               vendor.verificationStatus === 'Verified' ||
                               vendor.verificationStatus === 'approved' ||
@@ -2088,8 +2141,20 @@ export default function AdminDashboardPage() {
                         </tbody>
                       </table>
                     </div>
-                  );
-                })()}
+
+                    <div className="p-4 border-t border-slate-100 bg-slate-50/40">
+                      <Pagination
+                        page={vendorDirectoryPagination.page}
+                        totalPages={vendorDirectoryPagination.totalPages}
+                        totalItems={vendorDirectoryPagination.totalItems}
+                        pageSize={vendorDirectoryPagination.pageSize}
+                        onPageChange={vendorDirectoryPagination.setPage}
+                        onPageSizeChange={vendorDirectoryPagination.setPageSize}
+                        itemLabel="vendors"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -2185,7 +2250,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="divide-y divide-slate-100 text-xs">
-                  {auditLogs.map((log) => (
+                  {auditLogsPagination.paginatedItems.map((log) => (
                     <div key={log.id} className="py-4 space-y-2">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -2214,6 +2279,16 @@ export default function AdminDashboardPage() {
                     </div>
                   ))}
                 </div>
+
+                <Pagination
+                  page={auditLogsPagination.page}
+                  totalPages={auditLogsPagination.totalPages}
+                  totalItems={auditLogsPagination.totalItems}
+                  pageSize={auditLogsPagination.pageSize}
+                  onPageChange={auditLogsPagination.setPage}
+                  onPageSizeChange={auditLogsPagination.setPageSize}
+                  itemLabel="audit logs"
+                />
               </div>
             )}
 
@@ -2256,7 +2331,7 @@ export default function AdminDashboardPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {complaints.map((cmp) => (
+                        {complaintsPagination.paginatedItems.map((cmp) => (
                           <tr key={cmp.id} className="hover:bg-slate-50/70">
                             <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
                               {cmp.complaintNumber}
@@ -2316,6 +2391,18 @@ export default function AdminDashboardPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+
+                {complaints.length > 0 && (
+                  <Pagination
+                    page={complaintsPagination.page}
+                    totalPages={complaintsPagination.totalPages}
+                    totalItems={complaintsPagination.totalItems}
+                    pageSize={complaintsPagination.pageSize}
+                    onPageChange={complaintsPagination.setPage}
+                    onPageSizeChange={complaintsPagination.setPageSize}
+                    itemLabel="complaints"
+                  />
                 )}
 
                 {selectedComplaint && (
@@ -2435,7 +2522,7 @@ export default function AdminDashboardPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {contactInquiries.map((tkt) => (
+                        {contactTicketsPagination.paginatedItems.map((tkt) => (
                           <tr key={tkt.id} className="hover:bg-slate-50/70">
                             <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
                               {tkt.ticketId}
@@ -2507,6 +2594,18 @@ export default function AdminDashboardPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+
+                {contactInquiries.length > 0 && (
+                  <Pagination
+                    page={contactTicketsPagination.page}
+                    totalPages={contactTicketsPagination.totalPages}
+                    totalItems={contactTicketsPagination.totalItems}
+                    pageSize={contactTicketsPagination.pageSize}
+                    onPageChange={contactTicketsPagination.setPage}
+                    onPageSizeChange={contactTicketsPagination.setPageSize}
+                    itemLabel="tickets"
+                  />
                 )}
               </div>
             )}

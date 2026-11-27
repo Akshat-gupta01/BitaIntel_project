@@ -22,21 +22,49 @@ import {
   Camera,
   RefreshCw,
   X,
+  Image as ImageIcon,
+  Pencil,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CompanyProfileTabProps {
   data: Step2CompanyData;
   onUpdate: (updated: Partial<Step2CompanyData>) => void;
+  facilityPhotos?: string[];
+  onFacilityPhotosChange?: (photos: string[]) => void;
 }
 
-export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
+export function CompanyProfileTab({
+  data,
+  onUpdate,
+  facilityPhotos = [],
+  onFacilityPhotosChange,
+}: CompanyProfileTabProps) {
   const [showAddFacility, setShowAddFacility] = useState(false);
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
   const [facName, setFacName] = useState('');
-  const [facType, setFacType] = useState<'Manufacturing Plant' | 'Branch Office' | 'Warehouse / R&D Unit'>('Manufacturing Plant');
+  const [facType, setFacType] = useState<FacilityAddress['type']>('Manufacturing Plant');
   const [facCity, setFacCity] = useState('');
   const [facState, setFacState] = useState('');
   const [facAddress, setFacAddress] = useState('');
+  const [facilityImages, setFacilityImages] = useState<string[]>([]);
+  const [uploadingFacilityImages, setUploadingFacilityImages] = useState(false);
+  const facilityImageInputRef = useRef<HTMLInputElement>(null);
+  const facilityPreviewMapRef = useRef<Map<string, File>>(new Map());
+  const normalizedFacilityPhotos = vendorService.normalizeImageArray(facilityPhotos);
+
+  React.useEffect(() => {
+    const urlMap = facilityPreviewMapRef.current;
+    return () => {
+      for (const url of urlMap.keys()) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      }
+      urlMap.clear();
+    };
+  }, []);
 
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [pName, setPName] = useState('');
@@ -99,6 +127,94 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
     }
   }
 
+  function handleFacilityImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds 10 MB limit`);
+        continue;
+      }
+      if (!file.type.startsWith('image/')) {
+        toast.error(`"${file.name}" is not a valid image format`);
+        continue;
+      }
+      fileList.push(file);
+    }
+
+    if (fileList.length === 0) return;
+
+    const existingKeys = new Set(
+      Array.from(facilityPreviewMapRef.current.values()).map((f) => `${f.name}-${f.size}`)
+    );
+    const uniqueFiles = fileList.filter((f) => !existingKeys.has(`${f.name}-${f.size}`));
+    if (uniqueFiles.length === 0) {
+      toast.info('Selected image(s) already added');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    const newPreviewUrls: string[] = [];
+    for (const file of uniqueFiles) {
+      const previewUrl = URL.createObjectURL(file);
+      facilityPreviewMapRef.current.set(previewUrl, file);
+      newPreviewUrls.push(previewUrl);
+    }
+
+    setFacilityImages((prev) => [...prev, ...newPreviewUrls]);
+    if (facilityImageInputRef.current) facilityImageInputRef.current.value = '';
+  }
+
+  function handleRemoveFacilityImage(indexToRemove: number) {
+    const urlToRemove = facilityImages[indexToRemove];
+    if (urlToRemove) {
+      facilityPreviewMapRef.current.delete(urlToRemove);
+      if (urlToRemove.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(urlToRemove);
+        } catch {}
+      }
+    }
+    setFacilityImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  }
+
+  function handleCloseFacilityDrawer() {
+    for (const url of facilityPreviewMapRef.current.keys()) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }
+    facilityPreviewMapRef.current.clear();
+    setFacilityImages([]);
+    setEditingFacilityId(null);
+    setFacName('');
+    setFacCity('');
+    setFacState('');
+    setFacAddress('');
+    setFacType('Manufacturing Plant');
+    setShowAddFacility(false);
+  }
+
+  function handleStartEditFacility(fac: FacilityAddress) {
+    for (const url of facilityPreviewMapRef.current.keys()) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }
+    facilityPreviewMapRef.current.clear();
+    setFacilityImages([]);
+    setEditingFacilityId(fac.id);
+    setFacType(fac.type);
+    setFacName(fac.facilityName);
+    setFacAddress(fac.addressLine || '');
+    setFacCity(fac.city);
+    setFacState(fac.state);
+    setShowAddFacility(true);
+  }
+
   async function handleSaveFacility() {
     if (!facName || !facCity || !facState) {
       toast.error('Please enter facility name, city, and state.');
@@ -116,18 +232,62 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
       isOwned: true,
     };
 
-    let assignedId = `FAC-${Date.now()}`;
-    try {
-      const res = await vendorService.addFacility(payload);
-      if (res?.data?.facility?.id) {
-        assignedId = String(res.data.facility.id);
+    const isEditing = Boolean(editingFacilityId);
+    let assignedId = editingFacilityId || `FAC-${Date.now()}`;
+
+    if (isEditing && editingFacilityId) {
+      if (/^\d+$/.test(editingFacilityId)) {
+        try {
+          await vendorService.updateFacility(editingFacilityId, payload);
+          toast.success('Facility Updated in Database', {
+            description: `${payload.facilityName} updated in business_facilities table.`,
+          });
+        } catch (err: any) {
+          console.warn('Backend facility update note:', err?.message);
+          toast.info('Facility updated locally.');
+        }
+      } else {
+        toast.info('Facility updated.');
       }
-      toast.success('Facility Saved to Database', {
-        description: `${payload.facilityName} stored in business_facilities table.`,
-      });
-    } catch (err: any) {
-      console.warn('Backend facility save note:', err.message);
-      toast.info('Facility added locally.');
+    } else {
+      try {
+        const res = await vendorService.addFacility(payload);
+        if (res?.data?.facility?.id) {
+          assignedId = String(res.data.facility.id);
+        }
+        toast.success('Facility Saved to Database', {
+          description: `${payload.facilityName} stored in business_facilities table.`,
+        });
+      } catch (err: any) {
+        console.warn('Backend facility save note:', err.message);
+        toast.info('Facility added locally.');
+      }
+    }
+
+    const pendingFiles = facilityImages
+      .map((url) => ({ url, file: facilityPreviewMapRef.current.get(url) }))
+      .filter((e): e is { url: string; file: File } => Boolean(e.file));
+
+    if (pendingFiles.length > 0) {
+      setUploadingFacilityImages(true);
+      try {
+        const uploadRes = await vendorService.uploadFacilityImages(
+          pendingFiles.map((e) => e.file),
+          'append'
+        );
+        const returnedPaths: string[] =
+          uploadRes?.data?.facilityPhotos || uploadRes?.data?.paths || [];
+        if (returnedPaths.length > 0) {
+          onFacilityPhotosChange?.(returnedPaths);
+          toast.success(`${pendingFiles.length} Facility Photo(s) Uploaded`);
+        }
+      } catch (err: any) {
+        toast.error('Failed to upload facility photos', {
+          description: err?.response?.data?.message || err?.message || 'Upload failed',
+        });
+      } finally {
+        setUploadingFacilityImages(false);
+      }
     }
 
     const newFac: FacilityAddress = {
@@ -141,12 +301,14 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
       country: 'India',
       isOwned: true,
     };
-    onUpdate({ facilities: [...data.facilities, newFac] });
-    setShowAddFacility(false);
-    setFacName('');
-    setFacCity('');
-    setFacState('');
-    setFacAddress('');
+    if (isEditing && editingFacilityId) {
+      onUpdate({
+        facilities: data.facilities.map((f) => (f.id === editingFacilityId ? newFac : f)),
+      });
+    } else {
+      onUpdate({ facilities: [...data.facilities, newFac] });
+    }
+    handleCloseFacilityDrawer();
   }
 
   async function handleRemoveFacility(id: string) {
@@ -481,17 +643,28 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setShowAddFacility(!showAddFacility)}
+            onClick={() => (showAddFacility ? handleCloseFacilityDrawer() : setShowAddFacility(true))}
             className="text-xs border-primary-300 text-primary-700 hover:bg-primary-50 font-bold"
           >
             <Plus className="size-3.5 mr-1" /> Add Plant / Office
           </Button>
         </div>
 
-        {/* Add Facility Drawer */}
+        {/* Add / Edit Facility Drawer */}
         {showAddFacility && (
           <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
-            <h4 className="text-xs font-bold text-primary-950">Add Plant or Operational Office</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-primary-950">
+                {editingFacilityId ? 'Edit Plant or Operational Office' : 'Add Plant or Operational Office'}
+              </h4>
+              <button
+                type="button"
+                onClick={handleCloseFacilityDrawer}
+                className="text-xs text-slate-500 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="text-[11px] font-semibold text-slate-700 block mb-1">Facility Type</label>
@@ -503,6 +676,7 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
                   <option value="Manufacturing Plant">Manufacturing Plant</option>
                   <option value="Branch Office">Branch Office</option>
                   <option value="Warehouse / R&D Unit">Warehouse / R&D Unit</option>
+                  <option value="Corporate Office">Corporate Office</option>
                 </select>
               </div>
               <div className="sm:col-span-2">
@@ -538,16 +712,112 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
                   className="text-xs"
                 />
               </div>
-              <div className="flex justify-end items-center">
+            </div>
+
+            {/* Facility / Plant Photos Upload */}
+            <div className="rounded-lg bg-white p-3 border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                    <ImageIcon className="size-3.5 text-primary-600" />
+                    Facility / Plant Photos ({normalizedFacilityPhotos.length + facilityImages.length})
+                  </span>
+                  <p className="text-[10px] text-slate-400">
+                    Upload multiple plant, machinery, or facility images (JPG, PNG, WEBP, up to 10 MB each).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={uploadingFacilityImages}
+                  onClick={() => facilityImageInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 px-2.5 py-1 rounded-md cursor-pointer shrink-0"
+                >
+                  <UploadCloud className="size-3.5 text-primary-600" /> Select Photos
+                </button>
+              </div>
+              <input
+                ref={facilityImageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFacilityImageSelect}
+              />
+              {(normalizedFacilityPhotos.length > 0 || facilityImages.length > 0) && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {normalizedFacilityPhotos.map((savedUrl, idx) => (
+                    <div
+                      key={`saved-${idx}`}
+                      className="relative group size-14 rounded-lg border border-emerald-200 bg-slate-50 overflow-hidden shrink-0"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={vendorService.getFullImageUrl(savedUrl)}
+                        alt={`Saved Facility Photo ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          const fallbackUrl = savedUrl.startsWith('/') ? savedUrl : `/${savedUrl}`;
+                          if (!target.src.endsWith(fallbackUrl)) target.src = fallbackUrl;
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {facilityImages.map((imgUrl, idx) => (
+                    <div
+                      key={`new-${idx}`}
+                      className="relative group size-14 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden shrink-0"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={vendorService.getFullImageUrl(imgUrl)}
+                        alt={`New Facility Photo ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFacilityImage(idx)}
+                        className="absolute top-0.5 right-0.5 bg-rose-600/90 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Remove Photo"
+                      >
+                        <Trash2 className="size-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              {editingFacilityId && (
                 <Button
                   type="button"
+                  variant="outline"
                   size="sm"
-                  onClick={handleSaveFacility}
-                  className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
+                  onClick={handleCloseFacilityDrawer}
+                  className="text-xs"
                 >
-                  Save Facility
+                  Cancel Edit
                 </Button>
-              </div>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                disabled={uploadingFacilityImages}
+                onClick={handleSaveFacility}
+                className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
+              >
+                {uploadingFacilityImages ? (
+                  <>
+                    <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                    Uploading...
+                  </>
+                ) : editingFacilityId ? (
+                  'Update Facility'
+                ) : (
+                  'Save Facility'
+                )}
+              </Button>
             </div>
           </div>
         )}
@@ -565,30 +835,82 @@ export function CompanyProfileTab({ data, onUpdate }: CompanyProfileTabProps) {
           </div>
 
           {/* Additional facilities */}
-          {data.facilities.map((fac) => (
-            <div
-              key={fac.id}
-              className="rounded-xl border border-slate-200 bg-white p-4 flex items-start justify-between gap-3 shadow-2xs"
-            >
-              <div>
-                <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                  {fac.type}
-                </span>
-                <h4 className="text-xs font-bold text-slate-900 mt-1">{fac.facilityName}</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {fac.addressLine ? `${fac.addressLine}, ` : ''}
-                  {fac.city}, {fac.state} {fac.pincode}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleRemoveFacility(fac.id)}
-                className="text-slate-400 hover:text-rose-600 p-1"
+          {data.facilities.map((fac) => {
+            const showPhotosOnCard =
+              normalizedFacilityPhotos.length > 0 &&
+              (fac.type.toLowerCase().includes('manufacturing') ||
+                !data.facilities.some((f) => f.type.toLowerCase().includes('manufacturing')));
+
+            return (
+              <div
+                key={fac.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 flex items-start justify-between gap-3 shadow-2xs"
               >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                    {fac.type}
+                  </span>
+                  <h4 className="text-xs font-bold text-slate-900 mt-1">{fac.facilityName}</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {fac.addressLine ? `${fac.addressLine}, ` : ''}
+                    {fac.city}, {fac.state} {fac.pincode}
+                  </p>
+                  {showPhotosOnCard && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {normalizedFacilityPhotos.map((photoPath, idx) => (
+                        <div
+                          key={`${fac.id}-dash-photo-${idx}`}
+                          className="relative group size-11 rounded-md border border-slate-200 bg-slate-50 overflow-hidden shrink-0 shadow-2xs"
+                        >
+                          <a
+                            href={vendorService.getFullImageUrl(photoPath)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="View Facility Photo"
+                            className="block w-full h-full"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={vendorService.getFullImageUrl(photoPath)}
+                              alt={`${fac.facilityName} Photo ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                const fallbackUrl = photoPath.startsWith('/')
+                                  ? photoPath
+                                  : `/${photoPath}`;
+                                if (!target.src.endsWith(fallbackUrl)) {
+                                  target.src = fallbackUrl;
+                                }
+                              }}
+                            />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditFacility(fac)}
+                    className="text-slate-400 hover:text-primary-700 hover:bg-primary-50 p-1 rounded cursor-pointer"
+                    title="Edit Facility / Upload Photos"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFacility(fac.id)}
+                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded cursor-pointer"
+                    title="Delete Facility"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
 

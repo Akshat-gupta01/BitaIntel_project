@@ -18,6 +18,7 @@ export class BusinessServiceCapability extends Model<
   declare serviceTypes: CreationOptional<string | null>;
   declare serviceExpertise: CreationOptional<string | null>;
   declare geographicCoverage: CreationOptional<string | null>;
+  declare serviceEquipment: CreationOptional<string | null>;
   declare deliveryCapacity: CreationOptional<string | null>;
 
   declare createdAt: CreationOptional<Date>;
@@ -52,6 +53,10 @@ BusinessServiceCapability.init(
     },
     geographicCoverage: {
       type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    serviceEquipment: {
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     deliveryCapacity: {

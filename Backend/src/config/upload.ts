@@ -157,7 +157,7 @@ export function deleteRequestFiles(
  * the file as well so an HTML/script file cannot be renamed to .jpg/.pdf.
  */
 const FILE_SIGNATURES: Record<string, (header: Buffer) => boolean> = {
-  "application/pdf": (header) => header.subarray(0, 4).toString("ascii") === "%PDF",
+  "application/pdf": (header) => header.subarray(0, 64).toString("ascii").includes("%PDF"),
   "image/jpeg": (header) =>
     header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff,
   "image/jpg": (header) =>
@@ -193,7 +193,7 @@ export function validateUploadedFile(
   try {
     const descriptor = fs.openSync(file.path, "r");
     try {
-      const header = Buffer.alloc(16);
+      const header = Buffer.alloc(64);
       fs.readSync(descriptor, header, 0, header.length, 0);
       if (!signatureCheck(header)) {
         deleteStoredFile(kind, file.path);

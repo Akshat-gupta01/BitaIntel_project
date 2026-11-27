@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { ProductCatalogItem } from '@/types/vendorRegistration';
 import { CURRENCIES } from '@/config/vendorMasterData';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Dialog } from '@/components/ui/Dialog';
+import { Pagination } from '@/components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import { BulkProductImportModal } from './BulkProductImportModal';
 import { ProductThumbnail } from '@/components/shared/ProductThumbnail';
 import * as vendorService from '@services/vendor.service';
@@ -37,6 +39,8 @@ interface CatalogProductsTabProps {
 
 export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProductsTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'Product' | 'Service'>('all');
+  const [docFilter, setDocFilter] = useState<'all' | 'with_docs' | 'missing_docs'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductCatalogItem | null>(null);
@@ -84,12 +88,26 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.hsnCode.includes(searchQuery)
-  );
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesQuery =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        (p.brand || '').toLowerCase().includes(q) ||
+        (p.hsnCode || '').toLowerCase().includes(q) ||
+        (p.specifications || '').toLowerCase().includes(q);
+      const matchesType = typeFilter === 'all' || (p.type || 'Product') === typeFilter;
+      const hasAllKeyDocs = Boolean(p.technicalDataSheetDoc && p.coaDoc);
+      const matchesDocs =
+        docFilter === 'all' ||
+        (docFilter === 'with_docs' && hasAllKeyDocs) ||
+        (docFilter === 'missing_docs' && !hasAllKeyDocs);
+      return matchesQuery && matchesType && matchesDocs;
+    });
+  }, [products, searchQuery, typeFilter, docFilter]);
+
+  const productsPagination = usePagination(filteredProducts, 10);
 
   function resetNewItem() {
     setNewItem({
@@ -467,18 +485,49 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
             </div>
           </div>
 
-          {/* Search + Action Buttons: Buttons stay locked side-by-side without orphaned wrapping */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
-            <div className="relative flex-1 sm:w-56 sm:flex-none">
+          {/* Search + Filters + Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px] sm:w-48 sm:flex-none">
               <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  productsPagination.resetPage();
+                }}
                 placeholder="Search products or HSN..."
                 className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all bg-white"
               />
             </div>
+
+            <select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value as 'all' | 'Product' | 'Service');
+                productsPagination.resetPage();
+              }}
+              aria-label="Filter by item type"
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="all">All Types</option>
+              <option value="Product">Products</option>
+              <option value="Service">Services</option>
+            </select>
+
+            <select
+              value={docFilter}
+              onChange={(e) => {
+                setDocFilter(e.target.value as 'all' | 'with_docs' | 'missing_docs');
+                productsPagination.resetPage();
+              }}
+              aria-label="Filter by technical documents"
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="all">All Docs</option>
+              <option value="with_docs">TDS &amp; COA Ready</option>
+              <option value="missing_docs">Missing TDS/COA</option>
+            </select>
 
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -523,7 +572,7 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((p) => {
+                productsPagination.paginatedItems.map((p) => {
                   const hasTds = Boolean(p.technicalDataSheetDoc);
                   const hasCoa = Boolean(p.coaDoc);
 
@@ -659,6 +708,17 @@ export function CatalogProductsTab({ products, onUpdateProducts }: CatalogProduc
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={productsPagination.page}
+          totalPages={productsPagination.totalPages}
+          totalItems={productsPagination.totalItems}
+          pageSize={productsPagination.pageSize}
+          onPageChange={productsPagination.setPage}
+          onPageSizeChange={productsPagination.setPageSize}
+          pageSizeOptions={[10, 20, 50]}
+          itemLabel="products"
+        />
       </Card>
 
       {/* ─────────────────────────────────────────────────────────────────── */}

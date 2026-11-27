@@ -30,6 +30,7 @@ export interface AuthUser {
   avatarInitials: string;
   role: UserRole;
   systemRole?: string;
+  permissions?: string[];
   registrationProgress: number; // 25, 50, 75, 100%
   completedSteps: number[]; // [1], [1, 2], etc.
   submissionDate?: string;
@@ -155,8 +156,14 @@ export const PERSONA_PROFILES: Record<UserRole, AuthUser | null> = {
 };
 
 export function mapBackendUser(bUser: any): AuthUser {
-  const isSuperAdmin = bUser?.role === 'super_admin';
-  const isAdmin = bUser?.role === 'admin' || bUser?.role === 'verification_officer';
+  const normalizedSystemRole = String(bUser?.role || '').trim().toLowerCase();
+  const isSuperAdmin = normalizedSystemRole === 'super_admin';
+  const isAdmin = [
+    'admin',
+    'verification_officer',
+    'quality_auditor',
+    'support_team',
+  ].includes(normalizedSystemRole);
 
   // Backend emits mixed-case statuses ("Verified", "registered", "Under Review"),
   // so normalize before mapping the lifecycle role.
@@ -221,6 +228,7 @@ export function mapBackendUser(bUser: any): AuthUser {
       (bUser?.companyName?.charAt(0) || 'B').toUpperCase(),
     role: mappedRole,
     systemRole: bUser?.role || 'vendor',
+    permissions: Array.isArray(bUser?.permissions) ? bUser.permissions.map(String) : undefined,
     registrationProgress,
     completedSteps,
     tierPlan: isAdmin || isSuperAdmin ? 'Premium' : 'Standard',
@@ -235,6 +243,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isMounted: boolean;
+  hasPermission: (permission: string) => boolean;
   login: (email: string, password?: string) => Promise<AuthUser | null>;
   loginWithOtp: (identifier: string, otp: string) => Promise<AuthUser | null>;
   logout: () => Promise<void>;
@@ -451,6 +460,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const hasPermission = (permission: string): boolean => {
+    if (!user) return false;
+    const sysRole = String(user.systemRole || user.role || '').toLowerCase();
+    if (sysRole === 'super_admin' || user.role === 'super_admin') return true;
+    if (Array.isArray(user.permissions)) {
+      return user.permissions.includes(permission) || user.permissions.includes('*');
+    }
+
+    // Fallback defaults for demo/offline personas when backend permissions are absent
+    if (sysRole === 'admin') return true;
+    if (sysRole === 'verification_officer') {
+      return [
+        'dashboard.view',
+        'vendors.view',
+        'verification.view',
+        'verification.edit',
+        'verification.approve',
+        'documents.view',
+        'documents.edit',
+        'documents.approve',
+        'complaints.view',
+        'complaints.edit',
+        'audit_logs.view',
+        'scoring.view',
+        'scoring.approve',
+        'reports.view',
+      ].includes(permission);
+    }
+    if (sysRole === 'quality_auditor') {
+      return [
+        'dashboard.view',
+        'vendors.view',
+        'verification.view',
+        'verification.edit',
+        'documents.view',
+        'documents.edit',
+        'complaints.view',
+        'complaints.edit',
+        'audit_logs.view',
+        'scoring.view',
+      ].includes(permission);
+    }
+    if (sysRole === 'support_team') {
+      return [
+        'dashboard.view',
+        'vendors.view',
+        'complaints.view',
+        'complaints.create',
+        'audit_logs.view',
+        'reports.view',
+      ].includes(permission);
+    }
+    return [
+      'vendors.edit',
+      'documents.view',
+      'documents.create',
+      'products.view',
+      'products.create',
+      'products.edit',
+      'products.delete',
+      'complaints.create',
+    ].includes(permission);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -459,6 +532,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user && role !== 'visitor',
         isLoading,
         isMounted: mounted,
+        hasPermission,
         login,
         loginWithOtp,
         logout,

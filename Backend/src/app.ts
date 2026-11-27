@@ -52,7 +52,7 @@ app.use(
 
 // Allow uploaded files to be embedded in iframes from frontend origin
 app.use("/uploads", (req, res, next) => {
-  res.setHeader("X-Frame-Options", "ALLOWALL");
+  res.removeHeader("X-Frame-Options");
   res.setHeader("Content-Security-Policy", "frame-ancestors *");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -115,6 +115,7 @@ app.get("/uploads/documents/:filename", (req, res, next) => {
 
   const isPdf = filePath.toLowerCase().endsWith(".pdf");
   res.setHeader("Content-Type", isPdf ? "application/pdf" : "application/octet-stream");
+  res.setHeader("Content-Disposition", "inline");
   return res.sendFile(filePath);
 });
 

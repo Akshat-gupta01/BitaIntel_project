@@ -24,6 +24,8 @@ import {
   User,
   Camera,
   RefreshCw,
+  Image as ImageIcon,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as vendorService from '@services/vendor.service';
@@ -33,9 +35,18 @@ interface Step2CompanyProps {
   onChange: (updated: Partial<Step2CompanyData>) => void;
   onNext: () => void;
   onPrev: () => void;
+  facilityPhotos?: string[];
+  onFacilityPhotosChange?: (photos: string[]) => void;
 }
 
-export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyProps) {
+export function Step2Company({
+  data,
+  onChange,
+  onNext,
+  onPrev,
+  facilityPhotos = [],
+  onFacilityPhotosChange,
+}: Step2CompanyProps) {
   const [isSaving, setIsSaving] = useState(false);
   // Facility / Plant adding state
   const [newFacility, setNewFacility] = useState<Partial<FacilityAddress>>({
@@ -49,6 +60,24 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     isOwned: true,
   });
   const [showAddFacility, setShowAddFacility] = useState(false);
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
+  const [facilityImages, setFacilityImages] = useState<string[]>([]);
+  const [uploadingFacilityImages, setUploadingFacilityImages] = useState(false);
+  const facilityImageInputRef = useRef<HTMLInputElement>(null);
+  const facilityPreviewMapRef = useRef<Map<string, File>>(new Map());
+  const normalizedFacilityPhotos = vendorService.normalizeImageArray(facilityPhotos);
+
+  useEffect(() => {
+    const urlMap = facilityPreviewMapRef.current;
+    return () => {
+      for (const url of urlMap.keys()) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      }
+      urlMap.clear();
+    };
+  }, []);
 
   // Key Personnel profile adding state
   const [newPerson, setNewPerson] = useState<Partial<KeyPersonnel>>({
@@ -60,6 +89,8 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     isAuthorizedSignatory: false,
   });
   const [showAddPerson, setShowAddPerson] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
+  const [isSavingPerson, setIsSavingPerson] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const personPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -193,7 +224,127 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     }
   }
 
-  // Add Facility & save to MySQL business_facilities
+  function handleFacilityImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds 10 MB limit`);
+        continue;
+      }
+      if (!file.type.startsWith('image/')) {
+        toast.error(`"${file.name}" is not a valid image format`);
+        continue;
+      }
+      fileList.push(file);
+    }
+
+    if (fileList.length === 0) return;
+
+    const existingKeys = new Set(
+      Array.from(facilityPreviewMapRef.current.values()).map((f) => `${f.name}-${f.size}`)
+    );
+    const uniqueFiles = fileList.filter((f) => !existingKeys.has(`${f.name}-${f.size}`));
+
+    if (uniqueFiles.length === 0) {
+      toast.info('Selected image(s) already added');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    const newPreviewUrls: string[] = [];
+    for (const file of uniqueFiles) {
+      const previewUrl = URL.createObjectURL(file);
+      facilityPreviewMapRef.current.set(previewUrl, file);
+      newPreviewUrls.push(previewUrl);
+    }
+
+    setFacilityImages((prev) => [...prev, ...newPreviewUrls]);
+    if (facilityImageInputRef.current) {
+      facilityImageInputRef.current.value = '';
+    }
+
+    toast.success(`${uniqueFiles.length} photo(s) selected`, {
+      description: 'Preview is visible below. Click "Save Facility" to upload and save.',
+    });
+  }
+
+  function handleRemoveFacilityImage(indexToRemove: number) {
+    const urlToRemove = facilityImages[indexToRemove];
+    if (urlToRemove) {
+      if (facilityPreviewMapRef.current.has(urlToRemove)) {
+        facilityPreviewMapRef.current.delete(urlToRemove);
+      }
+      if (urlToRemove.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(urlToRemove);
+        } catch {}
+      }
+    }
+    setFacilityImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    toast.info('Image removed');
+  }
+
+  function handleCloseAddFacility() {
+    for (const url of facilityPreviewMapRef.current.keys()) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }
+    facilityPreviewMapRef.current.clear();
+    setFacilityImages([]);
+    setEditingFacilityId(null);
+    setNewFacility({
+      type: 'Manufacturing Plant',
+      facilityName: '',
+      addressLine: '',
+      city: '',
+      state: '',
+      pincode: '',
+      country: 'India',
+      isOwned: true,
+    });
+    setShowAddFacility(false);
+  }
+
+  function handleStartEditFacility(fac: FacilityAddress) {
+    for (const url of facilityPreviewMapRef.current.keys()) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }
+    facilityPreviewMapRef.current.clear();
+    setFacilityImages([]);
+    setEditingFacilityId(fac.id);
+    setNewFacility({
+      type: fac.type,
+      facilityName: fac.facilityName,
+      addressLine: fac.addressLine,
+      city: fac.city,
+      state: fac.state,
+      pincode: fac.pincode,
+      country: fac.country || 'India',
+      isOwned: fac.isOwned ?? true,
+    });
+    setShowAddFacility(true);
+  }
+
+  async function handleRemoveSavedFacilityPhoto(photoToRemove: string) {
+    const nextPhotos = normalizedFacilityPhotos.filter((p) => p !== photoToRemove);
+    onFacilityPhotosChange?.(nextPhotos);
+    try {
+      await vendorService.updateFacilityPhotos(nextPhotos);
+      toast.success('Facility photo removed from database');
+    } catch (err: any) {
+      console.warn('Facility photo update note:', err?.message);
+      toast.info('Facility photo removed');
+    }
+  }
+
+  // Add or Update Facility & save to MySQL business_facilities (+ upload facilityPhotos to business_manufacturing_capabilities)
   async function handleAddFacility() {
     if (!newFacility.facilityName || !newFacility.city || !newFacility.state) {
       toast.error('Please enter facility name, city, and state.');
@@ -211,18 +362,79 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       isOwned: newFacility.isOwned ?? true,
     };
 
-    let assignedId = `FAC-${Date.now()}`;
-    try {
-      const res = await vendorService.addFacility(payload);
-      if (res?.data?.facility?.id) {
-        assignedId = String(res.data.facility.id);
+    const isEditing = Boolean(editingFacilityId);
+    let assignedId = editingFacilityId || `FAC-${Date.now()}`;
+
+    if (isEditing && editingFacilityId) {
+      if (/^\d+$/.test(editingFacilityId)) {
+        try {
+          await vendorService.updateFacility(editingFacilityId, payload);
+          toast.success('Facility Updated in Database', {
+            description: `${payload.facilityName} updated in business_facilities table.`,
+          });
+        } catch (err: any) {
+          console.warn('Backend facility update note:', err?.message);
+          toast.info('Facility Updated Locally', { description: payload.facilityName });
+        }
+      } else {
+        toast.info('Facility Updated', { description: payload.facilityName });
       }
-      toast.success('Facility Saved to Database', {
-        description: `${payload.facilityName} stored in business_facilities table.`,
-      });
-    } catch (err: any) {
-      console.warn('Backend facility save note:', err.message);
-      toast.info('Facility Added Locally', { description: payload.facilityName });
+    } else {
+      try {
+        const res = await vendorService.addFacility(payload);
+        if (res?.data?.facility?.id) {
+          assignedId = String(res.data.facility.id);
+        }
+        toast.success('Facility Saved to Database', {
+          description: `${payload.facilityName} stored in business_facilities table.`,
+        });
+      } catch (err: any) {
+        console.warn('Backend facility save note:', err.message);
+        toast.info('Facility Added Locally', { description: payload.facilityName });
+      }
+    }
+
+    const pendingEntries: Array<{ url: string; file: File }> = [];
+    for (const url of facilityImages) {
+      const file = facilityPreviewMapRef.current.get(url);
+      if (file) {
+        pendingEntries.push({ url, file });
+      }
+    }
+
+    if (pendingEntries.length > 0) {
+      setUploadingFacilityImages(true);
+      try {
+        const filesToUpload = pendingEntries.map((entry) => entry.file);
+        const uploadRes = await vendorService.uploadFacilityImages(filesToUpload, 'append');
+        const returnedPaths: string[] =
+          uploadRes?.data?.facilityPhotos ||
+          uploadRes?.data?.paths ||
+          uploadRes?.data?.urls ||
+          (uploadRes?.data?.path ? [uploadRes.data.path] : []) ||
+          [];
+
+        if (returnedPaths.length > 0) {
+          onFacilityPhotosChange?.(returnedPaths);
+          toast.success(`${filesToUpload.length} Facility Photo(s) Uploaded`, {
+            description: 'Saved in business_manufacturing_capabilities.facilityPhotos.',
+          });
+        }
+      } catch (err: any) {
+        console.error('Facility image upload error:', err);
+        toast.error('Failed to upload facility photos to server', {
+          description: err?.response?.data?.message || err?.message || 'Please check backend server connection.',
+        });
+      } finally {
+        for (const { url } of pendingEntries) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {}
+          facilityPreviewMapRef.current.delete(url);
+        }
+        setFacilityImages([]);
+        setUploadingFacilityImages(false);
+      }
     }
 
     const item: FacilityAddress = {
@@ -236,7 +448,14 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       country: newFacility.country || 'India',
       isOwned: newFacility.isOwned ?? true,
     };
-    onChange({ facilities: [...data.facilities, item] });
+    if (isEditing && editingFacilityId) {
+      onChange({
+        facilities: data.facilities.map((f) => (f.id === editingFacilityId ? item : f)),
+      });
+    } else {
+      onChange({ facilities: [...data.facilities, item] });
+    }
+    setEditingFacilityId(null);
     setNewFacility({
       type: 'Manufacturing Plant',
       facilityName: '',
@@ -247,6 +466,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       country: 'India',
       isOwned: true,
     });
+    setFacilityImages([]);
     setShowAddFacility(false);
   }
 
@@ -298,8 +518,39 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
     }
   }
 
-  // Add Key Personnel & save to MySQL business_personnel
+  function handleClosePersonForm() {
+    setShowAddPerson(false);
+    setEditingPersonId(null);
+    setNewPerson({
+      name: '',
+      designation: 'Marketing Head',
+      email: '',
+      mobile: '',
+      photoUrl: undefined,
+      isAuthorizedSignatory: false,
+    });
+    setPhotoUploadError(null);
+    if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
+  }
+
+  function handleStartEditPerson(person: KeyPersonnel) {
+    setEditingPersonId(person.id);
+    setNewPerson({
+      name: person.name,
+      designation: person.designation || 'Marketing Head',
+      email: person.email,
+      mobile: person.mobile,
+      photoUrl: person.photoUrl,
+      isAuthorizedSignatory: Boolean(person.isAuthorizedSignatory),
+    });
+    setPhotoUploadError(null);
+    if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
+    setShowAddPerson(true);
+  }
+
+  // Add or Update Key Personnel & save to MySQL business_personnel
   async function handleAddPerson() {
+    if (isSavingPerson) return;
     if (!newPerson.name || !newPerson.designation || !newPerson.email) {
       toast.error('Please enter personnel name, designation, and official email.');
       return;
@@ -311,51 +562,78 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
       return;
     }
 
-    const payload: vendorService.PersonnelPayload = {
-      name: newPerson.name.trim(),
-      designation: newPerson.designation.trim(),
-      email: newPerson.email.trim(),
-      mobile: newPerson.mobile ? newPerson.mobile.trim() : '0000000000',
-      photoUrl: newPerson.photoUrl || undefined,
-      isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
-    };
-
-    let assignedId = `KP-${Date.now()}`;
+    setIsSavingPerson(true);
     try {
-      const res = await vendorService.addPersonnel(payload);
-      if (res?.data?.personnel?.id) {
-        assignedId = String(res.data.personnel.id);
-      }
-      toast.success('Key Executive Saved to Database', {
-        description: `${payload.name} (${payload.designation}) stored in business_personnel table.`,
-      });
-    } catch (err: any) {
-      console.warn('Backend personnel save note:', err.message);
-      toast.info('Executive Profile Added Locally', {
-        description: `${payload.name} (${payload.designation})`,
-      });
-    }
+      const payload: vendorService.PersonnelPayload = {
+        name: newPerson.name.trim(),
+        designation: newPerson.designation.trim(),
+        email: newPerson.email.trim(),
+        mobile: newPerson.mobile ? newPerson.mobile.trim() : '0000000000',
+        photoUrl: newPerson.photoUrl || undefined,
+        isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
+      };
 
-    const item: KeyPersonnel = {
-      id: assignedId,
-      name: newPerson.name || '',
-      designation: newPerson.designation || '',
-      email: newPerson.email || '',
-      mobile: newPerson.mobile || '',
-      photoUrl: newPerson.photoUrl || undefined,
-      isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
-    };
-    onChange({ keyPersonnel: [...data.keyPersonnel, item] });
-    setNewPerson({
-      name: '',
-      designation: 'Marketing Head',
-      email: '',
-      mobile: '',
-      photoUrl: undefined,
-      isAuthorizedSignatory: false,
-    });
-    setPhotoUploadError(null);
-    setShowAddPerson(false);
+      const isEditing = Boolean(editingPersonId);
+      let assignedId = editingPersonId || `KP-${Date.now()}`;
+
+      if (isEditing && editingPersonId) {
+        if (/^\d+$/.test(editingPersonId)) {
+          try {
+            await vendorService.updatePersonnel(editingPersonId, {
+              ...payload,
+              photoUrl: newPerson.photoUrl || null,
+            });
+            toast.success('Key Executive Updated in Database', {
+              description: `${payload.name} (${payload.designation}) updated in business_personnel table.`,
+            });
+          } catch (err: any) {
+            console.warn('Backend personnel update note:', err?.message);
+            toast.info('Executive Profile Updated Locally', {
+              description: `${payload.name} (${payload.designation})`,
+            });
+          }
+        } else {
+          toast.info('Executive Profile Updated', {
+            description: `${payload.name} (${payload.designation})`,
+          });
+        }
+      } else {
+        try {
+          const res = await vendorService.addPersonnel(payload);
+          if (res?.data?.personnel?.id) {
+            assignedId = String(res.data.personnel.id);
+          }
+          toast.success('Key Executive Saved to Database', {
+            description: `${payload.name} (${payload.designation}) stored in business_personnel table.`,
+          });
+        } catch (err: any) {
+          console.warn('Backend personnel save note:', err.message);
+          toast.info('Executive Profile Added Locally', {
+            description: `${payload.name} (${payload.designation})`,
+          });
+        }
+      }
+
+      const item: KeyPersonnel = {
+        id: assignedId,
+        name: newPerson.name.trim(),
+        designation: newPerson.designation.trim(),
+        email: newPerson.email.trim(),
+        mobile: newPerson.mobile ? newPerson.mobile.trim() : '',
+        photoUrl: newPerson.photoUrl || undefined,
+        isAuthorizedSignatory: !!newPerson.isAuthorizedSignatory,
+      };
+      if (isEditing && editingPersonId) {
+        onChange({
+          keyPersonnel: data.keyPersonnel.map((p) => (p.id === editingPersonId ? item : p)),
+        });
+      } else {
+        onChange({ keyPersonnel: [...data.keyPersonnel, item] });
+      }
+      handleClosePersonForm();
+    } finally {
+      setIsSavingPerson(false);
+    }
   }
 
   async function handleRemovePerson(id: string) {
@@ -826,10 +1104,14 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
         {showAddFacility && (
           <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-primary-900">Add Manufacturing Plant / Branch Office</h4>
+              <h4 className="text-xs font-bold text-primary-900">
+                {editingFacilityId
+                  ? 'Edit Manufacturing Plant / Branch Office'
+                  : 'Add Manufacturing Plant / Branch Office'}
+              </h4>
               <button
                 type="button"
-                onClick={() => setShowAddFacility(false)}
+                onClick={handleCloseAddFacility}
                 className="text-xs text-slate-500 hover:text-slate-800"
               >
                 Cancel
@@ -893,14 +1175,127 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
               </div>
             </div>
 
+            {/* Facility / Plant Photos & Visual Gallery */}
+            <div className="rounded-lg bg-white p-3.5 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                    <ImageIcon className="size-3.5 text-primary-600" />
+                    Facility / Plant Photos ({normalizedFacilityPhotos.length + facilityImages.length})
+                  </span>
+                  <p className="text-[10px] text-slate-400">
+                    Upload multiple plant, machinery, or facility images (JPG, PNG, WEBP, up to 10 MB each).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={uploadingFacilityImages}
+                  onClick={() => facilityImageInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 px-3 py-1.5 rounded-md cursor-pointer transition-colors shadow-xs shrink-0 disabled:opacity-50"
+                >
+                  <UploadCloud className="size-3.5 text-primary-600" /> Select Photos
+                </button>
+              </div>
+
+              <input
+                ref={facilityImageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFacilityImageSelect}
+              />
+
+              {normalizedFacilityPhotos.length > 0 || facilityImages.length > 0 ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
+                  {normalizedFacilityPhotos.map((savedUrl, idx) => (
+                    <div
+                      key={`saved-${idx}`}
+                      className="relative group rounded-lg border border-emerald-200 bg-slate-50 overflow-hidden aspect-square flex items-center justify-center shadow-xs"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={vendorService.getFullImageUrl(savedUrl)}
+                        alt={`Saved Facility Photo ${idx + 1}`}
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          const fallbackUrl = savedUrl.startsWith('/') ? savedUrl : `/${savedUrl}`;
+                          if (!target.src.endsWith(fallbackUrl)) {
+                            target.src = fallbackUrl;
+                          }
+                        }}
+                      />
+                      <span className="absolute top-1 left-1 bg-emerald-700/90 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                        Saved
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSavedFacilityPhoto(savedUrl)}
+                        className="absolute top-1 right-1 bg-rose-600/90 hover:bg-rose-700 text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-xs"
+                        title="Remove Saved Photo"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {facilityImages.map((imgUrl, idx) => (
+                    <div
+                      key={`new-${idx}`}
+                      className="relative group rounded-lg border border-slate-200 bg-slate-50 overflow-hidden aspect-square flex items-center justify-center shadow-xs"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={vendorService.getFullImageUrl(imgUrl)}
+                        alt={`Facility Preview ${idx + 1}`}
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      />
+                      {normalizedFacilityPhotos.length === 0 && idx === 0 && (
+                        <span className="absolute top-1 left-1 bg-primary-700/90 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                          Primary
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFacilityImage(idx)}
+                        className="absolute top-1 right-1 bg-rose-600/90 hover:bg-rose-700 text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-xs"
+                        title="Remove Photo"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  onClick={() => facilityImageInputRef.current?.click()}
+                  className="border border-dashed border-slate-300 rounded-lg p-3.5 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/40 transition-colors"
+                >
+                  <p className="text-[11px] font-medium text-slate-600">
+                    Click to select multiple manufacturing plant / facility photos
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end pt-2">
               <Button
                 type="button"
                 size="sm"
+                disabled={uploadingFacilityImages}
                 onClick={handleAddFacility}
                 className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
               >
-                Save Facility
+                {uploadingFacilityImages ? (
+                  <>
+                    <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                    Uploading Photos...
+                  </>
+                ) : editingFacilityId ? (
+                  'Update Facility'
+                ) : (
+                  'Save Facility'
+                )}
               </Button>
             </div>
           </div>
@@ -914,7 +1309,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
                 key={fac.id}
                 className="rounded-lg border border-slate-200 bg-white p-3.5 flex items-start justify-between gap-3 shadow-xs"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <span className="inline-block text-[10px] font-bold text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200 mb-1">
                     {fac.type}
                   </span>
@@ -923,14 +1318,65 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
                     {fac.addressLine ? `${fac.addressLine}, ` : ''}
                     {fac.city}, {fac.state} {fac.pincode}
                   </p>
+                  {normalizedFacilityPhotos.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {normalizedFacilityPhotos.map((photoPath, idx) => (
+                        <div
+                          key={`${fac.id}-photo-${idx}`}
+                          className="relative group size-10 rounded-md border border-slate-200 bg-slate-50 overflow-hidden shrink-0 shadow-2xs"
+                        >
+                          <a
+                            href={vendorService.getFullImageUrl(photoPath)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="View Facility Photo"
+                            className="block w-full h-full"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={vendorService.getFullImageUrl(photoPath)}
+                              alt={`${fac.facilityName} Photo ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                const fallbackUrl = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+                                if (!target.src.endsWith(fallbackUrl)) {
+                                  target.src = fallbackUrl;
+                                }
+                              }}
+                            />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSavedFacilityPhoto(photoPath)}
+                            className="absolute top-0.5 right-0.5 bg-rose-600/90 hover:bg-rose-700 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Remove Photo"
+                          >
+                            <Trash2 className="size-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFacility(fac.id)}
-                  className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditFacility(fac)}
+                    className="text-slate-400 hover:text-primary-700 hover:bg-primary-50 transition-colors p-1 rounded cursor-pointer"
+                    title="Edit Facility / Upload Photos"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFacility(fac.id)}
+                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded cursor-pointer"
+                    title="Delete Facility"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -948,7 +1394,7 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setShowAddPerson(!showAddPerson)}
+            onClick={() => (showAddPerson ? handleClosePersonForm() : setShowAddPerson(true))}
             className="text-xs border-primary-300 text-primary-700 hover:bg-primary-50"
           >
             <UserPlus className="size-3.5 mr-1" /> Add Person Profile
@@ -958,15 +1404,12 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
         {showAddPerson && (
           <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-primary-900">Add Executive / Head Profile</h4>
+              <h4 className="text-xs font-bold text-primary-900">
+                {editingPersonId ? 'Edit Executive / Head Profile' : 'Add Executive / Head Profile'}
+              </h4>
               <button
                 type="button"
-                onClick={() => {
-                  setShowAddPerson(false);
-                  setNewPerson((prev) => ({ ...prev, photoUrl: undefined }));
-                  setPhotoUploadError(null);
-                  if (personPhotoInputRef.current) personPhotoInputRef.current.value = '';
-                }}
+                onClick={handleClosePersonForm}
                 className="text-xs text-slate-500 hover:text-slate-800"
               >
                 Cancel
@@ -1109,14 +1552,26 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end gap-2 pt-2">
+              {editingPersonId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClosePersonForm}
+                  className="text-xs"
+                >
+                  Cancel Edit
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
+                disabled={isSavingPerson || isUploadingPhoto}
                 onClick={handleAddPerson}
                 className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
               >
-                Add Executive Profile
+                {editingPersonId ? 'Update Executive Profile' : 'Add Executive Profile'}
               </Button>
             </div>
           </div>
@@ -1155,13 +1610,24 @@ export function Step2Company({ data, onChange, onNext, onPrev }: Step2CompanyPro
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemovePerson(person.id)}
-                  className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditPerson(person)}
+                    className="text-slate-400 hover:text-primary-700 hover:bg-primary-50 transition-colors p-1 rounded cursor-pointer"
+                    title="Edit Executive Profile"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePerson(person.id)}
+                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded cursor-pointer"
+                    title="Delete Executive Profile"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

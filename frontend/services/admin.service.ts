@@ -21,6 +21,7 @@ export interface PersonnelItem {
   email?: string;
   mobile?: string;
   din?: string;
+  photoUrl?: string | null;
   isAuthorizedSignatory?: boolean;
   [key: string]: unknown;
 }
@@ -55,7 +56,9 @@ export interface ProductItem {
   hsnCode?: string;
   price?: number | string;
   tdsDoc?: string;
+  technicalDataSheetDoc?: string;
   catalogDoc?: string;
+  catalogueDoc?: string;
   coaDoc?: string;
   sdsDoc?: string;
   productImage?: string;
@@ -104,12 +107,25 @@ export interface ManufacturingCapabilityItem {
   testingCapabilities?: string;
   qualityAssuranceProcedures?: string;
   productionType?: string;
+  regulatoryApprovalDoc?: string | null;
+  regulatoryFilingDetails?: string | null;
+  technicalAuditDoc?: string | null;
   [key: string]: unknown;
 }
 
 export interface OperatingProfileItem {
   id?: number | string;
   primaryMachinery?: string;
+  [key: string]: unknown;
+}
+
+export interface ServiceCapabilityItem {
+  id?: number | string;
+  serviceTypes?: string;
+  serviceExpertise?: string;
+  geographicCoverage?: string;
+  serviceEquipment?: string;
+  deliveryCapacity?: string;
   [key: string]: unknown;
 }
 
@@ -175,7 +191,7 @@ export interface AdminQueueItem {
   departmentContacts?: GenericEntityItem[];
   complianceDeclarations?: Record<string, unknown>;
   manufacturingCapability?: ManufacturingCapabilityItem;
-  serviceCapability?: Record<string, unknown>;
+  serviceCapability?: ServiceCapabilityItem;
   operatingProfile?: OperatingProfileItem;
   vendorBusinessTypes?: GenericEntityItem[];
   vendorCategories?: GenericEntityItem[];
@@ -211,27 +227,48 @@ export interface DocumentReviewPayload {
   auditorNotes?: string;
 }
 
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+export interface ListQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
 /**
  * Fetch list of companies awaiting verification
  */
-export const getVerificationQueue = async (): Promise<{ total: number; queue: AdminQueueItem[] }> => {
-  const response = await api.get("/admin/verification-queue");
+export const getVerificationQueue = async (
+  params?: ListQueryParams
+): Promise<{ total: number; queue: AdminQueueItem[]; pagination?: PaginationMeta }> => {
+  const response = await api.get("/admin/verification-queue", { params });
   const data = response.data?.data || response.data;
   return {
     total: data?.total ?? (Array.isArray(data?.queue) ? data.queue.length : Array.isArray(data) ? data.length : 0),
     queue: Array.isArray(data?.queue) ? data.queue : Array.isArray(data) ? data : [],
+    pagination: data?.pagination,
   };
 };
 
 /**
  * Fetch all registered vendors
  */
-export const getAllVendors = async (): Promise<{ total: number; vendors: AdminQueueItem[] }> => {
-  const response = await api.get("/admin/vendors");
+export const getAllVendors = async (
+  params?: ListQueryParams
+): Promise<{ total: number; vendors: AdminQueueItem[]; pagination?: PaginationMeta }> => {
+  const response = await api.get("/admin/vendors", { params });
   const data = response.data?.data || response.data;
   return {
     total: data?.total ?? (Array.isArray(data?.vendors) ? data.vendors.length : Array.isArray(data) ? data.length : 0),
     vendors: Array.isArray(data?.vendors) ? data.vendors : Array.isArray(data) ? data : [],
+    pagination: data?.pagination,
   };
 };
 

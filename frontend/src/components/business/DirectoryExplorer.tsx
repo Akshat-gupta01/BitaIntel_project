@@ -28,6 +28,8 @@ import Link from 'next/link';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Slider } from '@/components/ui/Slider';
+import { Pagination } from '@/components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import { toast } from 'sonner';
 
 const industryPastelPill: Record<string, { active: string; inactive: string }> = {
@@ -169,6 +171,17 @@ export function DirectoryExplorer({
     });
   }, [liveBusinesses, deferredQuery, industry, level, minimumScore, verifiedOnly, premiumOnly, sortBy]);
 
+  const {
+    page: directoryPage,
+    pageSize: directoryPageSize,
+    totalItems: directoryTotalItems,
+    totalPages: directoryTotalPages,
+    paginatedItems: paginatedBusinesses,
+    setPage: setDirectoryPage,
+    setPageSize: setDirectoryPageSize,
+    resetPage: resetDirectoryPage,
+  } = usePagination(results, 9);
+
   function toggleCompare(id: string) {
     const business = liveBusinesses.find((b) => b.id === id);
     const bName = business ? business.name : id;
@@ -197,6 +210,7 @@ export function DirectoryExplorer({
     setVerifiedOnly(false);
     setPremiumOnly(false);
     setSortBy('score');
+    resetDirectoryPage();
   }
 
   return (
@@ -443,7 +457,7 @@ export function DirectoryExplorer({
       {/* Grid or Table Results */}
       {viewMode === 'grid' ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 min-h-[500px]">
-          {results.map((b) => (
+          {paginatedBusinesses.map((b) => (
             <div key={b.id} className="relative">
               <BusinessCard
                 business={b}
@@ -475,7 +489,7 @@ export function DirectoryExplorer({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {results.map((b) => (
+              {paginatedBusinesses.map((b) => (
                 <tr
                   key={b.id}
                   className="hover:bg-primary-50/40 transition-colors cursor-pointer"
@@ -557,6 +571,22 @@ export function DirectoryExplorer({
           </table>
         </div>
       )}
+
+      <Pagination
+        page={directoryPage}
+        totalPages={directoryTotalPages}
+        totalItems={directoryTotalItems}
+        pageSize={directoryPageSize}
+        onPageChange={(next) => {
+          setDirectoryPage(next);
+          if (typeof window !== 'undefined') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }}
+        onPageSizeChange={setDirectoryPageSize}
+        pageSizeOptions={[9, 12, 24]}
+        itemLabel="businesses"
+      />
 
       {/* Empty State */}
       {results.length === 0 && (

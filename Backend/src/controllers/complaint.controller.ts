@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { Op } from "sequelize";
 import { BusinessEntity, Complaint } from "../models/index.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import { parsePagination, buildPaginationMeta } from "../utils/pagination.js";
 import { recordAuditLog } from "../services/audit.service.js";
 
 const ADMIN_ROLES = new Set([
@@ -104,7 +105,12 @@ export async function submitComplaint(req: Request, res: Response) {
  */
 export async function getAdminComplaints(req: Request, res: Response) {
   try {
-    const complaints = await Complaint.findAll({
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
+      limit: 10,
+      maxLimit: 200,
+    });
+
+    const queryOptions = {
       include: [
         {
           model: BusinessEntity,
@@ -112,12 +118,31 @@ export async function getAdminComplaints(req: Request, res: Response) {
           attributes: ["id", "name", "legalName", "slug", "score", "badge"],
         },
       ],
-      order: [["createdAt", "DESC"]],
-    });
+      order: [["createdAt", "DESC"]] as [string, string][],
+    };
+
+    const result = hasExplicitPagination
+      ? await Complaint.findAndCountAll({
+          ...queryOptions,
+          distinct: true,
+          col: "id",
+          limit,
+          offset,
+        })
+      : {
+          rows: await Complaint.findAll(queryOptions),
+          count: 0,
+        };
+
+    const complaints = result.rows;
+    const totalCount = hasExplicitPagination ? result.count : complaints.length;
 
     return sendSuccess(res, {
-      totalCount: complaints.length,
+      totalCount,
       complaints,
+      pagination: hasExplicitPagination
+        ? buildPaginationMeta(totalCount, page, limit)
+        : buildPaginationMeta(totalCount, 1, totalCount || limit),
     });
   } catch (error: unknown) {
     console.error("Error fetching admin complaints:", error);

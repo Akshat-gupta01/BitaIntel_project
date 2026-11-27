@@ -13,14 +13,69 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { resolveBackendDocumentUrl } from '@/lib/verificationBadge';
 import {
   Layers,
   Factory,
   Briefcase,
   Check,
   Cpu,
+  UploadCloud,
+  ShieldCheck,
+  Trash2,
+  Plus,
+  Pencil,
+  FileCheck,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const REGULATORY_APPROVAL_TYPES = [
+  'DMF / USDMF Filing',
+  'CEP (Certificate of Suitability)',
+  'Manufacturing Licence (Drug / API / Factory)',
+  'WHO-GMP / EU-GMP Compliance',
+  'CDSCO / USFDA / Regulatory Filing',
+  'Other Regulatory Approval',
+];
+
+interface RegulatoryDraft {
+  approvalType: string;
+  referenceNumber: string;
+  issuingAuthority: string;
+  applicableScope: string;
+}
+
+function parseRegulatoryDetails(raw?: string): RegulatoryDraft {
+  const fallback: RegulatoryDraft = {
+    approvalType: REGULATORY_APPROVAL_TYPES[0],
+    referenceNumber: '',
+    issuingAuthority: '',
+    applicableScope: 'All Facilities',
+  };
+  if (!raw || !raw.trim()) return fallback;
+
+  const text = raw.trim();
+  const typeMatch = REGULATORY_APPROVAL_TYPES.find((t) => text.startsWith(t));
+  const refMatch = text.match(/Ref:\s*([^|•\n]+)/i);
+  const authMatch = text.match(/Authority:\s*([^|•\n]+)/i);
+  const scopeMatch = text.match(/Scope:\s*([^|•\n]+)/i);
+
+  if (typeMatch || refMatch || authMatch || scopeMatch) {
+    return {
+      approvalType: typeMatch || REGULATORY_APPROVAL_TYPES[0],
+      referenceNumber: refMatch?.[1]?.trim() || (!typeMatch ? text : ''),
+      issuingAuthority: authMatch?.[1]?.trim() || '',
+      applicableScope: scopeMatch?.[1]?.trim() || 'All Facilities',
+    };
+  }
+
+  return {
+    ...fallback,
+    referenceNumber: text,
+  };
+}
 
 interface Step3BusinessProps {
   data: Step3BusinessData;
@@ -31,6 +86,173 @@ interface Step3BusinessProps {
 
 export function Step3Business({ data, onChange, onNext, onPrev }: Step3BusinessProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingDocField, setUploadingDocField] = useState<
+    'regulatoryApprovalDoc' | 'technicalAuditDoc' | null
+  >(null);
+  const [showRegulatoryForm, setShowRegulatoryForm] = useState(false);
+  const [isEditingRegulatory, setIsEditingRegulatory] = useState(false);
+  const [regDraft, setRegDraft] = useState<RegulatoryDraft>(() =>
+    parseRegulatoryDetails(data.regulatoryFilingDetails)
+  );
+
+  const hasSavedRegulatoryRecord = Boolean(
+    data.regulatoryFilingDetails?.trim() ||
+      data.regulatoryApprovalDoc ||
+      data.technicalAuditDoc
+  );
+
+  function handleOpenNewRegulatoryForm() {
+    setIsEditingRegulatory(false);
+    setRegDraft(parseRegulatoryDetails(data.regulatoryFilingDetails));
+    setShowRegulatoryForm(true);
+  }
+
+  function handleStartEditRegulatory() {
+    setIsEditingRegulatory(true);
+    setRegDraft(parseRegulatoryDetails(data.regulatoryFilingDetails));
+    setShowRegulatoryForm(true);
+  }
+
+  function handleCancelRegulatoryForm() {
+    setIsEditingRegulatory(false);
+    setShowRegulatoryForm(false);
+  }
+
+  function formatRegulatoryDraft(): string {
+    const parts: string[] = [];
+    if (regDraft.referenceNumber.trim()) {
+      parts.push(`Ref: ${regDraft.referenceNumber.trim()}`);
+    }
+    if (regDraft.issuingAuthority.trim()) {
+      parts.push(`Authority: ${regDraft.issuingAuthority.trim()}`);
+    }
+    if (regDraft.applicableScope.trim() && regDraft.applicableScope.trim() !== 'All Facilities') {
+      parts.push(`Scope: ${regDraft.applicableScope.trim()}`);
+    } else if (regDraft.referenceNumber.trim() || regDraft.issuingAuthority.trim()) {
+      parts.push(`Scope: ${regDraft.applicableScope.trim() || 'All Facilities'}`);
+    }
+
+    return parts.length > 0
+      ? `${regDraft.approvalType} • ${parts.join(' | ')}`
+      : data.regulatoryApprovalDoc || data.technicalAuditDoc
+      ? regDraft.approvalType
+      : '';
+  }
+
+  function buildCapabilitiesPayload(regulatoryDetails: string | null) {
+    return {
+      businessTypeCodes: data.businessTypeCodes,
+      selectedCategoryIds: data.selectedCategoryIds,
+      selectedSubcategoryIds: data.selectedSubcategoryIds,
+      businessActivities: data.businessActivities || [],
+      manufacturingProcesses: data.manufacturingProcesses || null,
+      machineryEquipment: data.machineryEquipment || null,
+      installedCapacity: data.installedCapacity || null,
+      availableCapacity: data.availableCapacity || null,
+      hasRdLab: Boolean(data.hasRdLab),
+      hasQcLab: Boolean(data.hasQcLab),
+      offersCustomDevelopment: Boolean(data.offersCustomDevelopment),
+      serviceTypes: data.serviceTypes || null,
+      serviceExpertise: data.serviceExpertise || null,
+      geographicCoverage: data.geographicCoverage || null,
+      serviceEquipment: data.serviceEquipment || null,
+      deliveryCapacity: data.deliveryCapacity || null,
+      yearsInBusiness: data.yearsInBusiness || null,
+      numberOfFacilities: data.numberOfFacilities || null,
+      annualTurnoverRange: data.annualTurnoverRange || null,
+      totalWorkforce: data.totalWorkforce || null,
+      facilityPhotos: data.facilityPhotos || null,
+      technicalAuditDoc: data.technicalAuditDoc || null,
+      regulatoryApprovalDoc: data.regulatoryApprovalDoc || null,
+      regulatoryFilingDetails: regulatoryDetails,
+    };
+  }
+
+  async function handleSaveRegulatoryRecord() {
+    const formattedDetails = formatRegulatoryDraft();
+
+    if (!formattedDetails && !data.regulatoryApprovalDoc && !data.technicalAuditDoc) {
+      toast.error('Please enter filing/licence details or upload a supporting document.');
+      return;
+    }
+
+    onChange({ regulatoryFilingDetails: formattedDetails });
+    setShowRegulatoryForm(false);
+    setIsEditingRegulatory(false);
+
+    if (
+      data.businessTypeCodes.length > 0 &&
+      data.selectedCategoryIds.length > 0 &&
+      data.selectedSubcategoryIds.length > 0
+    ) {
+      try {
+        await vendorService.saveCapabilities(buildCapabilitiesPayload(formattedDetails || null));
+      } catch (err) {
+        console.warn('Background regulatory save deferred until Save & Continue:', err);
+      }
+    }
+
+    toast.success(
+      isEditingRegulatory ? 'Regulatory Record Updated' : 'Regulatory Record Added',
+      { description: formattedDetails || 'Attached document linked to Step 3.' }
+    );
+  }
+
+  function handleRemoveRegulatoryRecord() {
+    onChange({
+      regulatoryFilingDetails: '',
+      regulatoryApprovalDoc: '',
+      technicalAuditDoc: '',
+    });
+    setRegDraft({
+      approvalType: REGULATORY_APPROVAL_TYPES[0],
+      referenceNumber: '',
+      issuingAuthority: '',
+      applicableScope: 'All Facilities',
+    });
+    toast.info('Regulatory record cleared.');
+  }
+
+  async function handleUploadOptionalDoc(
+    file: File,
+    docField: 'regulatoryApprovalDoc' | 'technicalAuditDoc',
+    categoryKey: string,
+    categoryName: string
+  ) {
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('File size exceeds 15 MB limit');
+      return;
+    }
+
+    setUploadingDocField(docField);
+    try {
+      const res: any = await vendorService.uploadStatutoryDocument(
+        file,
+        categoryKey,
+        categoryName,
+        'Module C'
+      );
+      const uploadedUrl =
+        res?.data?.document?.fileUrl ||
+        res?.data?.url ||
+        res?.data?.path ||
+        res?.document?.fileUrl ||
+        res?.data?.fileUrl;
+      if (!uploadedUrl) {
+        throw new Error('Server did not return uploaded document URL.');
+      }
+      onChange({ [docField]: uploadedUrl });
+      toast.success(`${categoryName} Uploaded`, {
+        description: `${file.name} saved to your compliance document vault.`,
+      });
+    } catch (err: any) {
+      toast.error('Document Upload Failed', {
+        description: err?.response?.data?.message || err?.message || 'Could not upload file.',
+      });
+    } finally {
+      setUploadingDocField(null);
+    }
+  }
 
   // Check if manufacturing capability should conditionally render
   const isManufacturingSelected = useMemo(() => {
@@ -39,14 +261,6 @@ export function Step3Business({ data, onChange, onNext, onPrev }: Step3BusinessP
       data.businessActivities.some((act) =>
         ['Manufacturing', 'Contract Manufacturing', 'Private Label'].includes(act)
       )
-    );
-  }, [data.businessTypeCodes, data.businessActivities]);
-
-  // Check if service capability should conditionally render
-  const isServiceSelected = useMemo(() => {
-    return (
-      data.businessTypeCodes.some((code) => ['BT11', 'BT12', 'BT13'].includes(code)) ||
-      data.businessActivities.includes('Services')
     );
   }, [data.businessTypeCodes, data.businessActivities]);
 
@@ -127,32 +341,17 @@ export function Step3Business({ data, onChange, onNext, onPrev }: Step3BusinessP
       return;
     }
 
+    const syncedRegulatoryDetails = showRegulatoryForm
+      ? formatRegulatoryDraft() || data.regulatoryFilingDetails || null
+      : data.regulatoryFilingDetails || null;
+
+    if (showRegulatoryForm && syncedRegulatoryDetails && syncedRegulatoryDetails !== data.regulatoryFilingDetails) {
+      onChange({ regulatoryFilingDetails: syncedRegulatoryDetails });
+    }
+
     setIsSaving(true);
     try {
-      await vendorService.saveCapabilities({
-        businessTypeCodes: data.businessTypeCodes,
-        selectedCategoryIds: data.selectedCategoryIds,
-        selectedSubcategoryIds: data.selectedSubcategoryIds,
-        businessActivities: data.businessActivities || [],
-        manufacturingProcesses: data.manufacturingProcesses || null,
-        machineryEquipment: data.machineryEquipment || null,
-        installedCapacity: data.installedCapacity || null,
-        availableCapacity: data.availableCapacity || null,
-        hasRdLab: Boolean(data.hasRdLab),
-        hasQcLab: Boolean(data.hasQcLab),
-        offersCustomDevelopment: Boolean(data.offersCustomDevelopment),
-        serviceTypes: data.serviceTypes || null,
-        serviceExpertise: data.serviceExpertise || null,
-        geographicCoverage: data.geographicCoverage || null,
-        deliveryCapacity: data.deliveryCapacity || null,
-        yearsInBusiness: data.yearsInBusiness || null,
-        numberOfFacilities: data.numberOfFacilities || null,
-        annualTurnoverRange: data.annualTurnoverRange || null,
-        totalWorkforce: data.totalWorkforce || null,
-        manufacturingLicenceDoc: data.manufacturingLicenceDoc || null,
-        facilityPhotos: data.facilityPhotos || null,
-        technicalAuditDoc: data.technicalAuditDoc || null,
-      });
+      await vendorService.saveCapabilities(buildCapabilitiesPayload(syncedRegulatoryDetails));
 
       toast.success('Business Capabilities Saved to Database', {
         description: 'Business classification, categories, and operational capabilities stored in database.',
@@ -434,48 +633,408 @@ export function Step3Business({ data, onChange, onNext, onPrev }: Step3BusinessP
         </div>
       )}
 
-      {isServiceSelected && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 sm:p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Briefcase className="size-4 text-indigo-700" />
+      {/* 4b. Service Capabilities & Geographic Delivery (Always visible) */}
+      <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 sm:p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Briefcase className="size-4 text-indigo-700" />
+          <div>
             <h3 className="text-sm font-bold text-indigo-950">
-              Service Capabilities & Geographic Delivery
+              Service Capabilities &amp; Geographic Delivery
             </h3>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Service Expertise</label>
-              <Input
-                value={data.serviceExpertise || ''}
-                onChange={(e) => onChange({ serviceExpertise: e.target.value })}
-                placeholder="e.g. Industrial Automation Consulting & Calibration"
-                className="text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Geographic Coverage</label>
-              <Input
-                value={data.geographicCoverage || ''}
-                onChange={(e) => onChange({ geographicCoverage: e.target.value })}
-                placeholder="e.g. Pan-India, Middle East, Southeast Asia"
-                className="text-xs"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">Delivery Capacity & SLA</label>
-              <Input
-                value={data.deliveryCapacity || ''}
-                onChange={(e) => onChange({ deliveryCapacity: e.target.value })}
-                placeholder="e.g. 50+ on-site deployment engineers, 24/7 SLA"
-                className="text-xs"
-              />
-            </div>
+            <p className="text-[11px] text-indigo-800/80">
+              Specify service types, specialized expertise, geographic coverage, field equipment, and delivery SLA.
+            </p>
           </div>
         </div>
-      )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Service Types</label>
+            <Input
+              value={data.serviceTypes || ''}
+              onChange={(e) => onChange({ serviceTypes: e.target.value })}
+              placeholder="e.g. AMC, Turnkey Installation, Testing & Calibration, Consulting"
+              className="text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Service Expertise</label>
+            <Input
+              value={data.serviceExpertise || ''}
+              onChange={(e) => onChange({ serviceExpertise: e.target.value })}
+              placeholder="e.g. Industrial Automation Consulting & Calibration"
+              className="text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Geographic Coverage</label>
+            <Input
+              value={data.geographicCoverage || ''}
+              onChange={(e) => onChange({ geographicCoverage: e.target.value })}
+              placeholder="e.g. Pan-India, Middle East, Southeast Asia"
+              className="text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Equipment &amp; Field Tools
+            </label>
+            <Input
+              value={data.serviceEquipment || ''}
+              onChange={(e) => onChange({ serviceEquipment: e.target.value })}
+              placeholder="e.g. Fluke Calibration Kits, PLC Diagnostic Rigs, NDT Scanners"
+              className="text-xs"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Delivery Capacity &amp; SLA
+            </label>
+            <Input
+              value={data.deliveryCapacity || ''}
+              onChange={(e) => onChange({ deliveryCapacity: e.target.value })}
+              placeholder="e.g. 50+ on-site deployment engineers, 24/7 SLA"
+              className="text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Regulatory Approvals, Licences & Filings */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-primary-700" />
+            <h3 className="text-sm font-bold text-slate-900">
+              5. Regulatory Approvals, Manufacturing Licences &amp; Filings ({hasSavedRegulatoryRecord ? 1 : 0})
+            </h3>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              showRegulatoryForm ? handleCancelRegulatoryForm() : handleOpenNewRegulatoryForm()
+            }
+            className="text-xs border-primary-300 text-primary-700 hover:bg-primary-50"
+          >
+            <Plus className="size-3.5 mr-1" /> Add Regulatory Record
+          </Button>
+        </div>
+
+        {/* Dynamic Add / Edit Regulatory Record Form (matches Step 4 Card UI) */}
+        {showRegulatoryForm && (
+          <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-primary-950 flex items-center gap-1.5">
+                {isEditingRegulatory ? (
+                  <>
+                    <Pencil className="size-3.5 text-primary-700" />
+                    Edit Regulatory Approval &amp; Licence Record
+                  </>
+                ) : (
+                  'Add Regulatory Approval & Licence Record'
+                )}
+              </h4>
+              <button
+                type="button"
+                onClick={handleCancelRegulatoryForm}
+                className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Approval / Filing Standard
+                </label>
+                <Select
+                  value={regDraft.approvalType}
+                  onChange={(e) => setRegDraft({ ...regDraft, approvalType: e.target.value })}
+                  options={REGULATORY_APPROVAL_TYPES.map((t) => ({ value: t, label: t }))}
+                  className="text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Filing / Licence Number
+                </label>
+                <Input
+                  value={regDraft.referenceNumber}
+                  onChange={(e) => setRegDraft({ ...regDraft, referenceNumber: e.target.value })}
+                  placeholder="e.g. USDMF #034921 / MH-1024 / CEP-2026"
+                  className="text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Issuing Authority / Agency
+                </label>
+                <Input
+                  value={regDraft.issuingAuthority}
+                  onChange={(e) => setRegDraft({ ...regDraft, issuingAuthority: e.target.value })}
+                  placeholder="e.g. USFDA / EDQM / CDSCO / State FDA"
+                  className="text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Applicable Facility / Scope
+                </label>
+                <Input
+                  value={regDraft.applicableScope}
+                  onChange={(e) => setRegDraft({ ...regDraft, applicableScope: e.target.value })}
+                  placeholder="All Facilities"
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Regulatory / Manufacturing Licence Document — DMF / USDMF, CEP (PDF / JPG)
+                </label>
+                {(() => {
+                  const currentPath = data.regulatoryApprovalDoc || '';
+                  const previewUrl = resolveBackendDocumentUrl(currentPath);
+                  const isUploading = uploadingDocField === 'regulatoryApprovalDoc';
+                  const currentFileName = currentPath
+                    ? currentPath.split('/').pop() || currentPath.split('\\').pop() || 'Attached Document'
+                    : '';
+
+                  return currentPath ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-lg border border-emerald-300 bg-emerald-50/70">
+                      <div className="flex items-center gap-2 truncate">
+                        <FileCheck className="size-4 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-semibold text-emerald-900 truncate" title={currentFileName}>
+                          {currentFileName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {previewUrl && (
+                          <a
+                            href={previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-primary-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <ExternalLink className="size-3" /> View
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onChange({ regulatoryApprovalDoc: '' })}
+                          className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                          title="Remove Document"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-slate-300 hover:border-primary-400 bg-white hover:bg-primary-50/40 text-xs font-medium text-slate-600 hover:text-primary-700 transition-colors cursor-pointer">
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin text-primary-700" />
+                          <span>Uploading Document...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="size-4 text-primary-600" />
+                          <span>Upload Regulatory / Licence Proof (PDF / JPG / PNG, Max 15 MB)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                        disabled={uploadingDocField !== null}
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) {
+                            handleUploadOptionalDoc(
+                              file,
+                              'regulatoryApprovalDoc',
+                              'regulatory_approval_dmf',
+                              'Regulatory Approvals & Manufacturing Licences (DMF / USDMF, CEP)'
+                            );
+                          }
+                        }}
+                      />
+                    </label>
+                  );
+                })()}
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Technical Audit &amp; Inspection Report (PDF / JPG)
+                </label>
+                {(() => {
+                  const techPath = data.technicalAuditDoc || '';
+                  const techPreviewUrl = resolveBackendDocumentUrl(techPath);
+                  const isUploadingTech = uploadingDocField === 'technicalAuditDoc';
+                  const techFileName = techPath
+                    ? techPath.split('/').pop() || techPath.split('\\').pop() || 'Technical_Audit_Report.pdf'
+                    : '';
+
+                  return techPath ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-lg border border-emerald-300 bg-emerald-50/70">
+                      <div className="flex items-center gap-2 truncate">
+                        <FileCheck className="size-4 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-semibold text-emerald-900 truncate" title={techFileName}>
+                          {techFileName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {techPreviewUrl && (
+                          <a
+                            href={techPreviewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-primary-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <ExternalLink className="size-3" /> View
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onChange({ technicalAuditDoc: '' })}
+                          className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                          title="Remove Technical Document"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-slate-300 hover:border-primary-400 bg-white hover:bg-primary-50/40 text-xs font-medium text-slate-600 hover:text-primary-700 transition-colors cursor-pointer">
+                      {isUploadingTech ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin text-primary-700" />
+                          <span>Uploading Technical Document...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="size-4 text-primary-600" />
+                          <span>Upload Technical Audit / Inspection PDF (PDF / JPG / PNG, Max 15 MB)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                        disabled={uploadingDocField !== null}
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) {
+                            handleUploadOptionalDoc(
+                              file,
+                              'technicalAuditDoc',
+                              'technical_audit',
+                              'Technical Audit & Inspection Report'
+                            );
+                          }
+                        }}
+                      />
+                    </label>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              {isEditingRegulatory && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelRegulatoryForm}
+                  className="text-xs"
+                >
+                  Cancel Edit
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveRegulatoryRecord}
+                className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
+              >
+                {isEditingRegulatory ? 'Update Regulatory Record' : 'Save Regulatory Record'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Saved Regulatory Record Summary Card */}
+        {hasSavedRegulatoryRecord && (
+          <div className="rounded-xl border border-slate-200 bg-white p-3.5 flex items-start justify-between gap-3 shadow-xs hover:border-slate-300 transition-colors">
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {parseRegulatoryDetails(data.regulatoryFilingDetails).approvalType}
+                </span>
+              </div>
+              {data.regulatoryFilingDetails && (
+                <p className="text-xs font-medium text-slate-800 whitespace-pre-line">
+                  {data.regulatoryFilingDetails}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                {data.regulatoryApprovalDoc && resolveBackendDocumentUrl(data.regulatoryApprovalDoc) && (
+                  <a
+                    href={resolveBackendDocumentUrl(data.regulatoryApprovalDoc)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-primary-700 hover:underline bg-primary-50 px-2 py-0.5 rounded border border-primary-200"
+                  >
+                    <FileCheck className="size-3" /> Regulatory / Manufacturing Licence PDF <ExternalLink className="size-2.5" />
+                  </a>
+                )}
+                {data.technicalAuditDoc && resolveBackendDocumentUrl(data.technicalAuditDoc) && (
+                  <a
+                    href={resolveBackendDocumentUrl(data.technicalAuditDoc)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-primary-700 hover:underline bg-primary-50 px-2 py-0.5 rounded border border-primary-200"
+                  >
+                    <FileCheck className="size-3" /> Technical Audit Report PDF <ExternalLink className="size-2.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={handleStartEditRegulatory}
+                className="text-slate-400 hover:text-primary-700 hover:bg-primary-50 transition-colors p-1 rounded cursor-pointer"
+                title="Edit Regulatory Record"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveRegulatoryRecord}
+                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded cursor-pointer"
+                title="Remove Regulatory Record"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 6. Operating Profile & Turnover */}
       <div className="space-y-4">

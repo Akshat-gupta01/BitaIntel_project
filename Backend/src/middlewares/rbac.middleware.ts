@@ -3,11 +3,10 @@ import { sendError } from "../utils/apiResponse.js";
 import { RbacService } from "../services/rbac.service.js";
 
 /**
- * High performance RBAC Authorization Middleware
- * Evaluates module-wise permissions against database role assignments.
- * Super Admin retains universal wildcard bypass.
+ * Evaluates whether a request satisfies at least one of the listed permission codes.
+ * Shared implementation backing `authorize` and `authorizeAny`.
  */
-export function authorize(requiredPermission: string) {
+export function authorizeAny(...requiredPermissions: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = req.user;
@@ -31,22 +30,32 @@ export function authorize(requiredPermission: string) {
       }
 
       // 2. Evaluates cached/DB effective permissions
-      const allowed = await RbacService.hasPermission(user.role, requiredPermission);
-      if (!allowed) {
-        return sendError(
-          res,
-          `Access Denied: Your assigned role (${user.role}) does not possess the required permission [${requiredPermission}].`,
-          403,
-          "ERR_FORBIDDEN_PERMISSION"
-        );
+      for (const perm of requiredPermissions) {
+        if (await RbacService.hasPermission(user.role, perm)) {
+          return next();
+        }
       }
 
-      next();
+      return sendError(
+        res,
+        `Access Denied: Your assigned role (${user.role}) does not possess the required permission [${requiredPermissions.join(" | ")}].`,
+        403,
+        "ERR_FORBIDDEN_PERMISSION"
+      );
     } catch (error) {
       console.error("[RBAC Middleware Error]:", error);
       return sendError(res, "Internal error validating role permissions", 500, "ERR_RBAC_INTERNAL");
     }
   };
+}
+
+/**
+ * High performance RBAC Authorization Middleware
+ * Evaluates module-wise permissions against database role assignments.
+ * Super Admin retains universal wildcard bypass.
+ */
+export function authorize(requiredPermission: string) {
+  return authorizeAny(requiredPermission);
 }
 
 /**

@@ -261,14 +261,16 @@ export function OnboardingWizardModal({
               serviceTypes: dossier.step3.serviceTypes || null,
               serviceExpertise: dossier.step3.serviceExpertise || null,
               geographicCoverage: dossier.step3.geographicCoverage || null,
+              serviceEquipment: dossier.step3.serviceEquipment || null,
               deliveryCapacity: dossier.step3.deliveryCapacity || null,
               yearsInBusiness: dossier.step3.yearsInBusiness || null,
               numberOfFacilities: dossier.step3.numberOfFacilities || null,
               annualTurnoverRange: dossier.step3.annualTurnoverRange || null,
               totalWorkforce: dossier.step3.totalWorkforce || null,
-              manufacturingLicenceDoc: dossier.step3.manufacturingLicenceDoc || null,
               facilityPhotos: dossier.step3.facilityPhotos || null,
               technicalAuditDoc: dossier.step3.technicalAuditDoc || null,
+              regulatoryApprovalDoc: dossier.step3.regulatoryApprovalDoc || null,
+              regulatoryFilingDetails: dossier.step3.regulatoryFilingDetails || null,
             });
           } catch {}
         }
@@ -334,9 +336,14 @@ export function OnboardingWizardModal({
                     evidenceDoc: cert.evidenceDoc || null,
                     status: cert.status,
                   });
-                  if (res?.data?.certification?.id) {
+                  const savedCert =
+                    res?.data?.certification ||
+                    (Array.isArray(res?.data?.certifications)
+                      ? res.data.certifications[0]
+                      : res?.data?.certifications);
+                  if (savedCert?.id) {
                     didBackfillIds = true;
-                    return { ...cert, id: String(res.data.certification.id) };
+                    return { ...cert, id: String(savedCert.id) };
                   }
                 } catch {}
               }
@@ -606,6 +613,13 @@ export function OnboardingWizardModal({
           {currentStep === 2 && (
             <Step2Company
               data={dossier.step2}
+              facilityPhotos={dossier.step3.facilityPhotos || []}
+              onFacilityPhotosChange={(photos) =>
+                updateDossier((prev) => ({
+                  ...prev,
+                  step3: { ...prev.step3, facilityPhotos: photos },
+                }))
+              }
               onChange={(updated) =>
                 updateDossier((prev) => ({
                   ...prev,

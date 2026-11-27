@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FullVendorRegistrationDossier,
   DocumentVaultItem,
@@ -33,6 +34,8 @@ import {
   Eye,
   RefreshCw,
   X,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as vendorService from '../../../../services/vendor.service';
@@ -71,9 +74,56 @@ export function Step6Review({
 
   // Preview & Replace states
   const [previewDoc, setPreviewDoc] = useState<(DocumentVaultItem & { fullUrl: string }) | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [replacingDocId, setReplacingDocId] = useState<string | null>(null);
   const [targetDocForReplace, setTargetDocForReplace] = useState<DocumentVaultItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const targetUrl = previewDoc?.fullUrl;
+    if (!targetUrl) return;
+
+    let cancelled = false;
+    let createdObjectUrl: string | null = null;
+
+    fetch(targetUrl, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(
+            res.status === 404
+              ? 'Uploaded file was not found on the server (404). Please re-upload using Replace.'
+              : `Could not load document (HTTP ${res.status}).`
+          );
+        }
+        const contentType = res.headers.get('content-type') || '';
+        const blob = await res.blob();
+        if (cancelled) return;
+        createdObjectUrl = URL.createObjectURL(blob);
+        setPreviewMimeType(contentType || blob.type || '');
+        setPreviewBlobUrl(createdObjectUrl);
+        setPreviewError(null);
+      })
+      .catch((err: any) => {
+        if (!cancelled) {
+          setPreviewError(err?.message || 'Unable to load document preview.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (createdObjectUrl) {
+        try {
+          URL.revokeObjectURL(createdObjectUrl);
+        } catch {}
+      }
+    };
+  }, [previewDoc?.fullUrl]);
 
   useEffect(() => {
     vendorService
@@ -115,10 +165,22 @@ export function Step6Review({
       return;
     }
     const fullUrl = vendorService.getFullImageUrl(doc.downloadUrl);
+    setPreviewBlobUrl(null);
+    setPreviewMimeType('');
+    setPreviewError(null);
+    setPreviewLoading(true);
     setPreviewDoc({
       ...doc,
       fullUrl,
     });
+  }
+
+  function handleClosePreview() {
+    setPreviewDoc(null);
+    setPreviewBlobUrl(null);
+    setPreviewMimeType('');
+    setPreviewError(null);
+    setPreviewLoading(false);
   }
 
   function handleTriggerReplace(doc: DocumentVaultItem) {
@@ -142,8 +204,54 @@ export function Step6Review({
 
       let catKey = doc.categoryKey || 'statutory_doc';
       let catName = doc.name;
+      const prodDocMatch = /^DOC-S4-(CAT|TDS|COA|SDS)-(\d+)$/.exec(doc.id);
 
-      if (doc.id.includes('S5-BANK') || doc.name.toLowerCase().includes('bank')) {
+      if (prodDocMatch) {
+        const docCode = prodDocMatch[1];
+        const prodIdx = Number(prodDocMatch[2]);
+        const targetProduct = dossier.step4?.products?.[prodIdx];
+        const prodDocType: 'catalog' | 'tds' | 'coa' | 'sds' =
+          docCode === 'CAT'
+            ? 'catalog'
+            : docCode === 'TDS'
+            ? 'tds'
+            : docCode === 'COA'
+            ? 'coa'
+            : 'sds';
+        const prodFieldMap = {
+          CAT: 'catalogueDoc',
+          TDS: 'technicalDataSheetDoc',
+          COA: 'coaDoc',
+          SDS: 'sdsDoc',
+        } as const;
+        const prodField = prodFieldMap[docCode as keyof typeof prodFieldMap];
+        const numericProdId =
+          targetProduct?.id && /^\d+$/.test(String(targetProduct.id)) ? targetProduct.id : undefined;
+
+        const prodUploadRes: any = await vendorService.uploadProductDocument(
+          file,
+          prodDocType,
+          numericProdId
+        );
+        relativePath =
+          prodUploadRes?.data?.path ||
+          prodUploadRes?.data?.url ||
+          `/uploads/documents/${file.name}`;
+        fullUrl = prodUploadRes?.data?.url || relativePath;
+        catKey = numericProdId
+          ? `product_document_${numericProdId}_${prodField}`.slice(0, 50)
+          : `product_${prodDocType}`;
+
+        if (onDossierChange && targetProduct) {
+          const nextProducts = dossier.step4.products.map((p, i) =>
+            i === prodIdx ? { ...p, [prodField]: relativePath } : p
+          );
+          onDossierChange({
+            ...dossier,
+            step4: { ...dossier.step4, products: nextProducts },
+          });
+        }
+      } else if (doc.id.includes('S5-BANK') || doc.name.toLowerCase().includes('bank')) {
         catKey = 'bank_proof';
         catName = 'Statutory Bank Proof (Cancelled Cheque)';
         const bankRes = await vendorService.uploadBankProof(file);
@@ -151,12 +259,15 @@ export function Step6Review({
       } else {
         if (doc.id.includes('S3-LIC') || doc.name.toLowerCase().includes('licence')) {
           catKey = 'manufacturing_licence';
-          catName = 'Factory / Manufacturing Operating Licence';
+          catName = 'Relevant Manufacturing Licence / Operating Permit';
+        } else if (doc.id.includes('S3-REG') || doc.name.toLowerCase().includes('regulatory') || doc.name.toLowerCase().includes('dmf')) {
+          catKey = 'regulatory_approval_dmf';
+          catName = 'Regulatory Approvals (DMF / USDMF, CEP & Filings)';
         } else if (doc.id.includes('S3-AUD') || doc.name.toLowerCase().includes('audit')) {
           catKey = 'technical_audit';
           catName = 'Technical Audit & Inspection Report';
         } else if (doc.name.toLowerCase().includes('incorporation')) {
-          catKey = 'incorporation';
+          catKey = 'incorporation_cert';
           catName = 'Certificate of Incorporation / Registration Proof';
         } else if (doc.name.toLowerCase().includes('address') || doc.name.toLowerCase().includes('electricity')) {
           catKey = 'address_proof';
@@ -205,7 +316,9 @@ export function Step6Review({
           ...dossier,
           step3: {
             ...dossier.step3,
-            ...(catKey === 'manufacturing_licence' ? { manufacturingLicenceDoc: relativePath } : {}),
+            ...(catKey === 'manufacturing_licence' || catKey === 'regulatory_approval_dmf'
+              ? { regulatoryApprovalDoc: relativePath }
+              : {}),
             ...(catKey === 'technical_audit' ? { technicalAuditDoc: relativePath } : {}),
           },
           step5: {
@@ -214,6 +327,23 @@ export function Step6Review({
           },
         };
         onDossierChange(updatedDossier);
+      }
+
+      // If this document is currently open in the preview modal, refresh it immediately
+      if (previewDoc && previewDoc.id === doc.id) {
+        const nextPreviewUrl = vendorService.getFullImageUrl(fullUrl || relativePath);
+        setPreviewBlobUrl(null);
+        setPreviewMimeType('');
+        setPreviewError(null);
+        setPreviewLoading(true);
+        setPreviewDoc({
+          ...previewDoc,
+          fileName: file.name,
+          uploadDate: new Date().toISOString().split('T')[0],
+          verificationStatus: 'Under Review',
+          downloadUrl: fullUrl || relativePath,
+          fullUrl: nextPreviewUrl,
+        });
       }
 
       toast.success('Document Replaced Successfully', {
@@ -235,13 +365,30 @@ export function Step6Review({
   const aggregatedDocuments = useMemo(() => {
     const list: DocumentVaultItem[] = [];
     const seenRefs = new Set<string>();
+    const seenCategories = new Set<string>();
+    const singleSlotCategories = new Set([
+      'incorporation_cert',
+      'address_proof',
+      'tax_registration',
+      'board_resolution',
+      'manufacturing_licence',
+      'regulatory_approval_dmf',
+      'technical_audit',
+      'bank_proof',
+    ]);
 
     const addDoc = (doc: DocumentVaultItem) => {
-      const key = (doc.fileName || doc.downloadUrl || doc.name).trim().toLowerCase();
-      if (key && !seenRefs.has(key)) {
-        seenRefs.add(key);
-        list.push(doc);
+      const urlPath = doc.downloadUrl ? vendorService.getFullImageUrl(doc.downloadUrl) : '';
+      const pathKey = (urlPath || doc.fileName || doc.name).trim().toLowerCase();
+      const catKey = (doc.categoryKey || '').trim().toLowerCase();
+
+      if (catKey && singleSlotCategories.has(catKey)) {
+        if (seenCategories.has(catKey)) return;
+        seenCategories.add(catKey);
       }
+      if (pathKey && seenRefs.has(pathKey)) return;
+      if (pathKey) seenRefs.add(pathKey);
+      list.push(doc);
     };
 
     // 1. Documents from Database Vault (Step 2 ROC incorporation, GST, PAN, Board Resolution)
@@ -253,21 +400,6 @@ export function Step6Review({
     }
 
     // 3. Step 3: Manufacturing License & Capabilities
-    if (dossier.step3?.manufacturingLicenceDoc) {
-      const raw = dossier.step3.manufacturingLicenceDoc;
-      const fileName = raw.split('/').pop() || raw.split('\\').pop() || 'Manufacturing_Licence.pdf';
-      addDoc({
-        id: 'DOC-S3-LIC',
-        name: 'Factory / Manufacturing Operating Licence',
-        category: 'Facility & Licences',
-        fileName,
-        fileSize: '1.8 MB',
-        uploadDate: 'Attached in Step 3',
-        verificationStatus: 'Under Review',
-        downloadUrl: raw,
-      });
-    }
-
     if (dossier.step3?.technicalAuditDoc) {
       const raw = dossier.step3.technicalAuditDoc;
       const fileName = raw.split('/').pop() || raw.split('\\').pop() || 'Technical_Audit_Report.pdf';
@@ -275,8 +407,25 @@ export function Step6Review({
         id: 'DOC-S3-AUD',
         name: 'Technical Audit & Inspection Report',
         category: 'Facility & Licences',
+        categoryKey: 'technical_audit',
         fileName,
         fileSize: '2.4 MB',
+        uploadDate: 'Attached in Step 3',
+        verificationStatus: 'Under Review',
+        downloadUrl: raw,
+      });
+    }
+
+    if (dossier.step3?.regulatoryApprovalDoc) {
+      const raw = dossier.step3.regulatoryApprovalDoc;
+      const fileName = raw.split('/').pop() || raw.split('\\').pop() || 'Regulatory_Approval_DMF_CEP.pdf';
+      addDoc({
+        id: 'DOC-S3-REG',
+        name: 'Regulatory Approvals (DMF / USDMF, CEP & Filings)',
+        category: 'Facility & Licences',
+        categoryKey: 'regulatory_approval_dmf',
+        fileName,
+        fileSize: '1.8 MB',
         uploadDate: 'Attached in Step 3',
         verificationStatus: 'Under Review',
         downloadUrl: raw,
@@ -305,32 +454,51 @@ export function Step6Review({
       });
     }
 
-    // 5. Step 4: Product Catalogues & Specification Sheets
+    // 5. Step 4: Product Catalogues & Specification Sheets (Catalogue, TDS, COA, SDS)
     if (Array.isArray(dossier.step4?.products)) {
+      const productDocSpecs = [
+        {
+          field: 'catalogueDoc',
+          code: 'CAT',
+          label: 'Product Catalogue / Brochure',
+          fallback: 'Catalogue.pdf',
+          size: '3.1 MB',
+        },
+        {
+          field: 'technicalDataSheetDoc',
+          code: 'TDS',
+          label: 'Technical Data Sheet (TDS)',
+          fallback: 'TDS.pdf',
+          size: '1.8 MB',
+        },
+        {
+          field: 'coaDoc',
+          code: 'COA',
+          label: 'Certificate of Analysis (COA)',
+          fallback: 'COA.pdf',
+          size: '1.4 MB',
+        },
+        {
+          field: 'sdsDoc',
+          code: 'SDS',
+          label: 'Safety Data Sheet (SDS)',
+          fallback: 'SDS.pdf',
+          size: '1.2 MB',
+        },
+      ] as const;
+
       dossier.step4.products.forEach((prod, idx) => {
-        if (prod.catalogueDoc) {
-          const raw = prod.catalogueDoc;
-          const fileName = raw.split('/').pop() || raw.split('\\').pop() || `${prod.name}_Catalogue.pdf`;
+        for (const spec of productDocSpecs) {
+          const raw = prod[spec.field];
+          if (!raw) continue;
+          const fileName =
+            raw.split('/').pop() || raw.split('\\').pop() || `${prod.name}_${spec.fallback}`;
           addDoc({
-            id: `DOC-S4-CAT-${idx}`,
-            name: `${prod.name} — Technical Specification / Catalogue`,
+            id: `DOC-S4-${spec.code}-${idx}`,
+            name: `${prod.name} — ${spec.label}`,
             category: 'Quality & Standards',
             fileName,
-            fileSize: '3.1 MB',
-            uploadDate: 'Attached in Step 4',
-            verificationStatus: 'Under Review',
-            downloadUrl: raw,
-          });
-        }
-        if (prod.coaDoc) {
-          const raw = prod.coaDoc;
-          const fileName = raw.split('/').pop() || raw.split('\\').pop() || `${prod.name}_COA.pdf`;
-          addDoc({
-            id: `DOC-S4-COA-${idx}`,
-            name: `${prod.name} — Certificate of Analysis (COA)`,
-            category: 'Quality & Standards',
-            fileName,
-            fileSize: '1.4 MB',
+            fileSize: spec.size,
             uploadDate: 'Attached in Step 4',
             verificationStatus: 'Under Review',
             downloadUrl: raw,
@@ -347,6 +515,7 @@ export function Step6Review({
         id: 'DOC-S5-BANK',
         name: `Statutory Bank Proof (${dossier.step5.bankName || 'Cancelled Cheque'})`,
         category: 'Banking & Identity',
+        categoryKey: 'bank_proof',
         fileName,
         fileSize: '1.5 MB',
         uploadDate: 'Attached in Step 5',
@@ -921,85 +1090,112 @@ export function Step6Review({
         className="hidden"
       />
 
-      {/* Document Inspection & Preview Modal */}
-      {previewDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/90">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="size-10 rounded-xl bg-primary-100 text-primary-800 grid place-items-center shrink-0">
-                  <FileText className="size-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
-                    {previewDoc.name}
-                  </h3>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                    <span className="font-mono text-slate-700">{previewDoc.fileName}</span>
-                    <span>•</span>
-                    <span className="text-primary-700 font-semibold">{previewDoc.category}</span>
-                    <span>•</span>
-                    <span>{previewDoc.uploadDate}</span>
+      {/* Document Inspection & Preview Modal (Portaled to document.body so it floats above OnboardingWizardModal) */}
+      {previewDoc &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/90">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-10 rounded-xl bg-primary-100 text-primary-800 grid place-items-center shrink-0">
+                    <FileText className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                      {previewDoc.name}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                      <span className="font-mono text-slate-700">{previewDoc.fileName}</span>
+                      <span>•</span>
+                      <span className="text-primary-700 font-semibold">{previewDoc.category}</span>
+                      <span>•</span>
+                      <span>{previewDoc.uploadDate}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    handleTriggerReplace(previewDoc);
-                  }}
-                  className="text-xs h-8 text-slate-700 border-slate-300 hover:bg-slate-100 font-bold flex items-center gap-1.5"
-                >
-                  <RefreshCw className="size-3.5" />
-                  <span>Replace</span>
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleTriggerReplace(previewDoc);
+                    }}
+                    className="text-xs h-8 text-slate-700 border-slate-300 hover:bg-slate-100 font-bold flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="size-3.5" />
+                    <span>Replace</span>
+                  </Button>
 
-                <a
-                  href={previewDoc.fullUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 h-8 px-3 rounded-lg shadow-2xs"
-                >
-                  <ExternalLink className="size-3.5" />
-                  <span>Open Full Tab</span>
-                </a>
+                  <a
+                    href={previewBlobUrl || previewDoc.fullUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 h-8 px-3 rounded-lg shadow-2xs"
+                  >
+                    <ExternalLink className="size-3.5" />
+                    <span>Open Full Tab</span>
+                  </a>
 
-                <button
-                  type="button"
-                  onClick={() => setPreviewDoc(null)}
-                  className="size-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 grid place-items-center transition-colors cursor-pointer"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body Preview */}
-            <div className="p-4 flex-1 overflow-auto bg-slate-100/60 min-h-[440px] flex items-center justify-center">
-              {previewDoc.fileName.toLowerCase().endsWith('.pdf') ? (
-                <iframe
-                  src={previewDoc.fullUrl}
-                  title={previewDoc.name}
-                  className="w-full h-[540px] rounded-xl border border-slate-200 bg-white shadow-xs"
-                />
-              ) : (
-                <div className="max-w-full max-h-[540px] flex items-center justify-center">
-                  <img
-                    src={previewDoc.fullUrl}
-                    alt={previewDoc.name}
-                    className="max-h-[540px] max-w-full rounded-xl object-contain shadow-md border border-slate-200 bg-white"
-                  />
+                  <button
+                    type="button"
+                    onClick={handleClosePreview}
+                    className="size-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 grid place-items-center transition-colors cursor-pointer"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {/* Modal Body Preview */}
+              <div className="p-4 flex-1 overflow-auto bg-slate-100/60 min-h-[440px] flex items-center justify-center">
+                {previewLoading ? (
+                  <div className="flex flex-col items-center gap-2 text-slate-500">
+                    <Loader2 className="size-7 animate-spin text-primary-600" />
+                    <span className="text-xs font-semibold">Loading document preview...</span>
+                  </div>
+                ) : previewError ? (
+                  <div className="max-w-md bg-white rounded-2xl border border-amber-200 p-6 text-center space-y-3 shadow-xs">
+                    <div className="size-12 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 mx-auto grid place-items-center">
+                      <AlertCircle className="size-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900">Document Preview Unavailable</h4>
+                    <p className="text-xs text-slate-600">{previewError}</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleTriggerReplace(previewDoc)}
+                      className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
+                    >
+                      <RefreshCw className="size-3.5 mr-1.5" />
+                      Re-upload Document
+                    </Button>
+                  </div>
+                ) : previewMimeType.toLowerCase().includes('pdf') ||
+                  previewDoc.fileName.toLowerCase().endsWith('.pdf') ||
+                  previewDoc.fullUrl.toLowerCase().includes('.pdf') ? (
+                  <iframe
+                    src={previewBlobUrl || previewDoc.fullUrl}
+                    title={previewDoc.name}
+                    className="w-full h-[540px] rounded-xl border border-slate-200 bg-white shadow-xs"
+                  />
+                ) : (
+                  <div className="max-w-full max-h-[540px] flex items-center justify-center">
+                    <img
+                      src={previewBlobUrl || previewDoc.fullUrl}
+                      alt={previewDoc.name}
+                      className="max-h-[540px] max-w-full rounded-xl object-contain shadow-md border border-slate-200 bg-white"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

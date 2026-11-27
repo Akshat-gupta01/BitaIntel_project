@@ -25,6 +25,7 @@ import {
 import { recordAuditLog } from "../services/audit.service.js";
 import { createNotification } from "../services/notification.service.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import { parsePagination, buildPaginationMeta } from "../utils/pagination.js";
 import {
   getGradeAndRisk,
   computeAndSaveBusinessTrustScore,
@@ -45,7 +46,12 @@ function getBadge(score: number): "Platinum" | "Gold" | "Silver" | "Verified" | 
  */
 export async function getVerificationQueue(req: Request, res: Response) {
   try {
-    const queue = await BusinessEntity.findAll({
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
+      limit: 10,
+      maxLimit: 200,
+    });
+
+    const queryOptions = {
       include: [
         {
           model: StatutoryIdentifier,
@@ -95,12 +101,31 @@ export async function getVerificationQueue(req: Request, res: Response) {
           { verified: false },
         ],
       },
-      order: [["updatedAt", "DESC"]],
-    });
+      order: [["updatedAt", "DESC"]] as [string, string][],
+    };
+
+    if (hasExplicitPagination) {
+      const { count, rows } = await BusinessEntity.findAndCountAll({
+        ...queryOptions,
+        distinct: true,
+        col: "id",
+        limit,
+        offset,
+      });
+
+      return sendSuccess(res, {
+        total: count,
+        queue: rows,
+        pagination: buildPaginationMeta(count, page, limit),
+      });
+    }
+
+    const queue = await BusinessEntity.findAll(queryOptions);
 
     return sendSuccess(res, {
       total: queue.length,
       queue,
+      pagination: buildPaginationMeta(queue.length, 1, queue.length || limit),
     });
   } catch (error: any) {
     console.error("Get Verification Queue Error:", error);
@@ -119,7 +144,22 @@ export async function getVerificationQueue(req: Request, res: Response) {
  */
 export async function getAllVendors(req: Request, res: Response) {
   try {
-    const vendors = await BusinessEntity.findAll({
+    const { page, limit, offset, search, hasExplicitPagination } = parsePagination(req, {
+      limit: 10,
+      maxLimit: 200,
+    });
+
+    const where: Record<string | symbol, unknown> = {};
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${search}%` } },
+        { legalName: { [Op.like]: `%${search}%` } },
+        { city: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    const queryOptions = {
+      where,
       include: [
         { model: StatutoryIdentifier, as: "statutory" },
         { model: User, as: "owner", attributes: ["id", "fullName", "email", "mobile", "designation"] },
@@ -130,8 +170,24 @@ export async function getAllVendors(req: Request, res: Response) {
         { model: BusinessFacility, as: "facilities" },
         { model: BusinessManufacturingCapability, as: "manufacturingCapability" },
       ],
-      order: [["updatedAt", "DESC"]],
-    });
+      order: [["updatedAt", "DESC"]] as [string, string][],
+    };
+
+    const result = hasExplicitPagination
+      ? await BusinessEntity.findAndCountAll({
+          ...queryOptions,
+          distinct: true,
+          col: "id",
+          limit,
+          offset,
+        })
+      : {
+          rows: await BusinessEntity.findAll(queryOptions),
+          count: 0,
+        };
+
+    const vendors = result.rows;
+    const total = hasExplicitPagination ? result.count : vendors.length;
 
     // Auto-refresh legacy or uncalculated verified vendors (e.g. propack with initial 40.00 score or 'Under Review' badge)
     for (const v of vendors) {
@@ -150,8 +206,11 @@ export async function getAllVendors(req: Request, res: Response) {
     }
 
     return sendSuccess(res, {
-      total: vendors.length,
+      total,
       vendors,
+      pagination: hasExplicitPagination
+        ? buildPaginationMeta(total, page, limit)
+        : buildPaginationMeta(total, 1, total || limit),
     });
   } catch (error: any) {
     console.error("Get All Vendors Error:", error);
@@ -498,15 +557,21 @@ export async function reviewDocument(req: Request, res: Response) {
  */
 export async function getAuditLogs(req: Request, res: Response) {
   try {
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
-    const logs = await AuditLog.findAll({
+    const { page, limit, offset, hasExplicitPagination } = parsePagination(req, {
+      limit: 100,
+      maxLimit: 200,
+    });
+    const effectiveLimit = hasExplicitPagination ? limit : 100;
+    const { count, rows } = await AuditLog.findAndCountAll({
       order: [["createdAt", "DESC"]],
-      limit,
+      limit: effectiveLimit,
+      offset: hasExplicitPagination ? offset : 0,
     });
 
     return sendSuccess(res, {
-      total: logs.length,
-      logs,
+      total: count,
+      logs: rows,
+      pagination: buildPaginationMeta(count, page, effectiveLimit),
     });
   } catch (error) {
     console.error("Get Audit Logs Error:", error);

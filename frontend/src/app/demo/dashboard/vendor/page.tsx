@@ -6,6 +6,8 @@ import { RoleGuard } from '@/components/auth/RoleGuard';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Pagination } from '@/components/ui/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import { Logo } from '@/components/ui/Logo';
 import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { toast } from 'sonner';
@@ -57,6 +59,9 @@ import {
   FileCheck2,
   Download,
   DollarSign,
+  MessageSquare,
+  Lock,
+  Search,
 } from 'lucide-react';
 
 interface BackendFacility {
@@ -159,12 +164,14 @@ interface BackendBusinessPayload {
     serviceTypes?: string;
     serviceExpertise?: string;
     geographicCoverage?: string;
+    serviceEquipment?: string;
     deliveryCapacity?: string;
     yearsInBusiness?: string;
     numberOfFacilities?: string;
     annualTurnoverRange?: string;
     totalWorkforce?: string;
-    manufacturingLicenceDoc?: string;
+    regulatoryApprovalDoc?: string;
+    regulatoryFilingDetails?: string;
     facilityPhotos?: string[];
     technicalAuditDoc?: string;
     testingCapabilities?: string;
@@ -536,6 +543,7 @@ export default function VendorDashboardPage() {
     | 'documents'
     | 'score'
     | 'modules'
+    | 'enquiries'
     | 'notifications'
     | 'settings'
   >('overview');
@@ -565,6 +573,20 @@ export default function VendorDashboardPage() {
 
   // Document Vault State
   const [documents, setDocuments] = useState<VaultDocumentItem[]>(INITIAL_DOCUMENTS);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [docStatusFilter, setDocStatusFilter] = useState<'all' | 'Verified' | 'In Review'>('all');
+  const filteredDocuments = useMemo(() => {
+    const q = docSearchQuery.trim().toLowerCase();
+    return documents.filter((doc) => {
+      if (docStatusFilter !== 'all' && doc.status !== docStatusFilter) return false;
+      if (!q) return true;
+      return (
+        doc.name.toLowerCase().includes(q) ||
+        doc.category.toLowerCase().includes(q)
+      );
+    });
+  }, [documents, docSearchQuery, docStatusFilter]);
+  const documentsPagination = usePagination(filteredDocuments, 10);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedUploadCategory, setSelectedUploadCategory] = useState(DOCUMENT_CATEGORIES_SRS[0].name);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
@@ -573,6 +595,43 @@ export default function VendorDashboardPage() {
 
   // Notifications State (live from DB)
   const [notifications, setNotifications] = useState<NotificationUIItem[]>([]);
+  const [notifSearchQuery, setNotifSearchQuery] = useState('');
+  const [notifStatusFilter, setNotifStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const filteredNotifications = useMemo(() => {
+    const q = notifSearchQuery.trim().toLowerCase();
+    return notifications.filter((notif) => {
+      if (notifStatusFilter === 'unread' && notif.read) return false;
+      if (notifStatusFilter === 'read' && !notif.read) return false;
+      if (!q) return true;
+      return (
+        notif.title.toLowerCase().includes(q) ||
+        notif.desc.toLowerCase().includes(q)
+      );
+    });
+  }, [notifications, notifSearchQuery, notifStatusFilter]);
+  const notificationsPagination = usePagination(filteredNotifications, 10);
+
+  // Vendor Buyer Enquiries (Read-Only)
+  const [vendorEnquiries, setVendorEnquiries] = useState<vendorService.VendorEnquiryItem[]>([]);
+  const [enquiriesLoading, setEnquiriesLoading] = useState<boolean>(true);
+  const [enquirySearchQuery, setEnquirySearchQuery] = useState('');
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>('all');
+  const filteredVendorEnquiries = useMemo(() => {
+    const q = enquirySearchQuery.trim().toLowerCase();
+    return vendorEnquiries.filter((enq) => {
+      if (enquiryStatusFilter !== 'all' && enq.status !== enquiryStatusFilter) return false;
+      if (!q) return true;
+      return (
+        (enq.enquiryNumber || '').toLowerCase().includes(q) ||
+        (enq.enquiryId || '').toLowerCase().includes(q) ||
+        (enq.subject || '').toLowerCase().includes(q) ||
+        (enq.buyerName || '').toLowerCase().includes(q) ||
+        (enq.buyerCompany || '').toLowerCase().includes(q) ||
+        (enq.productName || '').toLowerCase().includes(q)
+      );
+    });
+  }, [vendorEnquiries, enquirySearchQuery, enquiryStatusFilter]);
+  const enquiriesPagination = usePagination(filteredVendorEnquiries, 10);
 
   // Keep Step 1 & Step 2 synchronized with authenticated user whenever user context updates
   useEffect(() => {
@@ -605,6 +664,11 @@ export default function VendorDashboardPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'enquiries') {
+        setTimeout(() => setActiveTab('enquiries'), 0);
+      }
+
       const justCompleted = sessionStorage.getItem('vendor_profile_just_completed');
       if (justCompleted) {
         try {
@@ -618,6 +682,20 @@ export default function VendorDashboardPage() {
         }
       }
     }
+
+    // Live sync buyer enquiries (Read-Only for vendor)
+    vendorService
+      .getVendorEnquiries()
+      .then((enqRes) => {
+        const list = enqRes?.data?.enquiries;
+        if (Array.isArray(list)) {
+          setVendorEnquiries(list);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setEnquiriesLoading(false);
+      });
 
     // Live sync notifications from Backend MySQL
     vendorService
@@ -688,14 +766,19 @@ export default function VendorDashboardPage() {
                   serviceTypes: b.capabilities.serviceTypes || prev.step3.serviceTypes,
                   serviceExpertise: b.capabilities.serviceExpertise || prev.step3.serviceExpertise,
                   geographicCoverage: b.capabilities.geographicCoverage || prev.step3.geographicCoverage,
+                  serviceEquipment: b.capabilities.serviceEquipment || prev.step3.serviceEquipment,
                   deliveryCapacity: b.capabilities.deliveryCapacity || prev.step3.deliveryCapacity,
                   yearsInBusiness: b.capabilities.yearsInBusiness || prev.step3.yearsInBusiness,
                   numberOfFacilities: b.capabilities.numberOfFacilities || prev.step3.numberOfFacilities,
                   annualTurnoverRange: b.capabilities.annualTurnoverRange || prev.step3.annualTurnoverRange,
                   totalWorkforce: b.capabilities.totalWorkforce || prev.step3.totalWorkforce,
-                  manufacturingLicenceDoc: b.capabilities.manufacturingLicenceDoc || prev.step3.manufacturingLicenceDoc,
-                  facilityPhotos: b.capabilities.facilityPhotos || prev.step3.facilityPhotos,
+                  facilityPhotos:
+                    vendorService.normalizeImageArray(b.capabilities.facilityPhotos).length > 0
+                      ? vendorService.normalizeImageArray(b.capabilities.facilityPhotos)
+                      : prev.step3.facilityPhotos,
                   technicalAuditDoc: b.capabilities.technicalAuditDoc || prev.step3.technicalAuditDoc,
+                  regulatoryApprovalDoc: b.capabilities.regulatoryApprovalDoc || prev.step3.regulatoryApprovalDoc,
+                  regulatoryFilingDetails: b.capabilities.regulatoryFilingDetails || prev.step3.regulatoryFilingDetails,
                 }
               : prev.step3;
 
@@ -1055,6 +1138,7 @@ export default function VendorDashboardPage() {
     { id: 'commercial', label: 'Commercial & Banking', icon: DollarSign, badge: 'Protected' },
     { id: 'documents', label: 'Document Vault', icon: FileCheck2, badge: `${documents.length} Files` },
     { id: 'score', label: 'Score & Badge', icon: Award, badge: `${trustScore}/100` },
+    { id: 'enquiries', label: 'Buyer Enquiries', icon: MessageSquare, badge: `${vendorEnquiries.length}` },
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: `${notifications.filter(n => !n.read).length}` },
     { id: 'settings', label: 'Account Settings', icon: Settings, badge: null },
   ];
@@ -1865,6 +1949,36 @@ export default function VendorDashboardPage() {
                   </Button>
                 </div>
 
+                {/* Search & Status Filter */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+                    <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={docSearchQuery}
+                      onChange={(e) => {
+                        setDocSearchQuery(e.target.value);
+                        documentsPagination.resetPage();
+                      }}
+                      placeholder="Search document name, category..."
+                      className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                  <select
+                    value={docStatusFilter}
+                    onChange={(e) => {
+                      setDocStatusFilter(e.target.value as 'all' | 'Verified' | 'In Review');
+                      documentsPagination.resetPage();
+                    }}
+                    aria-label="Filter documents by status"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="Verified">Verified</option>
+                    <option value="In Review">In Review</option>
+                  </select>
+                </div>
+
                 {/* Table of Vaulted Documents */}
                 <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                   <table className="w-full text-left text-xs">
@@ -1880,7 +1994,13 @@ export default function VendorDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {documents.map((doc) => (
+                      {documentsPagination.paginatedItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
+                            No matching documents found.
+                          </td>
+                        </tr>
+                      ) : documentsPagination.paginatedItems.map((doc) => (
                         <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-3.5">
                             <p className="font-bold text-slate-900 flex items-center gap-2">
@@ -1946,6 +2066,170 @@ export default function VendorDashboardPage() {
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  page={documentsPagination.page}
+                  totalPages={documentsPagination.totalPages}
+                  totalItems={documentsPagination.totalItems}
+                  pageSize={documentsPagination.pageSize}
+                  onPageChange={documentsPagination.setPage}
+                  onPageSizeChange={documentsPagination.setPageSize}
+                  pageSizeOptions={[10, 20, 50]}
+                  itemLabel="documents"
+                />
+              </div>
+            )}
+
+            {/* ===================================================================== */}
+            {/* BUYER ENQUIRIES & RFQs (VENDOR READ-ONLY VIEW)                        */}
+            {/* ===================================================================== */}
+            {activeTab === 'enquiries' && (
+              <div className="space-y-5 animate-in fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                      <span>Buyer Enquiries &amp; RFQ Leads</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">
+                        <Lock className="size-3" /> Read-Only
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Incoming buyer enquiries submitted for your company dossier &amp; products. Status changes and buyer responses are handled exclusively by Platform Admin.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Search & Status Filter */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+                    <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={enquirySearchQuery}
+                      onChange={(e) => {
+                        setEnquirySearchQuery(e.target.value);
+                        enquiriesPagination.resetPage();
+                      }}
+                      placeholder="Search enquiry ID, buyer, product..."
+                      className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                  <select
+                    value={enquiryStatusFilter}
+                    onChange={(e) => {
+                      setEnquiryStatusFilter(e.target.value);
+                      enquiriesPagination.resetPage();
+                    }}
+                    aria-label="Filter enquiries by status"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="New">New</option>
+                    <option value="Viewed">Viewed</option>
+                    <option value="In Discussion">In Discussion</option>
+                    <option value="Responded">Responded</option>
+                    <option value="Closed/Rejected">Closed/Rejected</option>
+                  </select>
+                </div>
+
+                {enquiriesLoading ? (
+                  <Card variant="bento" className="p-8 bg-white text-center text-xs text-slate-500">
+                    Loading buyer enquiries...
+                  </Card>
+                ) : filteredVendorEnquiries.length === 0 ? (
+                  <Card variant="bento" className="p-10 bg-white text-center space-y-2">
+                    <div className="size-10 rounded-full bg-slate-100 text-slate-500 grid place-items-center mx-auto">
+                      <MessageSquare className="size-5" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">No Buyer Enquiries Yet</p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      When buyers submit RFQ enquiries on your company profile or products, they will appear here automatically for your visibility.
+                    </p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {enquiriesPagination.paginatedItems.map((enq) => (
+                      <Card key={enq.id} variant="bento" className="p-5 bg-white space-y-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200">
+                                {enq.enquiryNumber || enq.enquiryId}
+                              </span>
+                              <span className="text-xs font-bold text-slate-900">{enq.subject}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              From <strong className="text-slate-800">{enq.buyerName}</strong>
+                              {enq.buyerCompany ? ` (${enq.buyerCompany})` : ''} &bull; {enq.date}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                                enq.status === 'Responded'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : enq.status === 'In Discussion'
+                                  ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                  : enq.status === 'Closed/Rejected'
+                                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }`}
+                            >
+                              {enq.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3 text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 block">Buyer Email</span>
+                            <span className="font-medium text-slate-800">{enq.buyerEmail}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 block">Phone / Contact</span>
+                            <span className="font-medium text-slate-800">{enq.buyerPhone || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 block">
+                              {enq.productName ? 'Product / Budget' : 'Requirement Scope'}
+                            </span>
+                            <span className="font-medium text-slate-800">
+                              {[enq.productName, enq.budget].filter(Boolean).join(' • ') || 'Commercial RFQ'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-slate-200">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                            Buyer Requirement Details
+                          </span>
+                          <p className="whitespace-pre-line">{enq.details}</p>
+                        </div>
+
+                        {enq.replyMessage && (
+                          <div className="text-xs text-emerald-900 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 space-y-1">
+                            <span className="text-[10px] font-bold uppercase text-emerald-700 block">
+                              Admin Official Response
+                            </span>
+                            <p className="whitespace-pre-line">{enq.replyMessage}</p>
+                          </div>
+                        )}
+                      </Card>
+                    ))}
+
+                    <Pagination
+                      page={enquiriesPagination.page}
+                      totalPages={enquiriesPagination.totalPages}
+                      totalItems={enquiriesPagination.totalItems}
+                      pageSize={enquiriesPagination.pageSize}
+                      onPageChange={enquiriesPagination.setPage}
+                      onPageSizeChange={enquiriesPagination.setPageSize}
+                      pageSizeOptions={[10, 20, 50]}
+                      itemLabel="enquiries"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1975,13 +2259,43 @@ export default function VendorDashboardPage() {
                   </button>
                 </div>
 
+                {/* Search & Read Status Filter */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+                    <Search className="size-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={notifSearchQuery}
+                      onChange={(e) => {
+                        setNotifSearchQuery(e.target.value);
+                        notificationsPagination.resetPage();
+                      }}
+                      placeholder="Search notifications..."
+                      className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                  <select
+                    value={notifStatusFilter}
+                    onChange={(e) => {
+                      setNotifStatusFilter(e.target.value as 'all' | 'unread' | 'read');
+                      notificationsPagination.resetPage();
+                    }}
+                    aria-label="Filter notifications by read status"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  >
+                    <option value="all">All Alerts</option>
+                    <option value="unread">Unread</option>
+                    <option value="read">Read</option>
+                  </select>
+                </div>
+
                 <div className="space-y-2.5">
-                  {notifications.length === 0 ? (
+                  {filteredNotifications.length === 0 ? (
                     <Card variant="bento" className="p-8 bg-white text-center text-xs text-slate-500">
-                      No notifications yet. Verification updates and document review alerts will appear here.
+                      No matching notifications found.
                     </Card>
                   ) : (
-                    notifications.map((notif) => (
+                    notificationsPagination.paginatedItems.map((notif) => (
                       <Card
                         key={notif.id}
                         variant="bento"
@@ -2015,6 +2329,17 @@ export default function VendorDashboardPage() {
                     ))
                   )}
                 </div>
+
+                <Pagination
+                  page={notificationsPagination.page}
+                  totalPages={notificationsPagination.totalPages}
+                  totalItems={notificationsPagination.totalItems}
+                  pageSize={notificationsPagination.pageSize}
+                  onPageChange={notificationsPagination.setPage}
+                  onPageSizeChange={notificationsPagination.setPageSize}
+                  pageSizeOptions={[10, 20, 50]}
+                  itemLabel="notifications"
+                />
               </div>
             )}
 
@@ -2025,6 +2350,13 @@ export default function VendorDashboardPage() {
               <div className="space-y-6 animate-in fade-in">
                 <CompanyProfileTab
                   data={dossier.step2}
+                  facilityPhotos={dossier.step3.facilityPhotos || []}
+                  onFacilityPhotosChange={(photos) =>
+                    setDossier((prev) => ({
+                      ...prev,
+                      step3: { ...prev.step3, facilityPhotos: photos },
+                    }))
+                  }
                   onUpdate={async (up) => {
                     const updated = { ...dossier, step2: { ...dossier.step2, ...up } };
                     setDossier(updated);

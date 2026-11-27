@@ -11,6 +11,22 @@ interface RoleGuardProps {
   redirectTo?: string;
 }
 
+const ADMIN_DESK_SYSTEM_ROLES = new Set([
+  'admin',
+  'super_admin',
+  'verification_officer',
+  'quality_auditor',
+  'support_team',
+]);
+
+function isAdminDeskUser(user: { role?: string; systemRole?: string } | null | undefined): boolean {
+  if (!user) return false;
+  return (
+    ADMIN_DESK_SYSTEM_ROLES.has((user.role || '').toLowerCase()) ||
+    ADMIN_DESK_SYSTEM_ROLES.has((user.systemRole || '').toLowerCase())
+  );
+}
+
 export function RoleGuard({ children, allowedRoles, redirectTo }: RoleGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -36,14 +52,7 @@ export function RoleGuard({ children, allowedRoles, redirectTo }: RoleGuardProps
 
     // Role check if authenticated
     if (!isLoading && isAuthenticated && user && !isRoleAllowed) {
-      const isAdminUser =
-        user.role === 'admin' ||
-        user.role === 'super_admin' ||
-        user.systemRole === 'admin' ||
-        user.systemRole === 'super_admin' ||
-        user.systemRole === 'verification_officer';
-
-      const fallbackTarget = redirectTo || (isAdminUser ? '/demo/dashboard/admin' : '/demo/dashboard/vendor');
+      const fallbackTarget = redirectTo || (isAdminDeskUser(user) ? '/demo/dashboard/admin' : '/demo/dashboard/vendor');
       router.replace(fallbackTarget);
     }
   }, [isLoading, isAuthenticated, user, router, pathname, isRoleAllowed, redirectTo]);
@@ -78,19 +87,12 @@ export function RoleGuard({ children, allowedRoles, redirectTo }: RoleGuardProps
 
   // If authenticated user does not have permission for this route, block child render and show redirect loader
   if (!isRoleAllowed) {
-    const isAdminUser =
-      user.role === 'admin' ||
-      user.role === 'super_admin' ||
-      user.systemRole === 'admin' ||
-      user.systemRole === 'super_admin' ||
-      user.systemRole === 'verification_officer';
-
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center py-16 px-4">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="size-8 text-primary-600 animate-spin" />
           <p className="text-xs font-bold text-slate-700 tracking-wide">
-            {isAdminUser ? 'Redirecting to Admin Verification Desk...' : 'Redirecting to your dashboard...'}
+            {isAdminDeskUser(user) ? 'Redirecting to Admin Verification Desk...' : 'Redirecting to your dashboard...'}
           </p>
         </div>
       </div>

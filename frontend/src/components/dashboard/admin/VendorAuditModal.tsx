@@ -13,6 +13,7 @@ import {
   CertificationItem,
 } from '@services/admin.service';
 import { getFullImageUrl } from '@services/vendor.service';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 import {
@@ -140,6 +141,9 @@ export function VendorAuditModal({
   onClose,
   onAuditComplete,
 }: VendorAuditModalProps) {
+  const { hasPermission } = useAuth();
+  const canApproveDocuments = hasPermission('documents.approve');
+  const canApproveVerification = hasPermission('verification.approve');
   const [vendor, setVendor] = useState<AdminQueueItem | null>(initialVendor || null);
   const [isLoading, setIsLoading] = useState<boolean>(!initialVendor);
   const [activeTab, setActiveTab] = useState<
@@ -283,20 +287,6 @@ export function VendorAuditModal({
         step: 'step1',
         issueDate: '2026-02-15',
       },
-      {
-        id: 'doc-s1-02',
-        categoryKey: 'signatory_kyc',
-        categoryName: 'Signatory & Governance',
-        title: 'Signatory Identity Proof & Dual Verification Record',
-        fileName: `Signatory_KYC_${signatoryName}_Verified.pdf`,
-        fileUrl: '',
-        formattedSize: '890 KB',
-        status: 'VERIFIED',
-        moduleCode: 'Module A',
-        sha256Checksum: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-        step: 'step1',
-        issueDate: '2026-03-01',
-      },
 
       // STEP 2: Statutory & Facilities
       {
@@ -340,52 +330,6 @@ export function VendorAuditModal({
         sha256Checksum: '2c83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9071',
         step: 'step2',
         issueDate: '2026-08-20',
-      },
-
-      // STEP 3: Manufacturing & Operations
-      {
-        id: 'doc-s3-01',
-        categoryKey: 'factory_license',
-        categoryName: 'Facility & Licences',
-        title: 'Factory Inspector License & Industrial Safety Operating Permit',
-        fileName: `Factory_Inspector_Operating_License_${compName}.pdf`,
-        fileUrl: '',
-        formattedSize: '3.2 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module C',
-        sha256Checksum: '3d83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9072',
-        step: 'step3',
-        issueDate: '2021-02-18',
-        expiryDate: '2028-02-17',
-      },
-      {
-        id: 'doc-s3-02',
-        categoryKey: 'spcb_pollution_cto',
-        categoryName: 'Facility & Licences',
-        title: 'State Pollution Control Board (SPCB) Consent to Operate (CTO)',
-        fileName: `SPCB_Pollution_Consent_To_Operate_${compName}.pdf`,
-        fileUrl: '',
-        formattedSize: '2.4 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module F',
-        sha256Checksum: '4e83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9073',
-        step: 'step3',
-        issueDate: '2023-01-15',
-        expiryDate: '2028-12-31',
-      },
-      {
-        id: 'doc-s3-03',
-        categoryKey: 'plant_layout_audit',
-        categoryName: 'Manufacturing Capabilities',
-        title: 'Plant Machinery Layout & Technical Calibration Registry',
-        fileName: `Plant_Machinery_Layout_And_Asset_Audit.pdf`,
-        fileUrl: '',
-        formattedSize: '4.1 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module C',
-        sha256Checksum: '5f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9074',
-        step: 'step3',
-        issueDate: '2026-05-10',
       },
 
       // STEP 4: Products & Quality Certifications
@@ -442,7 +386,22 @@ export function VendorAuditModal({
       let step: 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'documents' = 'step2';
       if (key.includes('board') || key.includes('signatory') || key.includes('kyc') || key.includes('poa')) step = 'step1';
       else if (key.includes('incorporation') || key.includes('gst') || key.includes('pan') || key.includes('address') || key.includes('utility') || key.includes('tax')) step = 'step2';
-      else if (key.includes('mfg') || key.includes('factory') || key.includes('pollution') || key.includes('machinery') || key.includes('spcb') || key.includes('plant')) step = 'step3';
+      else if (
+        key.includes('mfg') ||
+        key.includes('manufactur') ||
+        key.includes('factory') ||
+        key.includes('licence') ||
+        key.includes('license') ||
+        key.includes('regulat') ||
+        key.includes('dmf') ||
+        key.includes('cep') ||
+        key.includes('technical_audit') ||
+        key.includes('pollution') ||
+        key.includes('machinery') ||
+        key.includes('spcb') ||
+        key.includes('plant')
+      )
+        step = 'step3';
       else if (key.includes('iso') || key.includes('quality') || key.includes('cert') || key.includes('product') || key.includes('catalog') || key.includes('tds') || key.includes('coa') || key.includes('sds')) step = 'step4';
       else if (key.includes('bank') || key.includes('cheque') || key.includes('solvency') || key.includes('commercial') || key.includes('statement')) step = 'step5';
 
@@ -528,14 +487,15 @@ export function VendorAuditModal({
         });
       });
 
-      if (p.catalogDoc) {
+      const catUrl = p.catalogueDoc || p.catalogDoc;
+      if (catUrl) {
         extraDocs.push({
           id: `prod-catalog-${p.id || idx}`,
           categoryKey: 'product_catalog_datasheet',
           categoryName: 'Products & Engineering',
           title: `Product Catalog & Material Spec - ${p.name || 'Catalog'}`,
-          fileName: p.catalogDoc.split('/').pop() || 'Product_Catalog.pdf',
-          fileUrl: p.catalogDoc,
+          fileName: catUrl.split('/').pop() || 'Product_Catalog.pdf',
+          fileUrl: catUrl,
           formattedSize: '3.4 MB',
           status: 'VERIFIED',
           moduleCode: 'Module B',
@@ -545,14 +505,15 @@ export function VendorAuditModal({
           isUploaded: true,
         });
       }
-      if (p.tdsDoc) {
+      const tdsUrl = p.technicalDataSheetDoc || p.tdsDoc;
+      if (tdsUrl) {
         extraDocs.push({
           id: `prod-tds-${p.id || idx}`,
           categoryKey: `product_tds_${p.id || idx}`,
           categoryName: 'Technical Specifications',
           title: `Technical Data Sheet (TDS) - ${p.name || 'Product'}`,
-          fileName: p.tdsDoc.split('/').pop() || 'TDS_Document.pdf',
-          fileUrl: p.tdsDoc,
+          fileName: tdsUrl.split('/').pop() || 'TDS_Document.pdf',
+          fileUrl: tdsUrl,
           formattedSize: '1.8 MB',
           status: 'VERIFIED',
           moduleCode: 'Module B',
@@ -599,46 +560,57 @@ export function VendorAuditModal({
     });
 
     // 5. Extra documents from Manufacturing Capabilities (Step 3)
-    if (vendor.manufacturingCapability?.manufacturingLicenceDoc) {
-      const mfgDoc = String(vendor.manufacturingCapability.manufacturingLicenceDoc);
-      extraDocs.push({
-        id: 'mfg-licence-doc',
-        categoryKey: 'factory_license',
-        categoryName: 'Facility & Licences',
-        title: 'Factory Inspector License & Industrial Safety Operating Permit',
-        fileName: mfgDoc.split('/').pop() || 'Factory_License.pdf',
-        fileUrl: mfgDoc,
-        formattedSize: '2.5 MB',
-        status: 'VERIFIED',
-        moduleCode: 'Module C',
-        sha256Checksum: '3d83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9072',
-        step: 'step3',
-        issueDate: '2024-01-10',
-        isUploaded: true,
-      });
-    }
     if (vendor.manufacturingCapability?.technicalAuditDoc) {
       const techDoc = String(vendor.manufacturingCapability.technicalAuditDoc);
       extraDocs.push({
         id: 'tech-audit-doc',
-        categoryKey: 'plant_layout_audit',
+        categoryKey: 'technical_audit',
         categoryName: 'Manufacturing Capabilities',
-        title: 'Plant Machinery Layout & Technical Calibration Registry',
+        title: 'Technical Audit & Inspection Report',
         fileName: techDoc.split('/').pop() || 'Technical_Audit.pdf',
         fileUrl: techDoc,
-        formattedSize: '3.1 MB',
+        formattedSize: 'Uploaded PDF',
         status: 'VERIFIED',
         moduleCode: 'Module C',
-        sha256Checksum: '5f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9074',
+        sha256Checksum: 'Submitted via Step 3',
         step: 'step3',
         issueDate: '2026-05-10',
         isUploaded: true,
       });
     }
+    if (vendor.manufacturingCapability?.regulatoryApprovalDoc) {
+      const regDoc = String(vendor.manufacturingCapability.regulatoryApprovalDoc);
+      extraDocs.push({
+        id: 'regulatory-approval-doc',
+        categoryKey: 'regulatory_approval_dmf',
+        categoryName: 'Regulatory Approvals (Pharma / Industry)',
+        title: 'Regulatory Approvals (DMF / USDMF, CEP & Filings)',
+        fileName: regDoc.split('/').pop() || 'Regulatory_Approval_DMF_CEP.pdf',
+        fileUrl: regDoc,
+        formattedSize: 'Uploaded PDF',
+        status: 'PENDING',
+        moduleCode: 'Module C',
+        sha256Checksum: 'Submitted via Step 3',
+        step: 'step3',
+        issueDate: new Date().toISOString().split('T')[0],
+        isUploaded: true,
+      });
+    }
 
-    // De-duplicate extraDocs against rawVaultDocs by fileUrl
-    const existingUrls = new Set(rawVaultDocs.map((d) => d.fileUrl).filter(Boolean));
-    const uniqueExtraDocs = extraDocs.filter((d) => !d.fileUrl || !existingUrls.has(d.fileUrl));
+    // De-duplicate extraDocs against rawVaultDocs by normalized fileUrl or categoryKey
+    const existingUrls = new Set(rawVaultDocs.map((d) => getFullImageUrl(d.fileUrl)).filter(Boolean));
+    const existingCategoryKeys = new Set(
+      rawVaultDocs.map((d) => (d.categoryKey || '').toLowerCase()).filter(Boolean)
+    );
+    const uniqueExtraDocs = extraDocs.filter((d) => {
+      const normUrl = getFullImageUrl(d.fileUrl);
+      const cat = (d.categoryKey || '').toLowerCase();
+      if (normUrl && existingUrls.has(normUrl)) return false;
+      if ((cat === 'technical_audit' || cat === 'regulatory_approval_dmf') && existingCategoryKeys.has(cat)) {
+        return false;
+      }
+      return true;
+    });
 
     // Combine all real uploaded docs
     const allRealDocs = [...rawVaultDocs, ...uniqueExtraDocs];
@@ -663,10 +635,7 @@ export function VendorAuditModal({
         if (tk === 'product_catalog_datasheet' && (k.includes('catalog') || k.includes('datasheet') || k.includes('product') || k.includes('tds'))) return true;
         if (tk === 'board_resolution' && (k.includes('board') || k.includes('resolution') || k.includes('poa'))) return true;
         if (tk === 'address_proof' && (k.includes('address') || k.includes('utility') || k.includes('bill') || k.includes('lease'))) return true;
-        if (tk === 'incorporation_cert' && (k.includes('incorporation') || k.includes('mca') || k.includes('reg'))) return true;
-        if (tk === 'factory_license' && (k.includes('factory') || k.includes('dish') || k.includes('license'))) return true;
-        if (tk === 'spcb_pollution_cto' && (k.includes('pollution') || k.includes('spcb') || k.includes('cto'))) return true;
-        if (tk === 'plant_layout_audit' && (k.includes('layout') || k.includes('machinery') || k.includes('plant'))) return true;
+        if (tk === 'incorporation_cert' && (k.includes('incorporation') || k.includes('mca'))) return true;
         return false;
       });
 
@@ -922,35 +891,39 @@ export function VendorAuditModal({
             <span>View</span>
           </button>
 
-          <button
-            type="button"
-            disabled={isDocLoading}
-            onClick={() => handleReviewDoc(doc.id, 'VERIFIED')}
-            className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-              doc.status === 'VERIFIED'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-            }`}
-            title="Mark document as Verified"
-          >
-            <Check className="size-3.5" />
-            <span>{doc.status === 'VERIFIED' ? 'Verified' : 'Verify'}</span>
-          </button>
+          {canApproveDocuments && (
+            <>
+              <button
+                type="button"
+                disabled={isDocLoading}
+                onClick={() => handleReviewDoc(doc.id, 'VERIFIED')}
+                className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                  doc.status === 'VERIFIED'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+                title="Mark document as Verified"
+              >
+                <Check className="size-3.5" />
+                <span>{doc.status === 'VERIFIED' ? 'Verified' : 'Verify'}</span>
+              </button>
 
-          <button
-            type="button"
-            disabled={isDocLoading}
-            onClick={() => handleReviewDoc(doc.id, 'ACTION_REQUIRED')}
-            className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-              doc.status === 'ACTION_REQUIRED'
-                ? 'bg-amber-600 text-white'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-            }`}
-            title="Request vendor action or re-upload"
-          >
-            <AlertTriangle className="size-3.5" />
-            <span>Action Required</span>
-          </button>
+              <button
+                type="button"
+                disabled={isDocLoading}
+                onClick={() => handleReviewDoc(doc.id, 'ACTION_REQUIRED')}
+                className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                  doc.status === 'ACTION_REQUIRED'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                }`}
+                title="Request vendor action or re-upload"
+              >
+                <AlertTriangle className="size-3.5" />
+                <span>Action Required</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1088,48 +1061,55 @@ export function VendorAuditModal({
         </div>
 
         {/* Right: Remarks Input & Action Buttons (Reject, Action Required, Approve) */}
-        <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto flex-1 lg:justify-end">
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Auditor verification remarks or action required notes..."
-            className="text-xs bg-white border border-slate-200 rounded-xl px-3.5 py-2 outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100 text-slate-900 w-full sm:max-w-xs md:max-w-sm transition-all shadow-2xs"
-          />
+        {canApproveVerification ? (
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto flex-1 lg:justify-end">
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Auditor verification remarks or action required notes..."
+              className="text-xs bg-white border border-slate-200 rounded-xl px-3.5 py-2 outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-100 text-slate-900 w-full sm:max-w-xs md:max-w-sm transition-all shadow-2xs"
+            />
 
-          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDecision('REJECTED')}
-              isLoading={isSubmitting}
-              className="text-rose-700 hover:bg-rose-50 border-rose-200 text-xs px-3 h-8.5 font-bold cursor-pointer"
-            >
-              <XCircle className="size-3.5 mr-1" />
-              Reject
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDecision('ACTION_REQUIRED')}
-              isLoading={isSubmitting}
-              className="text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 text-xs px-3 h-8.5 font-bold cursor-pointer"
-            >
-              <AlertTriangle className="size-3.5 mr-1 text-amber-600" />
-              Action Required
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => handleDecision('APPROVED')}
-              isLoading={isSubmitting}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 h-8.5 font-bold shadow-2xs cursor-pointer"
-            >
-              <Check className="size-3.5 mr-1" />
-              Approve (L{vendor?.level || 1} {vendor?.badge || 'Verified'})
-            </Button>
+            <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDecision('REJECTED')}
+                isLoading={isSubmitting}
+                className="text-rose-700 hover:bg-rose-50 border-rose-200 text-xs px-3 h-8.5 font-bold cursor-pointer"
+              >
+                <XCircle className="size-3.5 mr-1" />
+                Reject
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDecision('ACTION_REQUIRED')}
+                isLoading={isSubmitting}
+                className="text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 text-xs px-3 h-8.5 font-bold cursor-pointer"
+              >
+                <AlertTriangle className="size-3.5 mr-1 text-amber-600" />
+                Action Required
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleDecision('APPROVED')}
+                isLoading={isSubmitting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 h-8.5 font-bold shadow-2xs cursor-pointer"
+              >
+                <Check className="size-3.5 mr-1" />
+                Approve (L{vendor?.level || 1} {vendor?.badge || 'Verified'})
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+            <ShieldCheck className="size-3.5 text-slate-500" />
+            <span>Read-Only Audit Inspection</span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -1546,26 +1526,76 @@ export function VendorAuditModal({
                       Directors & Key Personnel ({vendor.keyPersonnel.length})
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      {vendor.keyPersonnel.map((person: PersonnelItem, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center"
-                        >
-                          <div>
-                            <p className="font-bold text-slate-900">
-                              {person.fullName || person.name}
-                            </p>
-                            <p className="text-slate-500 text-[11px]">
-                              {person.designation || 'Director'}
-                            </p>
+                      {vendor.keyPersonnel.map((person: PersonnelItem, idx: number) => {
+                        const personName = person.fullName || person.name || 'Personnel';
+                        const initials = personName
+                          .split(' ')
+                          .map((part) => part[0])
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase();
+                        return (
+                          <div
+                            key={person.id ?? idx}
+                            className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center gap-3"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {person.photoUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPreviewDoc({
+                                      id: `personnel-photo-${person.id ?? idx}`,
+                                      categoryKey: 'product_image',
+                                      categoryName: 'Key Personnel Photo',
+                                      title: `${personName} (${person.designation || 'Director'})`,
+                                      fileName: person.photoUrl!.split('/').pop() || 'personnel_photo.jpg',
+                                      fileUrl: person.photoUrl!,
+                                      formattedSize: 'Image',
+                                      status: 'VERIFIED',
+                                      moduleCode: 'Module A',
+                                      sha256Checksum: 'Uploaded Photo',
+                                      step: 'step2',
+                                      isUploaded: true,
+                                    })
+                                  }
+                                  className="shrink-0 rounded-full overflow-hidden border border-slate-200 hover:border-primary-400 transition-colors cursor-pointer"
+                                  title="Click to enlarge photo"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={getFullImageUrl(person.photoUrl)}
+                                    alt={personName}
+                                    className="size-10 rounded-full object-cover bg-white"
+                                  />
+                                </button>
+                              ) : (
+                                <div className="size-10 rounded-full bg-primary-100 font-bold text-primary-800 grid place-items-center text-xs shrink-0">
+                                  {initials || 'KP'}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-900 truncate">
+                                  {personName}
+                                </p>
+                                <p className="text-slate-500 text-[11px] truncate">
+                                  {person.designation || 'Director'}
+                                </p>
+                                {(person.email || person.mobile) && (
+                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                    {[person.email, person.mobile].filter(Boolean).join(' • ')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            {person.din && (
+                              <span className="font-mono text-[10px] bg-slate-200 px-2 py-0.5 rounded-sm shrink-0">
+                                DIN: {person.din}
+                              </span>
+                            )}
                           </div>
-                          {person.din && (
-                            <span className="font-mono text-[10px] bg-slate-200 px-2 py-0.5 rounded-sm">
-                              DIN: {person.din}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1641,6 +1671,93 @@ export function VendorAuditModal({
                   </div>
                 </div>
 
+                {/* Service Capabilities & Geographic Delivery Section */}
+                {(vendor.serviceCapability?.serviceTypes ||
+                  vendor.serviceCapability?.serviceExpertise ||
+                  vendor.serviceCapability?.geographicCoverage ||
+                  vendor.serviceCapability?.serviceEquipment ||
+                  vendor.serviceCapability?.deliveryCapacity) && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+                    <h4 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                      <Briefcase className="size-4 text-indigo-700" />
+                      <span>Service Capabilities &amp; Geographic Delivery</span>
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-800 block">Service Types</span>
+                        <p className="text-slate-600">
+                          {vendor.serviceCapability?.serviceTypes || '—'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-800 block">Service Expertise</span>
+                        <p className="text-slate-600">
+                          {vendor.serviceCapability?.serviceExpertise || '—'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-800 block">Geographic Coverage</span>
+                        <p className="text-slate-600">
+                          {vendor.serviceCapability?.geographicCoverage || '—'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-800 block">
+                          Equipment &amp; Field Tools
+                        </span>
+                        <p className="text-slate-600">
+                          {vendor.serviceCapability?.serviceEquipment || '—'}
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-800 block">
+                          Delivery Capacity &amp; SLA
+                        </span>
+                        <p className="text-slate-600">
+                          {vendor.serviceCapability?.deliveryCapacity || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Regulatory Approvals, Licences & Filings Section */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-primary-700" />
+                      <span>Regulatory Approvals, Licences &amp; Filings</span>
+                    </h4>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                        vendor.manufacturingCapability?.regulatoryFilingDetails ||
+                        vendor.manufacturingCapability?.regulatoryApprovalDoc
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {vendor.manufacturingCapability?.regulatoryFilingDetails ||
+                      vendor.manufacturingCapability?.regulatoryApprovalDoc
+                        ? 'Submitted'
+                        : 'Not Submitted'}
+                    </span>
+                  </div>
+                  {vendor.manufacturingCapability?.regulatoryFilingDetails ? (
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                        DMF / USDMF, CEP &amp; Licence Reference Details
+                      </span>
+                      <p className="text-slate-800 font-medium whitespace-pre-line">
+                        {vendor.manufacturingCapability.regulatoryFilingDetails}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      No additional DMF/USDMF, CEP, or regulatory filing numbers declared.
+                    </p>
+                  )}
+                </div>
+
                 {/* Step 3 Statutory Documents Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -1655,7 +1772,13 @@ export function VendorAuditModal({
                     </span>
                   </div>
                   <div className="space-y-3">
-                    {step3Docs.map(renderDocumentCard)}
+                    {step3Docs.length === 0 ? (
+                      <p className="text-xs text-slate-500 py-4 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        No manufacturing or regulatory documents uploaded.
+                      </p>
+                    ) : (
+                      step3Docs.map(renderDocumentCard)
+                    )}
                   </div>
                 </div>
               </div>
@@ -2079,22 +2202,26 @@ export function VendorAuditModal({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleReviewDoc(previewDoc.id, 'VERIFIED')}
-                  className="h-8 px-3 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Check className="size-3.5" />
-                  <span>Verify</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReviewDoc(previewDoc.id, 'ACTION_REQUIRED')}
-                  className="h-8 px-3 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <AlertTriangle className="size-3.5" />
-                  <span>Action Required</span>
-                </button>
+                {canApproveDocuments && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleReviewDoc(previewDoc.id, 'VERIFIED')}
+                      className="h-8 px-3 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Check className="size-3.5" />
+                      <span>Verify</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReviewDoc(previewDoc.id, 'ACTION_REQUIRED')}
+                      className="h-8 px-3 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <AlertTriangle className="size-3.5" />
+                      <span>Action Required</span>
+                    </button>
+                  </>
+                )}
                 {previewDoc.fileUrl && (
                   <a
                     href={getDocUrl(previewDoc.fileUrl)}
@@ -2174,19 +2301,21 @@ export function VendorAuditModal({
                     The vendor has not attached a file for this statutory requirement during onboarding. You can flag this requirement using <strong>Action Required</strong> to request the vendor to upload the required file.
                   </p>
 
-                  <div className="pt-2 flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleReviewDoc(previewDoc.id, 'ACTION_REQUIRED');
-                        setPreviewDoc(null);
-                      }}
-                      className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                    >
-                      <AlertTriangle className="size-3.5" />
-                      <span>Request File from Vendor (Action Required)</span>
-                    </button>
-                  </div>
+                  {canApproveDocuments && (
+                    <div className="pt-2 flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleReviewDoc(previewDoc.id, 'ACTION_REQUIRED');
+                          setPreviewDoc(null);
+                        }}
+                        className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      >
+                        <AlertTriangle className="size-3.5" />
+                        <span>Request File from Vendor (Action Required)</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

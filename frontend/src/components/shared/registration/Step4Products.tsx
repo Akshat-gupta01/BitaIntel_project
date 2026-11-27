@@ -50,6 +50,7 @@ export function Step4Products({
 }: Step4ProductsProps) {
   // Add Product modal / form drawer
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [isSavingCert, setIsSavingCert] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const [attachedDocs, setAttachedDocs] = useState<{
     tds?: { name: string; url: string };
@@ -673,90 +674,101 @@ export function Step4Products({
 
   // Add Certificate & save to MySQL certifications table
   async function handleAddCert() {
+    if (isSavingCert) return;
     if (!newCert.certificateNumber || !newCert.issuingAuthority || !newCert.expiryDate) {
       toast.error('Please enter certificate number, issuing body, and expiry date.');
       return;
     }
 
-    const payload: vendorService.CertificationPayload = {
-      certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
-      certificateNumber: newCert.certificateNumber || '',
-      issuingAuthority: newCert.issuingAuthority || '',
-      issueDate: newCert.issueDate || null,
-      expiryDate: newCert.expiryDate || null,
-      scope: newCert.scope || null,
-      applicableFacility: newCert.applicableFacility || 'All Facilities',
-      evidenceDoc: newCert.evidenceDoc || null,
-      status: (newCert.status as any) || 'Active',
-    };
-
-    // If Editing Existing Certificate
-    if (editingCertId) {
-      if (/^\d+$/.test(editingCertId)) {
-        try {
-          await vendorService.updateCertification(Number(editingCertId), payload);
-          toast.success('Certificate Updated in Database', {
-            description: `${payload.certificateType} updated in certifications table.`,
-          });
-        } catch (err: any) {
-          console.error('Update cert error:', err);
-          toast.error('Failed to update certificate in database', {
-            description: err.message,
-          });
-        }
-      } else {
-        toast.info('Certificate Updated Locally', { description: payload.certificateNumber });
-      }
-
-      const updatedList = data.certifications.map((c) =>
-        c.id === editingCertId
-          ? {
-              ...c,
-              certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
-              certificateNumber: newCert.certificateNumber || '',
-              issuingAuthority: newCert.issuingAuthority || '',
-              issueDate: newCert.issueDate || '',
-              expiryDate: newCert.expiryDate || '',
-              scope: newCert.scope || '',
-              applicableFacility: newCert.applicableFacility || 'All Facilities',
-              evidenceDoc: newCert.evidenceDoc,
-              status: (newCert.status as any) || 'Active',
-            }
-          : c
-      );
-      onChange({ certifications: updatedList });
-      handleCancelCertForm();
-      return;
-    }
-
-    let assignedId = `CERT-${Date.now()}`;
+    setIsSavingCert(true);
     try {
-      const res = await vendorService.addCertification(payload);
-      if (res?.data?.certification?.id) {
-        assignedId = String(res.data.certification.id);
-      }
-      toast.success('Quality Certificate Saved to Database', {
-        description: `${payload.certificateType} stored in certifications table.`,
-      });
-    } catch (err: any) {
-      console.warn('Backend certification save note:', err.message);
-      toast.info('Quality Certificate Added Locally', { description: payload.certificateNumber });
-    }
+      const payload: vendorService.CertificationPayload = {
+        certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
+        certificateNumber: newCert.certificateNumber || '',
+        issuingAuthority: newCert.issuingAuthority || '',
+        issueDate: newCert.issueDate || null,
+        expiryDate: newCert.expiryDate || null,
+        scope: newCert.scope || null,
+        applicableFacility: newCert.applicableFacility || 'All Facilities',
+        evidenceDoc: newCert.evidenceDoc || null,
+        status: (newCert.status as any) || 'Active',
+      };
 
-    const item: QualityCertificateRecord = {
-      id: assignedId,
-      certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
-      certificateNumber: newCert.certificateNumber || '',
-      issuingAuthority: newCert.issuingAuthority || '',
-      issueDate: newCert.issueDate || '',
-      expiryDate: newCert.expiryDate || '',
-      scope: newCert.scope || '',
-      applicableFacility: newCert.applicableFacility || 'All Facilities',
-      evidenceDoc: newCert.evidenceDoc,
-      status: (newCert.status as any) || 'Active',
-    };
-    onChange({ certifications: [...data.certifications, item] });
-    handleCancelCertForm();
+      // If Editing Existing Certificate
+      if (editingCertId) {
+        if (/^\d+$/.test(editingCertId)) {
+          try {
+            await vendorService.updateCertification(Number(editingCertId), payload);
+            toast.success('Certificate Updated in Database', {
+              description: `${payload.certificateType} updated in certifications table.`,
+            });
+          } catch (err: any) {
+            console.error('Update cert error:', err);
+            toast.error('Failed to update certificate in database', {
+              description: err.message,
+            });
+          }
+        } else {
+          toast.info('Certificate Updated Locally', { description: payload.certificateNumber });
+        }
+
+        const updatedList = data.certifications.map((c) =>
+          c.id === editingCertId
+            ? {
+                ...c,
+                certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
+                certificateNumber: newCert.certificateNumber || '',
+                issuingAuthority: newCert.issuingAuthority || '',
+                issueDate: newCert.issueDate || '',
+                expiryDate: newCert.expiryDate || '',
+                scope: newCert.scope || '',
+                applicableFacility: newCert.applicableFacility || 'All Facilities',
+                evidenceDoc: newCert.evidenceDoc,
+                status: (newCert.status as any) || 'Active',
+              }
+            : c
+        );
+        onChange({ certifications: updatedList });
+        handleCancelCertForm();
+        return;
+      }
+
+      let assignedId = `CERT-${Date.now()}`;
+      try {
+        const res = await vendorService.addCertification(payload);
+        const savedCert =
+          res?.data?.certification ||
+          (Array.isArray(res?.data?.certifications)
+            ? res.data.certifications[0]
+            : res?.data?.certifications);
+        if (savedCert?.id) {
+          assignedId = String(savedCert.id);
+        }
+        toast.success('Quality Certificate Saved to Database', {
+          description: `${payload.certificateType} stored in certifications table.`,
+        });
+      } catch (err: any) {
+        console.warn('Backend certification save note:', err.message);
+        toast.info('Quality Certificate Added Locally', { description: payload.certificateNumber });
+      }
+
+      const item: QualityCertificateRecord = {
+        id: assignedId,
+        certificateType: newCert.certificateType || STANDARD_CERTIFICATIONS[0],
+        certificateNumber: newCert.certificateNumber || '',
+        issuingAuthority: newCert.issuingAuthority || '',
+        issueDate: newCert.issueDate || '',
+        expiryDate: newCert.expiryDate || '',
+        scope: newCert.scope || '',
+        applicableFacility: newCert.applicableFacility || 'All Facilities',
+        evidenceDoc: newCert.evidenceDoc,
+        status: (newCert.status as any) || 'Active',
+      };
+      onChange({ certifications: [...data.certifications, item] });
+      handleCancelCertForm();
+    } finally {
+      setIsSavingCert(false);
+    }
   }
 
   async function handleRemoveCert(id: string) {
@@ -844,11 +856,17 @@ export function Step4Products({
               expiryDate: cert.expiryDate || null,
               scope: cert.scope || null,
               applicableFacility: cert.applicableFacility || 'All Facilities',
+              evidenceDoc: cert.evidenceDoc || null,
               status: cert.status,
             });
-            if (res?.data?.certification?.id) {
+            const savedCert =
+              res?.data?.certification ||
+              (Array.isArray(res?.data?.certifications)
+                ? res.data.certifications[0]
+                : res?.data?.certifications);
+            if (savedCert?.id) {
               updatedAny = true;
-              return { ...cert, id: String(res.data.certification.id) };
+              return { ...cert, id: String(savedCert.id) };
             }
           } catch {}
         }
@@ -1695,6 +1713,7 @@ export function Step4Products({
               <Button
                 type="button"
                 size="sm"
+                disabled={isSavingCert}
                 onClick={handleAddCert}
                 className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold"
               >

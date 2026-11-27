@@ -46,7 +46,10 @@ export interface ProductResponseData {
 }
 
 export interface CertificationResponseData {
-  certification: { id: number | string; [key: string]: any };
+  certification?: { id: number | string; [key: string]: any };
+  certifications?:
+    | { id: number | string; [key: string]: any }
+    | Array<{ id: number | string; [key: string]: any }>;
   [key: string]: any;
 }
 
@@ -153,6 +156,7 @@ export interface CapabilitiesPayload {
   serviceTypes?: string | null;
   serviceExpertise?: string | null;
   geographicCoverage?: string | null;
+  serviceEquipment?: string | null;
   deliveryCapacity?: string | null;
   yearsInBusiness?: string | number | null;
   numberOfFacilities?: string | number | null;
@@ -163,9 +167,10 @@ export interface CapabilitiesPayload {
   exportTurnoverPercentage?: string | null;
   testingCapabilities?: string | null;
   qualityAssuranceProcedures?: string | null;
-  manufacturingLicenceDoc?: string | null;
   facilityPhotos?: string[] | null;
   technicalAuditDoc?: string | null;
+  regulatoryApprovalDoc?: string | null;
+  regulatoryFilingDetails?: string | null;
   [key: string]: unknown;
 }
 
@@ -343,6 +348,18 @@ export const getFacilities = async (): Promise<ApiResponse<FacilityPayload[]>> =
 };
 
 /**
+ * 7b. Update an existing Facility in Database
+ * PATCH /api/v1/vendor/facilities/:id
+ */
+export const updateFacility = async (
+  id: string | number,
+  data: Partial<FacilityPayload>
+): Promise<ApiResponse<FacilityResponseData>> => {
+  const res = await api.patch(`/vendor/facilities/${id}`, data);
+  return res.data;
+};
+
+/**
  * 8. Delete a Facility from Database
  * DELETE http://localhost:3000/api/v1/vendor/facilities/:id
  */
@@ -370,6 +387,18 @@ export const addPersonnel = async (
  */
 export const getPersonnel = async (): Promise<ApiResponse<PersonnelPayload[]>> => {
   const res = await api.get("/vendor/personnel");
+  return res.data;
+};
+
+/**
+ * 10b. Update Key Personnel / Executive Profile in Database (business_personnel)
+ * PATCH http://localhost:3000/api/v1/vendor/personnel/:id
+ */
+export const updatePersonnel = async (
+  id: string | number,
+  data: Partial<Omit<PersonnelPayload, "photoUrl">> & { photoUrl?: string | null }
+): Promise<ApiResponse<PersonnelResponseData>> => {
+  const res = await api.patch(`/vendor/personnel/${id}`, data);
   return res.data;
 };
 
@@ -404,12 +433,16 @@ export const uploadPersonnelPhoto = async (file: File): Promise<string> => {
 export const uploadStatutoryDocument = async (
   file: File,
   categoryKey: string,
-  categoryName: string
+  categoryName: string,
+  moduleCode?: string
 ): Promise<UploadDocumentResponse> => {
   const formData = new FormData();
   formData.append("document", file);
   formData.append("categoryKey", categoryKey);
   formData.append("categoryName", categoryName);
+  if (moduleCode) {
+    formData.append("moduleCode", moduleCode);
+  }
 
   const res = await api.post("/vendor/upload-documents", formData, {
     headers: {
@@ -616,6 +649,37 @@ export const uploadProductImages = async (
     }
     throw err;
   }
+};
+
+/**
+ * 24b. Upload Multiple Facility / Plant Photos
+ * POST /api/v1/vendor/facilities/upload-images
+ */
+export const uploadFacilityImages = async (
+  files: File[],
+  mode: "append" | "replace" = "append"
+): Promise<ApiResponse<{ path?: string; url?: string; paths?: string[]; urls?: string[]; facilityPhotos?: string[]; [key: string]: unknown }>> => {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("images", file);
+  }
+  formData.append("mode", mode);
+
+  const res = await api.post("/vendor/facilities/upload-images", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+/**
+ * 24c. Update saved Facility / Plant Photos list (e.g. after deleting an image)
+ * PATCH /api/v1/vendor/facilities/photos
+ */
+export const updateFacilityPhotos = async (
+  facilityPhotos: string[]
+): Promise<ApiResponse<{ facilityPhotos: string[] }>> => {
+  const res = await api.patch("/vendor/facilities/photos", { facilityPhotos });
+  return res.data;
 };
 
 /**
@@ -1124,6 +1188,40 @@ export const submitEnquiry = async (
   data: SubmitEnquiryPayload
 ): Promise<ApiResponse<any>> => {
   const res = await api.post("/enquiries", data);
+  return res.data;
+};
+
+export interface VendorEnquiryItem {
+  id: string;
+  enquiryId: string;
+  enquiryNumber: string;
+  businessId?: number;
+  buyerName: string;
+  buyerCompany?: string | null;
+  buyerEmail: string;
+  buyerPhone?: string | null;
+  subject: string;
+  details: string;
+  date: string;
+  status: string;
+  budget?: string | null;
+  productId?: number | null;
+  productName?: string | null;
+  replyMessage?: string | null;
+  repliedAt?: string | null;
+  createdAt?: string;
+}
+
+/**
+ * Fetch buyer enquiries for the logged-in vendor (Read-Only view; updates blocked for vendors)
+ * GET /api/v1/enquiries/vendor
+ */
+export const getVendorEnquiries = async (params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+}): Promise<ApiResponse<{ enquiries: VendorEnquiryItem[]; totalCount: number }>> => {
+  const res = await api.get("/enquiries/vendor", params ? { params } : undefined);
   return res.data;
 };
 

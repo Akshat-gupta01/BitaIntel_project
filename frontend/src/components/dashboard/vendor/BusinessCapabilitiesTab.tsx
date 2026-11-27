@@ -7,12 +7,16 @@ import {
   VENDOR_CATEGORIES,
 } from '@/config/vendorMasterData';
 import { Card } from '@/components/ui/Card';
+import { resolveBackendDocumentUrl } from '@/lib/verificationBadge';
 import {
   Layers,
   Factory,
   Cpu,
   CheckCircle2,
   TrendingUp,
+  ShieldCheck,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 
 interface BusinessCapabilitiesTabProps {
@@ -219,6 +223,128 @@ export function BusinessCapabilitiesTab({ data }: BusinessCapabilitiesTabProps) 
           </div>
         </Card>
       </div>
+
+      {/* 3b. Service Capabilities & Geographic Delivery */}
+      {(data.serviceTypes ||
+        data.serviceExpertise ||
+        data.geographicCoverage ||
+        data.serviceEquipment ||
+        data.deliveryCapacity) && (
+        <Card variant="bento" className="p-6 bg-white space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <TrendingUp className="size-5 text-indigo-700" />
+            <h3 className="text-sm font-bold text-slate-900">
+              Service Capabilities &amp; Geographic Delivery
+            </h3>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] text-slate-400 block font-semibold">Service Types</span>
+              <span className="font-bold text-slate-900">{data.serviceTypes || '—'}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] text-slate-400 block font-semibold">Service Expertise</span>
+              <span className="font-bold text-slate-900">{data.serviceExpertise || '—'}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] text-slate-400 block font-semibold">Geographic Coverage</span>
+              <span className="font-bold text-slate-900">{data.geographicCoverage || '—'}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] text-slate-400 block font-semibold">
+                Equipment &amp; Field Tools
+              </span>
+              <span className="font-bold text-slate-900">{data.serviceEquipment || '—'}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 sm:col-span-2 lg:col-span-2">
+              <span className="text-[10px] text-slate-400 block font-semibold">
+                Delivery Capacity &amp; SLA
+              </span>
+              <span className="font-bold text-slate-900">{data.deliveryCapacity || '—'}</span>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* 4. Regulatory Approvals, Licences & Filings */}
+      {(data.regulatoryFilingDetails ||
+        data.regulatoryApprovalDoc ||
+        data.technicalAuditDoc) && (
+        <Card variant="bento" className="p-6 bg-white space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-5 text-primary-700" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Regulatory Approvals, Manufacturing Licences &amp; Filings
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Compliance evidence (DMF/USDMF, CEP, and manufacturing operating licences)
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              Provided
+            </span>
+          </div>
+
+          {data.regulatoryFilingDetails && (
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                Regulatory Filing Details &amp; Reference Numbers
+              </span>
+              <p className="font-medium text-slate-800 whitespace-pre-line">
+                {data.regulatoryFilingDetails}
+              </p>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3 text-xs">
+            {[
+              {
+                label: 'Regulatory Approvals / Manufacturing Licence',
+                path: data.regulatoryApprovalDoc,
+              },
+              {
+                label: 'Technical Audit Report',
+                path: data.technicalAuditDoc,
+              },
+            ]
+              .filter((doc) => Boolean(doc.path))
+              .map((doc) => {
+                const url = resolveBackendDocumentUrl(doc.path);
+                const filename = doc.path!.split('/').pop() || doc.path!.split('\\').pop() || 'Document';
+                return (
+                  <div
+                    key={doc.label}
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                        {doc.label}
+                      </span>
+                      <span className="font-semibold text-slate-800 flex items-center gap-1.5 mt-0.5 truncate">
+                        <FileText className="size-3.5 text-primary-700 shrink-0" />
+                        <span className="truncate">{filename}</span>
+                      </span>
+                    </div>
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-primary-700 hover:bg-primary-50 font-bold text-[11px] shrink-0"
+                      >
+                        <ExternalLink className="size-3" /> View
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
